@@ -74,7 +74,10 @@ namespace ModernDrone.Drone
         void Apply(ControlSettings s)
         {
             if (drone != null && drone.Config != null)
+            {
                 drone.ApplyPilotRates(s.rollRates, s.pitchRates, s.yawRates);
+                drone.Config.maxAngle = Mathf.Clamp(s.angleMaxTilt, 10f, 80f);
+            }
             if (droneCamera != null)
             {
                 droneCamera.TiltDeg = s.cameraTilt;
@@ -182,8 +185,10 @@ namespace ModernDrone.Drone
             float dz = s.gpDeadzone;
 
             state.yaw = Curve(Deadband(left.x, dz), s.gpExpo);
-            state.roll = Curve(Deadband(right.x, dz), s.gpExpo);
-            state.pitch = Curve(Deadband(right.y, dz), s.gpExpo) * (s.gpInvertPitch ? -1f : 1f);
+            // Stick up is +1; the flight controller treats +pitch as nose down.
+            float tilt = s.gpTiltSensitivity;
+            state.roll = Curve(Deadband(right.x, dz), s.gpExpo) * tilt * (s.gpInvertRoll ? -1f : 1f);
+            state.pitch = Curve(Deadband(right.y, dz), s.gpExpo) * tilt * (s.gpPitchUpIsNoseUp ? -1f : 1f);
 
             float ly = Deadband(left.y, dz);
             // Spring-centred throttle: released stick counts as "throttle at rest" for arming.
@@ -222,7 +227,7 @@ namespace ModernDrone.Drone
                 // Mouse is a virtual stick for pitch/roll: movement deflects it, it springs back to centre.
                 Vector2 delta = mouse.delta.ReadValue();
                 _mouseStick.x += delta.x * s.mouseSensitivity;
-                _mouseStick.y += delta.y * s.mouseSensitivity * (s.mouseInvertY ? -1f : 1f);
+                _mouseStick.y += delta.y * s.mouseSensitivity;
                 if (s.mouseReturn > 0f)
                     _mouseStick = Vector2.MoveTowards(_mouseStick, Vector2.zero, s.mouseReturn * Time.deltaTime);
                 _mouseStick = Vector2.ClampMagnitude(_mouseStick, 1f);
@@ -231,8 +236,9 @@ namespace ModernDrone.Drone
             _heldThrottle = Mathf.Clamp01(_heldThrottle);
 
             state.throttle = _heldThrottle;
-            state.roll = _mouseStick.x;
-            state.pitch = _mouseStick.y; // mouse forward (up) = stick forward = nose down
+            state.roll = _mouseStick.x * (s.mouseInvertRoll ? -1f : 1f);
+            // Mouse up is +y; the flight controller treats +pitch as nose down.
+            state.pitch = _mouseStick.y * (s.mousePitchUpIsNoseUp ? -1f : 1f);
             float yaw = (ControlInput.IsHeld(PilotAction.YawRight) ? 1f : 0f) - (ControlInput.IsHeld(PilotAction.YawLeft) ? 1f : 0f);
             state.yaw = yaw * s.kbYaw;
         }

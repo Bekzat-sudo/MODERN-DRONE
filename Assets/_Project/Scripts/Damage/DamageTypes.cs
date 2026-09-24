@@ -18,7 +18,9 @@ namespace ModernDrone.Damage
         ControlStation,
         Generator,
         /// <summary>EW / comms antenna; counts as a sensor.</summary>
-        Antenna
+        Antenna,
+        /// <summary>Wheel group of a wheeled vehicle (mobility).</summary>
+        Wheels
     }
 
     public enum ModuleState
@@ -83,6 +85,7 @@ namespace ModernDrone.Damage
             ModuleType.ControlStation => "Пост управления",
             ModuleType.Generator => "Генератор",
             ModuleType.Antenna => "Антенна",
+            ModuleType.Wheels => "Колёса",
             _ => t.ToString()
         };
 

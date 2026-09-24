@@ -17,6 +17,8 @@
   prefabs and all scenes from the builders in `Editor/`.
 - Pilot control settings live in `ControlSettings` (JSON at `Application.persistentDataPath/controls.json`), edited by
   the in-game settings menu (`UI/SettingsMenu.cs`). Don't hardcode keys/axes in gameplay code — use `ControlInput`.
+- Vehicles are built in `Editor/VehicleCatalog.cs` with `VehicleKit` (plates / ERA / cages / modules / wheels). When swapping in
+  imported models keep the plate and module colliders; visuals are separate children.
 - Link/video: `Video/LinkModel.cs` (pure rules), `Missions/DroneLink.cs` (per-frame sampling, failsafe, fiber spool),
   `Art/Shaders/AnalogVideo.shader` via the URP Full Screen Pass on `Assets/Settings/PC_Renderer.asset`
   (installed by `Modern Drone/Setup/Install Video Feed Effect`). EW emitters are `SignalJammer` + `JammerStation`.

@@ -78,6 +78,7 @@ namespace ModernDrone.Drone
         public event Action<Collision> OnCrash;
         public event Action OnReset;
         public event Action OnFailsafe;
+        public event Action OnShotDown;
 
         /// <summary>Control link lost long enough to trigger failsafe (drone disarmed and dropped).</summary>
         public bool Failsafe { get; private set; }
@@ -233,6 +234,14 @@ namespace ModernDrone.Drone
             _rb.linearVelocity = Vector3.zero;
             _rb.angularVelocity = Vector3.zero;
             OnReset?.Invoke();
+        }
+
+        /// <summary>Hit by air defence: the drone drops and the sortie is lost.</summary>
+        public void ShootDown()
+        {
+            if (Crashed) return;
+            MarkDestroyed();
+            OnShotDown?.Invoke();
         }
 
         /// <summary>Ends the flight immediately (payload detonated, shot down...).</summary>

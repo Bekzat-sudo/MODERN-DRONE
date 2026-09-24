@@ -53,7 +53,9 @@ namespace ModernDrone.Damage
 
         internal void Track(VehicleDamageModel vehicle)
         {
-            if (vehicle != null && !stateBefore.ContainsKey(vehicle))
+            if (vehicle == null) return;
+            vehicle.RegisterHit();
+            if (!stateBefore.ContainsKey(vehicle))
                 stateBefore[vehicle] = vehicle.State;
         }
 
@@ -65,6 +67,15 @@ namespace ModernDrone.Damage
             hits.Add(new ModuleHit { module = module, damage = damage, before = before, after = module.State });
         }
 
+        public bool HitDecoy
+        {
+            get
+            {
+                foreach (var v in stateBefore.Keys) if (v != null && v.IsDecoy) return true;
+                return false;
+            }
+        }
+
         public string Summary()
         {
             var sb = new StringBuilder();
@@ -74,6 +85,11 @@ namespace ModernDrone.Damage
             foreach (var kv in stateBefore)
             {
                 var vehicle = kv.Key;
+                if (vehicle.IsDecoy)
+                {
+                    sb.Append(vehicle.DisplayName).AppendLine(": ЛОЖНАЯ ЦЕЛЬ (надувной макет)");
+                    continue;
+                }
                 sb.Append(vehicle.DisplayName).Append(": ").Append(DamageNames.Ru(vehicle.State));
                 bool anyModuleHit = hits.Exists(h => h.module.Owner == vehicle && h.after != h.before);
                 if (vehicle.State == kv.Value && vehicle.State == KillState.None && !anyModuleHit)

@@ -32,6 +32,8 @@ namespace ModernDrone.Missions
         [SerializeField] int sorties = 4;
         [Tooltip("Fiber-optic drones available.")]
         [SerializeField] int fiberSorties;
+        [Tooltip("Warheads the pilot can choose from before each sortie (first = default).")]
+        [SerializeField] WarheadData[] warheads = new WarheadData[0];
         [SerializeField] DroneController drone;
         [SerializeField] Killcam killcam;
         [SerializeField] float droneLostDelay = 2f;
@@ -43,6 +45,9 @@ namespace ModernDrone.Missions
         int _sortiesFlown;
         int _radioLeft, _fiberLeft;
         LinkType _choice;
+        int _warheadChoice;
+        int _loadoutRow;
+        int _decoyStrikes;
         DroneLink _link;
         string _lostMessage = "ДРОН ПОТЕРЯН";
         float _missionTime;
@@ -55,6 +60,8 @@ namespace ModernDrone.Missions
         public int Sorties => sorties + fiberSorties;
         public MissionOutcome Outcome => _outcome;
         public IReadOnlyList<MissionTarget> Targets => _targets;
+
+        public void SetWarheads(WarheadData[] options) => warheads = options ?? new WarheadData[0];
 
         public void Configure(string name, string briefingText, int radioDrones, int fiberDrones = 0)
         {
@@ -80,6 +87,7 @@ namespace ModernDrone.Missions
         {
             drone.OnCrash += OnDroneCrash;
             drone.OnFailsafe += OnFailsafe;
+            drone.OnShotDown += OnShotDown;
             if (_warhead != null) _warhead.StrikeResolved += OnStrike;
         }
 
@@ -87,6 +95,7 @@ namespace ModernDrone.Missions
         {
             drone.OnCrash -= OnDroneCrash;
             drone.OnFailsafe -= OnFailsafe;
+            drone.OnShotDown -= OnShotDown;
             if (_warhead != null) _warhead.StrikeResolved -= OnStrike;
         }
 
@@ -95,7 +104,7 @@ namespace ModernDrone.Missions
             if (_warhead != null) _warhead.ShowReportOverlay = killcam == null;
             _input.AllowReset = FreeFlight;
             if (FreeFlight)
-                BeginFlying();
+                PrepareSortie();
             else
             {
                 Phase = MissionPhase.Briefing;
@@ -126,6 +135,7 @@ namespace ModernDrone.Missions
         void OnStrike(StrikeReport report)
         {
             if (Phase != MissionPhase.Flying) return;
+            if (report.HitDecoy) _decoyStrikes++;
             Phase = MissionPhase.Killcam;
             _input.Suspended = true;
             if (killcam != null)
@@ -150,16 +160,20 @@ namespace ModernDrone.Missions
         }
 
         /// <summary>Picks the next drone: asks the pilot when both types are left.</summary>
+        bool ChooseLink => !FreeFlight && _radioLeft > 0 && _fiberLeft > 0;
+        bool ChooseWarhead => warheads.Length > 1;
+
         void PrepareSortie()
         {
-            if (_radioLeft > 0 && _fiberLeft > 0)
+            _choice = FreeFlight || _radioLeft > 0 ? LinkType.Radio : LinkType.Fiber;
+            if (ChooseLink || ChooseWarhead)
             {
                 Phase = MissionPhase.Loadout;
                 _input.Suspended = true;
-                _choice = LinkType.Radio;
+                _loadoutRow = ChooseLink ? 0 : 1;
                 return;
             }
-            LaunchSortie(_radioLeft > 0 ? LinkType.Radio : LinkType.Fiber);
+            LaunchSortie(_choice);
         }
 
         void UpdateLoadout()
@@ -168,14 +182,34 @@ namespace ModernDrone.Missions
             var pad = Gamepad.current;
             bool left = (kb != null && kb.leftArrowKey.wasPressedThisFrame) || (pad != null && pad.dpad.left.wasPressedThisFrame);
             bool right = (kb != null && kb.rightArrowKey.wasPressedThisFrame) || (pad != null && pad.dpad.right.wasPressedThisFrame);
-            if (left || right) _choice = _choice == LinkType.Radio ? LinkType.Fiber : LinkType.Radio;
+            bool vertical = (kb != null && (kb.upArrowKey.wasPressedThisFrame || kb.downArrowKey.wasPressedThisFrame))
+                         || (pad != null && (pad.dpad.up.wasPressedThisFrame || pad.dpad.down.wasPressedThisFrame));
+            if (vertical && ChooseLink && ChooseWarhead) _loadoutRow = 1 - _loadoutRow;
+            if (left || right)
+            {
+                if (_loadoutRow == 0 && ChooseLink) _choice = _choice == LinkType.Radio ? LinkType.Fiber : LinkType.Radio;
+                else if (ChooseWarhead) _warheadChoice = (_warheadChoice + (right ? 1 : warheads.Length - 1)) % warheads.Length;
+            }
             if (ConfirmPressed()) LaunchSortie(_choice);
+        }
+
+        void OnShotDown()
+        {
+            if (Phase != MissionPhase.Flying) return;
+            _lostMessage = "ДРОН СБИТ ПВО";
+            Phase = MissionPhase.DroneLost;
+            _input.Suspended = true;
+            StartCoroutine(DelayThen(droneLostDelay, EndSortie));
         }
 
         void LaunchSortie(LinkType type)
         {
-            if (type == LinkType.Fiber) _fiberLeft--; else _radioLeft--;
+            if (!FreeFlight)
+            {
+                if (type == LinkType.Fiber) _fiberLeft--; else _radioLeft--;
+            }
             _link?.SetType(type);
+            if (warheads.Length > 0 && _warhead != null) _warhead.SetWarhead(warheads[Mathf.Clamp(_warheadChoice, 0, warheads.Length - 1)]);
             _lostMessage = "ДРОН ПОТЕРЯН";
             BeginFlying();
         }
@@ -201,7 +235,7 @@ namespace ModernDrone.Missions
             if (FreeFlight)
             {
                 drone.ResetToHome();
-                BeginFlying();
+                PrepareSortie();
                 return;
             }
             _lostMessage = "ДРОН ПОТЕРЯН";
@@ -246,7 +280,8 @@ namespace ModernDrone.Missions
 
         void OnGUI()
         {
-            if (FreeFlight || ModernDrone.Core.GamePause.IsPaused) return;
+            if (ModernDrone.Core.GamePause.IsPaused) return;
+            if (FreeFlight && Phase != MissionPhase.Loadout) return;
             GUI.depth = -10; // above the OSD
             EnsureStyles();
             float w = Screen.width, h = Screen.height;
@@ -267,7 +302,8 @@ namespace ModernDrone.Missions
                     GUI.Label(new Rect(0, h * 0.4f, w, _title.fontSize * 1.5f), _lostMessage, _title);
                     break;
                 case MissionPhase.Loadout:
-                    Panel(new Rect(w * 0.3f, h * 0.3f, w * 0.4f, h * 0.36f), "ВЫБОР ДРОНА", LoadoutText(), "← → — выбор,  SPACE / A — взлёт");
+                    Panel(new Rect(w * 0.28f, h * 0.28f, w * 0.44f, h * 0.4f), "СНАРЯЖЕНИЕ", LoadoutText(),
+                        ChooseLink && ChooseWarhead ? "↑↓ — строка,  ← → — выбор,  SPACE / A — взлёт" : "← → — выбор,  SPACE / A — взлёт");
                     break;
                 case MissionPhase.Debrief:
                     string header = _outcome == MissionOutcome.Success ? "ЗАДАЧА ВЫПОЛНЕНА" : "ЗАДАЧА НЕ ВЫПОЛНЕНА";
@@ -304,6 +340,7 @@ namespace ModernDrone.Missions
                 sb.AppendLine($"{t.Label}: {DamageNames.Ru(t.Model.State)}  (+{MissionRules.Score(t.Model.State)})");
             sb.AppendLine();
             sb.AppendLine($"Израсходовано дронов: {_sortiesFlown}/{Sorties}");
+            if (_decoyStrikes > 0) sb.AppendLine($"Из них по макетам: {_decoyStrikes}");
             int s = (int)_missionTime;
             sb.AppendLine($"Время: {s / 60:00}:{s % 60:00}");
             sb.AppendLine().Append($"ОЧКИ: {MissionRules.TotalScore(states, _sortiesFlown, Sorties, _outcome)}");
@@ -312,10 +349,29 @@ namespace ModernDrone.Missions
 
         string LoadoutText()
         {
-            string Mark(LinkType t) => _choice == t ? "▶ " : "   ";
-            return $"{Mark(LinkType.Radio)}Радио (аналог) — осталось {_radioLeft}\n     лёгкий и манёвренный, но уязвим к РЭБ и рельефу\n\n" +
-                   $"{Mark(LinkType.Fiber)}Оптоволокно — осталось {_fiberLeft}\n     не глушится, катушка 5 км, тяжелее";
+            var sb = new StringBuilder();
+            if (ChooseLink)
+            {
+                string cursor = _loadoutRow == 0 && ChooseWarhead ? "» " : "";
+                sb.AppendLine($"{cursor}Канал:  ‹ {(_choice == LinkType.Radio ? "РАДИО (аналог)" : "ОПТОВОЛОКНО")} ›");
+                sb.AppendLine(_choice == LinkType.Radio
+                    ? $"   осталось {_radioLeft} · лёгкий, но уязвим к РЭБ и рельефу"
+                    : $"   осталось {_fiberLeft} · не глушится, катушка 5 км, тяжелее");
+                sb.AppendLine();
+            }
+            if (ChooseWarhead)
+            {
+                var w = warheads[Mathf.Clamp(_warheadChoice, 0, warheads.Length - 1)];
+                string cursor = _loadoutRow == 1 && ChooseLink ? "» " : "";
+                sb.AppendLine($"{cursor}Боевая часть:  ‹ {w.displayName} ›");
+                sb.AppendLine("   " + WarheadHint(w));
+            }
+            return sb.ToString();
         }
+
+        static string WarheadHint(WarheadData w) => w.kind == WarheadKind.Fragmentation
+            ? "против открытых целей: РЛС, орудия, грузовики"
+            : w.tandem ? "пробивает динамическую защиту" : "против брони: борт, корма, крыша";
 
         void Panel(Rect r, string header, string text, string footer)
         {

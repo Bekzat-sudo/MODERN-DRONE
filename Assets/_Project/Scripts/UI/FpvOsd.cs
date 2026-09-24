@@ -79,6 +79,7 @@ namespace ModernDrone.UI
             Label(new Rect(w * 0.5f - 150, h - pad - line, 300, line), $"H {t.distanceHome:0}m", textColor, TextAnchor.MiddleCenter);
 
             DrawCrosshair(w * 0.5f, h * 0.5f, h * 0.02f);
+            DrawThreat(w, h);
             DrawHorizon(w, h, t);
 
             // Centre warnings
@@ -97,6 +98,26 @@ namespace ModernDrone.UI
                 var r = new Rect(0, h * 0.62f, w, _big.fontSize * 1.4f);
                 Shadowed(r, warning, _big, t.crashed || lowBat || drone.Failsafe || linkNow.cableCut || (VideoFeed.HasLink && linkNow.control < 0.3f) || drone.ArmBlock != ArmBlockReason.None ? Color.red : textColor);
             }
+        }
+
+        /// <summary>Air-defence track / lock warning with a progress bar.</summary>
+        void DrawThreat(float w, float h)
+        {
+            float lockLevel = ModernDrone.Core.ThreatWarning.Lock;
+            if (lockLevel <= 0f) return;
+            bool locking = lockLevel > 0.7f;
+            if (locking && Mathf.Repeat(Time.unscaledTime, 0.4f) > 0.2f) return; // blink
+            string text = locking ? "ЗАХВАТ!" : "ОБНАРУЖЕН ПВО";
+            float y = h * 0.2f;
+            Shadowed(new Rect(0, y, w, _big.fontSize * 1.4f), text, _big, Color.red);
+            float bw = w * 0.2f, bh = Mathf.Max(4f, h * 0.008f);
+            var bar = new Rect(w * 0.5f - bw * 0.5f, y + _big.fontSize * 1.5f, bw, bh);
+            var prev = GUI.color;
+            GUI.color = new Color(0f, 0f, 0f, 0.6f);
+            GUI.DrawTexture(bar, Texture2D.whiteTexture);
+            GUI.color = Color.red;
+            GUI.DrawTexture(new Rect(bar.x, bar.y, bar.width * lockLevel, bar.height), Texture2D.whiteTexture);
+            GUI.color = prev;
         }
 
         void DrawCrosshair(float cx, float cy, float size)

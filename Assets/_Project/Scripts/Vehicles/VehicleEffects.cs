@@ -26,12 +26,34 @@ namespace ModernDrone.Vehicles
         {
             _model.FireStarted += OnFireStarted;
             _model.Destroyed += OnDestroyed;
+            _model.FirstStruck += OnFirstStruck;
         }
 
         void OnDisable()
         {
             _model.FireStarted -= OnFireStarted;
             _model.Destroyed -= OnDestroyed;
+            _model.FirstStruck -= OnFirstStruck;
+        }
+
+        void OnFirstStruck(VehicleDamageModel model)
+        {
+            if (model.IsDecoy) StartCoroutine(Deflate());
+        }
+
+        /// <summary>Inflatable decoy sags and collapses sideways.</summary>
+        System.Collections.IEnumerator Deflate()
+        {
+            Vector3 scale = transform.localScale;
+            Quaternion rot = transform.rotation;
+            Quaternion slump = rot * Quaternion.Euler(0f, 0f, Random.Range(-12f, 12f));
+            for (float t = 0f; t < 3f; t += Time.deltaTime)
+            {
+                float k = Mathf.SmoothStep(0f, 1f, t / 3f);
+                transform.localScale = new Vector3(scale.x * (1f + 0.15f * k), scale.y * Mathf.Lerp(1f, 0.12f, k), scale.z);
+                transform.rotation = Quaternion.Slerp(rot, slump, k);
+                yield return null;
+            }
         }
 
         void OnFireStarted(VehicleDamageModel model, VehicleModule origin)

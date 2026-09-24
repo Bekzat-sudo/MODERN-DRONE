@@ -139,20 +139,28 @@ namespace ModernDrone.Drone
         public GamepadThrottleMode gpThrottleMode = GamepadThrottleMode.CenterIsHover;
         public float gpDeadzone = 0.03f;
         public float gpIncrementalSpeed = 0.8f;
-        public bool gpInvertPitch;
+        [Tooltip("Stick up = nose up (camera style). Off = stick forward pitches the nose down (FPV / aircraft).")]
+        public bool gpPitchUpIsNoseUp = true;
+        public bool gpInvertRoll;
+        [Tooltip("Scale for pitch / roll stick deflection.")]
+        public float gpTiltSensitivity = 0.6f;
         public float gpExpo;
 
         [Header("Keyboard + mouse")]
         [Tooltip("Virtual stick deflection per pixel of mouse movement.")]
-        public float mouseSensitivity = 0.004f;
+        public float mouseSensitivity = 0.002f;
         [Tooltip("Speed at which the virtual stick returns to centre, per second (0 = holds position).")]
         public float mouseReturn = 2.5f;
-        public bool mouseInvertY;
+        [Tooltip("Mouse up = nose up (FPS style). Off = mouse forward pitches the nose down.")]
+        public bool mousePitchUpIsNoseUp = true;
+        public bool mouseInvertRoll;
         public float kbThrottleSpeed = 0.5f;
         public float kbYaw = 0.6f;
 
         [Header("Flight")]
         public FlightMode startMode = FlightMode.Angle;
+        [Tooltip("Maximum tilt in Angle mode, degrees.")]
+        public float angleMaxTilt = 45f;
         public AxisRates rollRates = new AxisRates(1.0f, 0.7f, 0f);
         public AxisRates pitchRates = new AxisRates(1.0f, 0.7f, 0f);
         public AxisRates yawRates = new AxisRates(1.0f, 0.5f, 0f);

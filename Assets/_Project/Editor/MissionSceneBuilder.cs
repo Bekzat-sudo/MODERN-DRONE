@@ -80,6 +80,47 @@ namespace ModernDrone.Editor
             Debug.Log($"[ModernDrone] Mission scene built: {Scene02Path}");
         }
 
+        const string Scene03Path = "Assets/_Project/Scenes/Mission_03.unity";
+        const string Terrain03Path = "Assets/_Project/Scenes/Mission_03_Terrain.asset";
+
+        const string Briefing03 =
+            "За лесополосой в ~350 м к северу — огневые позиции: САУ, две буксируемые гаубицы и прикрывающий их ЗРПК.\n\n" +
+            "ЗРПК видит дрон над посадкой и выше ~8 м. Удержание захвата ~4 с — и дрон сбит. Держитесь ниже крон, " +
+            "ныряйте в разрывы посадки, прячьтесь за рельефом — захват срывается.\n\n" +
+            "Разведка сообщает о возможных макетах техники. Осколочная БЧ эффективна по орудиям и РЛС, кумулятивная — по броне.";
+
+        [MenuItem("Modern Drone/Setup/Build Mission 03 Scene")]
+        public static void BuildMission03()
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var terrain = ProvingGroundBuilder.CreateTerrain(Terrain03Path);
+            ProvingGroundBuilder.CreateLighting();
+            ProvingGroundBuilder.CreateTreeLines(terrain);
+            ProvingGroundBuilder.CreateSpawn(terrain);
+            var c = ProvingGroundBuilder.Center;
+
+            // North of the tree line (z = 1300): the SPAAG covers the gun line.
+            TargetAt(terrain, VehicleCatalog.Spaag, new Vector3(c.x + 30f, 0f, 1335f), 190f, "ЗРПК", TargetRequirement.Silenced);
+            TargetAt(terrain, VehicleCatalog.Spg, new Vector3(c.x - 70f, 0f, 1345f), 170f, "САУ", TargetRequirement.OutOfAction);
+            TargetAt(terrain, VehicleCatalog.Howitzer, new Vector3(c.x + 110f, 0f, 1355f), 180f, "Гаубица №1", TargetRequirement.OutOfAction);
+            TargetAt(terrain, VehicleCatalog.Howitzer, new Vector3(c.x + 135f, 0f, 1358f), 180f, "Гаубица №2", TargetRequirement.OutOfAction);
+            ProvingGroundBuilder.PlacePrefab(terrain, VehicleCatalog.Truck, new Vector3(c.x + 120f, 0f, 1378f), 90f, "Грузовик");
+            // Bait south of the trees, in plain view of the launch site.
+            ProvingGroundBuilder.PlacePrefab(terrain, VehicleCatalog.DecoyTank, new Vector3(c.x - 20f, 0f, 1286f), 160f, "Танк");
+
+            ProvingGroundBuilder.CreateMissionRig("Задача 3: Огневые позиции", Briefing03, 5, 1);
+
+            EditorSceneManager.SaveScene(scene, Scene03Path);
+            ProvingGroundBuilder.AddToBuildSettings(Scene03Path, 3);
+            Debug.Log($"[ModernDrone] Mission scene built: {Scene03Path}");
+        }
+
+        static void TargetAt(Terrain terrain, string prefab, Vector3 pos, float yaw, string label, TargetRequirement req)
+        {
+            var go = ProvingGroundBuilder.PlacePrefab(terrain, prefab, pos, yaw, label);
+            go.AddComponent<MissionTarget>().Configure(label, req);
+        }
+
         static void Target(Terrain terrain, Vector3 pos, float yaw, string label)
         {
             var tank = ProvingGroundBuilder.PlaceTank(terrain, pos, yaw, label);

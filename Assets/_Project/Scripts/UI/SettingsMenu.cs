@@ -138,9 +138,10 @@ namespace ModernDrone.UI
         void KeyboardMouseRows()
         {
             _rows.Add(MenuRow.Header("Мышь — тангаж и крен (виртуальный стик)"));
-            _rows.Add(MenuRow.Slider("Чувствительность", () => S.mouseSensitivity * 1000f, v => S.mouseSensitivity = v / 1000f, 0.5f, 20f, 0.5f, "0.0"));
+            _rows.Add(MenuRow.Slider("Чувствительность наклонов", () => S.mouseSensitivity * 1000f, v => S.mouseSensitivity = v / 1000f, 0.25f, 10f, 0.25f, "0.00"));
             _rows.Add(MenuRow.Slider("Возврат в центр, /с (0 — держит)", () => S.mouseReturn, v => S.mouseReturn = v, 0f, 10f, 0.5f, "0.0"));
-            _rows.Add(MenuRow.Toggle("Инверсия Y", () => S.mouseInvertY, v => S.mouseInvertY = v));
+            _rows.Add(MenuRow.Choice("Тангаж: мышь вверх", new[] { "нос вниз (как стик FPV)", "нос вверх" }, () => S.mousePitchUpIsNoseUp ? 1 : 0, v => S.mousePitchUpIsNoseUp = v == 1));
+            _rows.Add(MenuRow.Toggle("Инверсия крена", () => S.mouseInvertRoll, v => S.mouseInvertRoll = v));
             _rows.Add(MenuRow.Header("Клавиатура"));
             _rows.Add(MenuRow.Slider("Скорость газа, /с", () => S.kbThrottleSpeed, v => S.kbThrottleSpeed = v, 0.1f, 2f, 0.1f, "0.0"));
             _rows.Add(MenuRow.Slider("Сила рыскания", () => S.kbYaw, v => S.kbYaw = v, 0.1f, 1f, 0.05f));
@@ -156,7 +157,9 @@ namespace ModernDrone.UI
             _rows.Add(MenuRow.Slider("Скорость газа (удержание), /с", () => S.gpIncrementalSpeed, v => S.gpIncrementalSpeed = v, 0.1f, 3f, 0.1f, "0.0"));
             _rows.Add(MenuRow.Slider("Мёртвая зона", () => S.gpDeadzone, v => S.gpDeadzone = v, 0f, 0.25f, 0.01f));
             _rows.Add(MenuRow.Slider("Экспо стиков", () => S.gpExpo, v => S.gpExpo = v, 0f, 0.9f, 0.05f));
-            _rows.Add(MenuRow.Toggle("Инверсия тангажа", () => S.gpInvertPitch, v => S.gpInvertPitch = v));
+            _rows.Add(MenuRow.Slider("Чувствительность наклонов", () => S.gpTiltSensitivity, v => S.gpTiltSensitivity = v, 0.2f, 1.5f, 0.05f));
+            _rows.Add(MenuRow.Choice("Тангаж: стик вверх", new[] { "нос вниз (FPV)", "нос вверх" }, () => S.gpPitchUpIsNoseUp ? 1 : 0, v => S.gpPitchUpIsNoseUp = v == 1));
+            _rows.Add(MenuRow.Toggle("Инверсия крена", () => S.gpInvertRoll, v => S.gpInvertRoll = v));
             _rows.Add(MenuRow.Header("Схема Mode 2"));
             _rows.Add(MenuRow.Info("Левый стик", () => "газ / рыскание"));
             _rows.Add(MenuRow.Info("Правый стик", () => "тангаж / крен"));
@@ -263,6 +266,8 @@ namespace ModernDrone.UI
             RateRows("Крен", () => S.rollRates, v => S.rollRates = v);
             RateRows("Тангаж", () => S.pitchRates, v => S.pitchRates = v);
             RateRows("Рыскание", () => S.yawRates, v => S.yawRates = v);
+            _rows.Add(MenuRow.Header("Режим Angle"));
+            _rows.Add(MenuRow.Slider("Макс. угол наклона, °", () => S.angleMaxTilt, v => { S.angleMaxTilt = v; ControlSettings.NotifyChanged(); }, 15f, 80f, 5f, "0"));
             _rows.Add(MenuRow.Header("Камера"));
             _rows.Add(MenuRow.Slider("Наклон камеры, °", () => S.cameraTilt, v => S.cameraTilt = v, 0f, 60f, 1f, "0"));
             _rows.Add(MenuRow.Slider("Угол обзора (гориз.), °", () => S.cameraFov, v => S.cameraFov = v, 80f, 150f, 1f, "0"));

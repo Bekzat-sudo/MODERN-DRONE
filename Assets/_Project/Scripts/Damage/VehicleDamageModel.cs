@@ -11,12 +11,15 @@ namespace ModernDrone.Damage
     public sealed class VehicleDamageModel : MonoBehaviour
     {
         [SerializeField] string displayName = "Vehicle";
+        [Tooltip("Inflatable / wooden decoy: no internals, collapses when struck.")]
+        [SerializeField] bool isDecoy;
 
         [Header("Secondary effects (chances 0..1)")]
         [SerializeField] float ammoDetonationChance = 0.7f;
         [SerializeField] float fuelFireChanceDamaged = 0.35f;
         [SerializeField] float fuelFireChanceDestroyed = 0.7f;
         [SerializeField] float engineFireChance = 0.2f;
+        [SerializeField] float launcherFireChance = 0.4f;
 
         [Header("Fire")]
         [SerializeField] float fireDamagePerSecond = 6f;
@@ -29,6 +32,8 @@ namespace ModernDrone.Damage
         float _fireTime;
 
         public string DisplayName => displayName;
+        public bool IsDecoy => isDecoy;
+        public bool Struck { get; private set; }
         public IReadOnlyList<VehicleModule> Modules => _modules;
         public KillState State { get; private set; }
         public DestructionCause Cause { get; private set; }
@@ -39,10 +44,22 @@ namespace ModernDrone.Damage
         public event Action<VehicleDamageModel, KillState> StateChanged;
         public event Action<VehicleDamageModel, VehicleModule> FireStarted;
         public event Action<VehicleDamageModel, DestructionCause> Destroyed;
+        /// <summary>First time any strike touches this vehicle (used by decoys to collapse).</summary>
+        public event Action<VehicleDamageModel> FirstStruck;
 
         void Awake() => Rebuild();
 
         public void SetDisplayName(string name) => displayName = name;
+
+        public void SetDecoy(bool decoy) => isDecoy = decoy;
+
+        /// <summary>Called by the damage solver whenever a strike reaches this vehicle.</summary>
+        public void RegisterHit()
+        {
+            if (Struck) return;
+            Struck = true;
+            FirstStruck?.Invoke(this);
+        }
 
         public void SetRandom(System.Random random) => _random = random;
 
@@ -79,6 +96,11 @@ namespace ModernDrone.Damage
 
                 case ModuleType.Engine when module.State == ModuleState.Destroyed:
                     if (_random.NextDouble() < engineFireChance) StartFire(module);
+                    break;
+
+                case ModuleType.Launcher when module.State == ModuleState.Destroyed:
+                    // Missile propellant.
+                    if (_random.NextDouble() < launcherFireChance) StartFire(module);
                     break;
             }
             UpdateState();
@@ -141,7 +163,7 @@ namespace ModernDrone.Damage
             var k = KillState.None;
             bool control = AnyDestroyed(ModuleType.ControlStation);
 
-            if (control || AnyDestroyed(ModuleType.Engine) || AnyDestroyed(ModuleType.Transmission) || AnyDestroyed(ModuleType.Track))
+            if (control || AnyDestroyed(ModuleType.Engine) || AnyDestroyed(ModuleType.Transmission) || AnyDestroyed(ModuleType.Track) || AnyDestroyed(ModuleType.Wheels))
                 k |= KillState.Mobility;
 
             if (control || AnyDestroyed(ModuleType.Gun) || AnyDestroyed(ModuleType.Breech) || AnyDestroyed(ModuleType.TurretDrive)

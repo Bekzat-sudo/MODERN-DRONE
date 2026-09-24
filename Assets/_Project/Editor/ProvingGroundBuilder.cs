@@ -38,6 +38,7 @@ namespace ModernDrone.Editor
             PlaceTank(terrain, Center + new Vector3(0f, 0f, 150f), 180f, "Tank_Front");
             PlaceTank(terrain, Center + new Vector3(-45f, 0f, 170f), 90f, "Tank_Side");
             PlaceTank(terrain, Center + new Vector3(45f, 0f, 170f), 0f, "Tank_Rear");
+            CreateVehiclePark(terrain);
             CreateSpawn(terrain);
             CreateMissionRig("Полигон", "", 0);
 
@@ -176,6 +177,32 @@ namespace ModernDrone.Editor
             bar.isStatic = true;
         }
 
+        internal static GameObject PlacePrefab(Terrain terrain, string prefabPath, Vector3 pos, float yaw, string name = null)
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+            if (name != null) go.name = name;
+            pos.y = terrain.SampleHeight(pos);
+            go.transform.SetPositionAndRotation(pos, Quaternion.Euler(0f, yaw, 0f));
+            return go;
+        }
+
+        /// <summary>One of every catalog vehicle in a row facing the launch site, for free-flight practice.</summary>
+        static void CreateVehiclePark(Terrain terrain)
+        {
+            string[] park =
+            {
+                VehicleCatalog.Ifv, VehicleCatalog.Apc, VehicleCatalog.Spg, VehicleCatalog.TankCage, VehicleCatalog.DecoyTank,
+                VehicleCatalog.Howitzer, VehicleCatalog.Mlrs, VehicleCatalog.Truck, VehicleCatalog.SamLauncher,
+                VehicleCatalog.SamRadar, VehicleCatalog.Spaag
+            };
+            for (int i = 0; i < park.Length; i++)
+            {
+                var pos = Center + new Vector3(-160f + i * 32f, 0f, 260f);
+                PlacePrefab(terrain, park[i], pos, 180f);
+            }
+        }
+
         internal static GameObject PlaceTank(Terrain terrain, Vector3 pos, float yaw, string name)
         {
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(VehicleBuilder.TankPrefabPath) ?? VehicleBuilder.BuildTank();
@@ -245,6 +272,12 @@ namespace ModernDrone.Editor
 
             var mission = new GameObject("Mission").AddComponent<MissionController>();
             mission.Configure(name, briefing, sorties, fiberSorties);
+            mission.SetWarheads(new[]
+            {
+                WarheadAssets.Load(WarheadAssets.ShapedChargePath),
+                WarheadAssets.Load(WarheadAssets.TandemPath),
+                WarheadAssets.Load(WarheadAssets.FragmentationPath)
+            });
             mission.gameObject.AddComponent<ModernDrone.UI.PauseMenu>();
             return mission;
         }

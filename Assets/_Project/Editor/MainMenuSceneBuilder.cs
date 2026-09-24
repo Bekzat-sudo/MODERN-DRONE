@@ -59,10 +59,12 @@ namespace ModernDrone.Editor
             WarheadAssets.CreateAll();
             VehicleBuilder.BuildTank();
             VehicleBuilder.BuildEwStation();
+            VehicleCatalog.BuildAll();
             DroneRigBuilder.BuildPrefab();
             ProvingGroundBuilder.Build();
             MissionSceneBuilder.Build();
             MissionSceneBuilder.BuildMission02();
+            MissionSceneBuilder.BuildMission03();
             Build();
             EditorSceneManager.OpenScene(ScenePath);
         }
