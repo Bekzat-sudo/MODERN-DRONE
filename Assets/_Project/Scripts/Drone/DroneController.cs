@@ -4,6 +4,13 @@ using UnityEngine;
 
 namespace ModernDrone.Drone
 {
+    public enum ArmBlockReason
+    {
+        None,
+        Throttle,
+        Crash
+    }
+
     public struct DroneTelemetry
     {
         public bool armed;
@@ -22,6 +29,7 @@ namespace ModernDrone.Drone
         public float flightTime;     // s since arming
         public float pitchDeg;       // nose down +
         public float rollDeg;        // right +
+        public float headingDeg;     // 0 = north (+z), clockwise
     }
 
     /// <summary>
@@ -53,6 +61,9 @@ namespace ModernDrone.Drone
         public Rigidbody Body => _rb;
         public bool Armed { get; private set; }
         public bool Crashed { get; private set; }
+
+        /// <summary>Why the last arm attempt was refused (shown on the OSD), until the switch is released.</summary>
+        public ArmBlockReason ArmBlock { get; private set; }
         public FlightMode Mode => _input.mode;
         public DroneInputState Input => _input;
         public BatteryModel Battery => _battery;
@@ -84,6 +95,12 @@ namespace ModernDrone.Drone
 
         void Setup()
         {
+            // Work on a runtime copy so pilot settings (rates) never modify the shared asset.
+            if (Application.isPlaying && !config.name.EndsWith("(Runtime)"))
+            {
+                config = Instantiate(config);
+                config.name += " (Runtime)";
+            }
             _rb = GetComponent<Rigidbody>();
             _rb.mass = config.TotalMass;
             _rb.linearDamping = 0f;
@@ -102,6 +119,14 @@ namespace ModernDrone.Drone
             _homeRotation = transform.rotation;
         }
 
+        /// <summary>Applies the pilot's rate profile from the control settings.</summary>
+        public void ApplyPilotRates(AxisRates roll, AxisRates pitch, AxisRates yaw)
+        {
+            config.rollRates = roll;
+            config.pitchRates = pitch;
+            config.yawRates = yaw;
+        }
+
         public void SetHome(Vector3 position, Quaternion rotation)
         {
             _homePosition = position;
@@ -112,13 +137,21 @@ namespace ModernDrone.Drone
         {
             _input = state;
 
-            if (state.armSwitch && !_prevArmSwitch && !Crashed && state.throttle < 0.05f && !Armed)
+            if (state.armSwitch && !_prevArmSwitch && !Armed)
             {
-                Armed = true;
-                _armedTime = 0f;
+                bool throttleLow = state.throttleAtRest || state.throttle < 0.05f;
+                ArmBlock = Crashed ? ArmBlockReason.Crash : !throttleLow ? ArmBlockReason.Throttle : ArmBlockReason.None;
+                if (ArmBlock == ArmBlockReason.None)
+                {
+                    Armed = true;
+                    _armedTime = 0f;
+                }
             }
             if (!state.armSwitch)
+            {
                 Armed = false;
+                ArmBlock = ArmBlockReason.None;
+            }
             _prevArmSwitch = state.armSwitch;
 
             if (state.resetPressed)
@@ -129,6 +162,7 @@ namespace ModernDrone.Drone
         {
             Armed = false;
             Crashed = false;
+            ArmBlock = ArmBlockReason.None;
             _prevArmSwitch = true; // require the arm switch to be cycled after a reset
             _fc.Reset();
             _battery.Reset();
@@ -248,6 +282,7 @@ namespace ModernDrone.Drone
                 flightTime = _armedTime,
                 pitchDeg = -Mathf.Asin(Mathf.Clamp(fwd.y, -1f, 1f)) * Mathf.Rad2Deg,
                 rollDeg = -Mathf.Asin(Mathf.Clamp(right.y, -1f, 1f)) * Mathf.Rad2Deg,
+                headingDeg = (Mathf.Atan2(fwd.x, fwd.z) * Mathf.Rad2Deg + 360f) % 360f,
             };
         }
 

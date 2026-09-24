@@ -1,0 +1,245 @@
+using System;
+using System.IO;
+using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Controls;
+
+namespace ModernDrone.Drone
+{
+    public enum ControlDevice
+    {
+        Auto,
+        Joystick,
+        Gamepad,
+        KeyboardMouse
+    }
+
+    public enum GamepadThrottleMode
+    {
+        /// <summary>Spring-centred stick, centre = 50%.</summary>
+        CenterIsHalf,
+        /// <summary>Spring-centred stick, centre = hover throttle.</summary>
+        CenterIsHover,
+        /// <summary>Stick changes throttle gradually; value is held when released.</summary>
+        Incremental,
+        /// <summary>Right trigger is throttle 0..100%.</summary>
+        Trigger
+    }
+
+    public enum PilotAction
+    {
+        Arm,
+        Mode,
+        Reset,
+        TiltUp,
+        TiltDown,
+        Pause,
+        ThrottleUp,
+        ThrottleDown,
+        YawLeft,
+        YawRight,
+        ThrottleCut
+    }
+
+    /// <summary>Calibrated analog axis of a joystick-class device (RC transmitter, HOTAS...).</summary>
+    [Serializable]
+    public sealed class AxisCalibration
+    {
+        public string control;
+        public float min = -1f;
+        public float center;
+        public float max = 1f;
+        public bool invert;
+
+        public AxisCalibration() { }
+        public AxisCalibration(string control) => this.control = control;
+
+        public static float? ReadRaw(InputDevice device, string control)
+        {
+            if (device == null || string.IsNullOrEmpty(control)) return null;
+            var axis = device.TryGetChildControl<AxisControl>(control);
+            return axis?.ReadUnprocessedValue();
+        }
+
+        /// <summary>-1..1 around the calibrated centre.</summary>
+        public float? ReadBipolar(InputDevice device)
+        {
+            var raw = ReadRaw(device, control);
+            return raw.HasValue ? NormalizeBipolar(raw.Value) : (float?)null;
+        }
+
+        /// <summary>Maps a raw value to -1..1 with separate scaling either side of the centre.</summary>
+        public float NormalizeBipolar(float r)
+        {
+            float v = r >= center
+                ? (max > center ? (r - center) / (max - center) : 0f)
+                : (center > min ? (r - center) / (center - min) : 0f);
+            v = Mathf.Clamp(v, -1f, 1f);
+            return invert ? -v : v;
+        }
+
+        /// <summary>0..1 across the calibrated range (throttle).</summary>
+        public float? ReadUnipolar(InputDevice device)
+        {
+            var raw = ReadRaw(device, control);
+            return raw.HasValue ? NormalizeUnipolar(raw.Value) : (float?)null;
+        }
+
+        public float NormalizeUnipolar(float r)
+        {
+            float v = Mathf.Approximately(max, min) ? 0f : Mathf.InverseLerp(min, max, r);
+            return invert ? 1f - v : v;
+        }
+    }
+
+    /// <summary>Per-action bindings for each device family (Input System control paths).</summary>
+    [Serializable]
+    public sealed class ActionBinding
+    {
+        public PilotAction action;
+        public string keyboard;
+        public string gamepad;
+        public string joystick;
+
+        public ActionBinding() { }
+
+        public ActionBinding(PilotAction action, string keyboard, string gamepad, string joystick = "")
+        {
+            this.action = action;
+            this.keyboard = keyboard;
+            this.gamepad = gamepad;
+            this.joystick = joystick;
+        }
+    }
+
+    /// <summary>
+    /// All pilot-facing control settings, persisted as JSON in the player's data folder.
+    /// </summary>
+    [Serializable]
+    public sealed class ControlSettings
+    {
+        const string FileName = "controls.json";
+
+        public ControlDevice device = ControlDevice.Auto;
+        [Tooltip("Display name of the preferred joystick; empty = first found.")]
+        public string joystickName = "";
+
+        [Header("Joystick / RC (AETR default: X, Y, Z, RX)")]
+        public AxisCalibration jsRoll = new AxisCalibration("stick/x");
+        public AxisCalibration jsPitch = new AxisCalibration("stick/y");
+        public AxisCalibration jsThrottle = new AxisCalibration("z");
+        public AxisCalibration jsYaw = new AxisCalibration("rx");
+        public bool jsUseArmAxis = true;
+        public AxisCalibration jsArm = new AxisCalibration("ry");
+        public bool jsUseModeAxis;
+        public AxisCalibration jsMode = new AxisCalibration("rz");
+        public float jsDeadband = 0.01f;
+
+        [Header("Gamepad")]
+        public GamepadThrottleMode gpThrottleMode = GamepadThrottleMode.CenterIsHover;
+        public float gpDeadzone = 0.03f;
+        public float gpIncrementalSpeed = 0.8f;
+        public bool gpInvertPitch;
+        public float gpExpo;
+
+        [Header("Keyboard + mouse")]
+        [Tooltip("Virtual stick deflection per pixel of mouse movement.")]
+        public float mouseSensitivity = 0.004f;
+        [Tooltip("Speed at which the virtual stick returns to centre, per second (0 = holds position).")]
+        public float mouseReturn = 2.5f;
+        public bool mouseInvertY;
+        public float kbThrottleSpeed = 0.5f;
+        public float kbYaw = 0.6f;
+
+        [Header("Flight")]
+        public FlightMode startMode = FlightMode.Angle;
+        public AxisRates rollRates = new AxisRates(1.0f, 0.7f, 0f);
+        public AxisRates pitchRates = new AxisRates(1.0f, 0.7f, 0f);
+        public AxisRates yawRates = new AxisRates(1.0f, 0.5f, 0f);
+        public float cameraTilt = 25f;
+        public float cameraFov = 118f;
+
+        public ActionBinding[] bindings = DefaultBindings();
+
+        static ControlSettings _current;
+
+        /// <summary>Loaded lazily: persistentDataPath cannot be read from static initialisers.</summary>
+        public static ControlSettings Current => _current ??= Load();
+
+        /// <summary>Raised when settings are edited (so the drone can re-apply rates / camera).</summary>
+        public static event Action<ControlSettings> Changed;
+
+        public static void NotifyChanged() => Changed?.Invoke(Current);
+
+        public static ActionBinding[] DefaultBindings() => new[]
+        {
+            new ActionBinding(PilotAction.Arm, "<Keyboard>/space", "<Gamepad>/rightShoulder"),
+            new ActionBinding(PilotAction.Mode, "<Keyboard>/m", "<Gamepad>/leftShoulder"),
+            new ActionBinding(PilotAction.Reset, "<Keyboard>/r", "<Gamepad>/startButton"),
+            new ActionBinding(PilotAction.TiltUp, "<Keyboard>/rightBracket", "<Gamepad>/dpad/up"),
+            new ActionBinding(PilotAction.TiltDown, "<Keyboard>/leftBracket", "<Gamepad>/dpad/down"),
+            new ActionBinding(PilotAction.Pause, "<Keyboard>/escape", "<Gamepad>/selectButton"),
+            new ActionBinding(PilotAction.ThrottleUp, "<Keyboard>/w", ""),
+            new ActionBinding(PilotAction.ThrottleDown, "<Keyboard>/s", ""),
+            new ActionBinding(PilotAction.YawLeft, "<Keyboard>/a", ""),
+            new ActionBinding(PilotAction.YawRight, "<Keyboard>/d", ""),
+            new ActionBinding(PilotAction.ThrottleCut, "<Keyboard>/x", ""),
+        };
+
+        public ActionBinding Binding(PilotAction action)
+        {
+            foreach (var b in bindings)
+                if (b.action == action) return b;
+            // Settings saved by an older version may lack new actions.
+            var def = Array.Find(DefaultBindings(), b => b.action == action);
+            var list = new System.Collections.Generic.List<ActionBinding>(bindings) { def };
+            bindings = list.ToArray();
+            return def;
+        }
+
+        public static string FilePath => Path.Combine(Application.persistentDataPath, FileName);
+
+        public static ControlSettings Load()
+        {
+            try
+            {
+                if (File.Exists(FilePath))
+                {
+                    var s = JsonUtility.FromJson<ControlSettings>(File.ReadAllText(FilePath));
+                    if (s != null) return s;
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[ModernDrone] Could not read control settings, using defaults: {e.Message}");
+            }
+            return new ControlSettings();
+        }
+
+        public static void Save()
+        {
+            try
+            {
+                File.WriteAllText(FilePath, JsonUtility.ToJson(Current, true));
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[ModernDrone] Could not save control settings: {e.Message}");
+            }
+            NotifyChanged();
+        }
+
+        public static void ResetToDefaults()
+        {
+            _current = new ControlSettings();
+            Save();
+        }
+
+        /// <summary>For tests and tools: replace the active settings without touching disk.</summary>
+        public static void SetCurrent(ControlSettings settings)
+        {
+            _current = settings ?? new ControlSettings();
+            NotifyChanged();
+        }
+    }
+}

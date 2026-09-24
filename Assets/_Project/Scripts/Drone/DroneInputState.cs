@@ -22,6 +22,12 @@ namespace ModernDrone.Drone
         public bool armSwitch;
         public FlightMode mode;
 
+        /// <summary>
+        /// Set by the input layer when the throttle control is at rest even though <see cref="throttle"/> is not zero
+        /// (spring-centred gamepad stick). Allows arming without pushing the stick down.
+        /// </summary>
+        public bool throttleAtRest;
+
         /// <summary>True on the frame a reset was requested.</summary>
         public bool resetPressed;
     }

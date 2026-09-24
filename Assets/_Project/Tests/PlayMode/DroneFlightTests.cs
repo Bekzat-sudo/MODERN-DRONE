@@ -73,6 +73,21 @@ namespace ModernDrone.Tests
         }
 
         [UnityTest]
+        public IEnumerator ArmingWithSpringThrottleAtRest_IsAllowed_AndBlockReasonReported()
+        {
+            _drone.SetInput(new DroneInputState { throttle = 0.5f });
+            _drone.SetInput(new DroneInputState { throttle = 0.5f, armSwitch = true });
+            Assert.IsFalse(_drone.Armed);
+            Assert.AreEqual(ArmBlockReason.Throttle, _drone.ArmBlock);
+
+            _drone.SetInput(new DroneInputState { throttle = 0.5f });
+            Assert.AreEqual(ArmBlockReason.None, _drone.ArmBlock, "releasing the switch clears the reason");
+            _drone.SetInput(new DroneInputState { throttle = 0.5f, throttleAtRest = true, armSwitch = true });
+            Assert.IsTrue(_drone.Armed);
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator AngleMode_HoverStaysLevel()
         {
             Arm(FlightMode.Angle);

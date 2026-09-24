@@ -14,6 +14,7 @@ namespace ModernDrone.UI
         [SerializeField] float lowCellVoltage = 3.4f;
         [SerializeField] Color textColor = Color.white;
 
+        Camera _fpvCamera;
         GUIStyle _style;
         GUIStyle _big;
         int _styleHeight;
@@ -26,7 +27,10 @@ namespace ModernDrone.UI
 
         void OnGUI()
         {
-            if (drone == null) return;
+            if (drone == null || ModernDrone.Core.GamePause.IsPaused) return;
+            if (_fpvCamera == null) _fpvCamera = drone.GetComponentInChildren<Camera>();
+            // The OSD belongs to the video feed: hide it when another camera (killcam) has taken over.
+            if (_fpvCamera != null && !_fpvCamera.enabled) return;
             // OSD numbers use '.' as in Betaflight, regardless of system locale.
             var culture = CultureInfo.CurrentCulture;
             CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
@@ -47,6 +51,7 @@ namespace ModernDrone.UI
             Label(new Rect(pad, pad, 400, line), t.mode == FlightMode.Acro ? "ACRO" : "ANGL");
             Label(new Rect(pad, pad + line, 400, line), input != null ? SourceName(input.ActiveSource) : "");
             LabelRight(new Rect(w - pad - 400, pad, 400, line), FormatTime(t.flightTime));
+            Label(new Rect(w * 0.5f - 150, pad, 300, line), $"{Compass(t.headingDeg)} {t.headingDeg:000}", textColor, TextAnchor.MiddleCenter);
 
             bool lowBat = t.cellVoltage < lowCellVoltage;
             Label(new Rect(pad, h - pad - line * 2, 400, line), $"{t.voltage:0.0}V  {t.cellVoltage:0.00}v", lowBat ? Color.red : textColor);
@@ -65,13 +70,15 @@ namespace ModernDrone.UI
             DrawHorizon(w, h, t);
 
             // Centre warnings
-            string warning = t.crashed ? "CRASH  [R / START]"
-                : !t.armed ? "DISARMED  [SPACE / RB]"
+            var source = input != null ? input.ActiveSource : InputSource.KeyboardMouse;
+            string warning = t.crashed ? $"CRASH  [{ControlInput.HintFor(PilotAction.Reset, source)}]"
+                : drone.ArmBlock == ArmBlockReason.Throttle ? "ARM BLOCKED: THROTTLE"
+                : !t.armed ? $"DISARMED  [{ControlInput.HintFor(PilotAction.Arm, source)}]"
                 : lowBat ? "LOW BATTERY" : null;
             if (warning != null)
             {
                 var r = new Rect(0, h * 0.62f, w, _big.fontSize * 1.4f);
-                Shadowed(r, warning, _big, t.crashed || lowBat ? Color.red : textColor);
+                Shadowed(r, warning, _big, t.crashed || lowBat || drone.ArmBlock != ArmBlockReason.None ? Color.red : textColor);
             }
         }
 
@@ -146,6 +153,12 @@ namespace ModernDrone.UI
             _big = new GUIStyle(_style) { fontSize = Mathf.RoundToInt(size * 1.4f), alignment = TextAnchor.MiddleCenter };
         }
 
+        static string Compass(float deg)
+        {
+            string[] names = { "N", "NE", "E", "SE", "S", "SW", "W", "NW" };
+            return names[Mathf.RoundToInt(deg / 45f) % 8];
+        }
+
         static string FormatTime(float seconds)
         {
             int s = Mathf.FloorToInt(seconds);
@@ -154,9 +167,9 @@ namespace ModernDrone.UI
 
         static string SourceName(InputSource source) => source switch
         {
-            InputSource.RcTransmitter => "RC",
+            InputSource.Joystick => "RC",
             InputSource.Gamepad => "PAD",
-            InputSource.Keyboard => "KBD",
+            InputSource.KeyboardMouse => "KBM",
             _ => ""
         };
     }

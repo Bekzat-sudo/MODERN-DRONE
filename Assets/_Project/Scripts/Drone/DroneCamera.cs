@@ -19,6 +19,16 @@ namespace ModernDrone.Drone
             set => tiltDeg = Mathf.Clamp(value, 0f, 60f);
         }
 
+        public float HorizontalFov
+        {
+            get => horizontalFov;
+            set
+            {
+                horizontalFov = Mathf.Clamp(value, 60f, 160f);
+                if (_camera != null) ApplyFov();
+            }
+        }
+
         void Awake()
         {
             _camera = GetComponent<Camera>();

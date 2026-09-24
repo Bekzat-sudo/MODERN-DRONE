@@ -1,3 +1,4 @@
+using ModernDrone.Core;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -5,41 +6,36 @@ namespace ModernDrone.Drone
 {
     public enum InputSource
     {
-        Auto,
-        RcTransmitter,
+        Joystick,
         Gamepad,
-        Keyboard
+        KeyboardMouse
     }
 
     /// <summary>
-    /// Reads pilot input from an RC transmitter (USB joystick), a gamepad (Mode 2) or the keyboard
-    /// and feeds <see cref="DroneController"/>. Stick values are read unprocessed so the Input System's
-    /// default gamepad deadzone does not eat small corrections.
+    /// Turns the active device into <see cref="DroneInputState"/> using <see cref="ControlSettings"/>:
+    /// RC transmitter / joystick (calibrated axes), gamepad (Mode 2, selectable throttle mode) or
+    /// keyboard + mouse (mouse = pitch/roll virtual stick, W/S throttle, A/D yaw).
     /// </summary>
     [DefaultExecutionOrder(-100)]
     public sealed class DroneInput : MonoBehaviour
     {
+        const float TiltStep = 5f;
+
         [SerializeField] DroneController drone;
         [SerializeField] DroneCamera droneCamera;
-        [SerializeField] InputSource preferredSource = InputSource.Auto;
-        [SerializeField] RcJoystickMapping rcMapping = new RcJoystickMapping();
-
-        [Header("Gamepad")]
-        [Range(0f, 0.2f)] [SerializeField] float gamepadDeadzone = 0.03f;
-
-        [Header("Keyboard (debug)")]
-        [SerializeField] float keyboardThrottleSpeed = 0.5f;
-        [SerializeField] float keyboardStick = 0.6f;
-
-        [Header("Camera tilt")]
-        [SerializeField] float tiltStep = 5f;
 
         bool _armToggle;
-        FlightMode _mode = FlightMode.Angle;
-        float _keyboardThrottle;
+        FlightMode _mode;
+        float _heldThrottle;      // keyboard / incremental gamepad throttle
+        Vector2 _mouseStick;      // x = roll, y = pitch
 
         public InputSource ActiveSource { get; private set; }
-        public RcJoystickMapping RcMapping => rcMapping;
+
+        /// <summary>Missions disable the pilot's reset key: a lost drone is handled by the mission.</summary>
+        public bool AllowReset { get; set; } = true;
+
+        /// <summary>Current virtual mouse stick (x = roll, y = pitch).</summary>
+        public Vector2 MouseStick => _mouseStick;
 
         void Reset()
         {
@@ -47,108 +43,200 @@ namespace ModernDrone.Drone
             droneCamera = GetComponentInChildren<DroneCamera>();
         }
 
+        void Awake() => _mode = ControlSettings.Current.startMode;
+
+        void OnEnable()
+        {
+            if (drone != null) drone.OnReset += ClearLatches;
+            ControlSettings.Changed += Apply;
+        }
+
+        void OnDisable()
+        {
+            if (drone != null) drone.OnReset -= ClearLatches;
+            ControlSettings.Changed -= Apply;
+            ReleaseCursor();
+        }
+
+        void Start() => Apply(ControlSettings.Current);
+
+        /// <summary>Pushes rates and camera settings to the drone.</summary>
+        void Apply(ControlSettings s)
+        {
+            if (drone != null && drone.Config != null)
+                drone.ApplyPilotRates(s.rollRates, s.pitchRates, s.yawRates);
+            if (droneCamera != null)
+            {
+                droneCamera.TiltDeg = s.cameraTilt;
+                droneCamera.HorizontalFov = s.cameraFov;
+            }
+        }
+
+        /// <summary>Any reset (pilot or mission) starts disarmed with zero held throttle.</summary>
+        void ClearLatches()
+        {
+            _armToggle = false;
+            _heldThrottle = 0f;
+            _mouseStick = Vector2.zero;
+        }
+
         void Update()
         {
             if (drone == null) return;
+            if (GamePause.IsPaused)
+            {
+                ReleaseCursor();
+                return;
+            }
+
+            var s = ControlSettings.Current;
+            var joystick = ControlInput.PreferredJoystick;
+            var gamepad = Gamepad.current;
+            ActiveSource = ResolveSource(s.device, joystick, gamepad);
 
             var state = new DroneInputState();
-            var gamepad = Gamepad.current;
-            var keyboard = Keyboard.current;
-            var joystick = Joystick.current;
-
-            ActiveSource = ResolveSource(gamepad, keyboard, joystick);
             switch (ActiveSource)
             {
-                case InputSource.RcTransmitter: ReadRc(joystick, ref state); break;
-                case InputSource.Gamepad: ReadGamepad(gamepad, ref state); break;
-                case InputSource.Keyboard: ReadKeyboard(keyboard, ref state); break;
+                case InputSource.Joystick: ReadJoystick(s, joystick, ref state); break;
+                case InputSource.Gamepad: ReadGamepad(s, gamepad, ref state); break;
+                default: ReadKeyboardMouse(s, ref state); break;
             }
 
-            // Buttons work from any device.
-            bool armPressed = (gamepad?.rightShoulder.wasPressedThisFrame ?? false) || (keyboard?.spaceKey.wasPressedThisFrame ?? false);
-            bool modePressed = (gamepad?.leftShoulder.wasPressedThisFrame ?? false) || (keyboard?.mKey.wasPressedThisFrame ?? false);
-            state.resetPressed = (gamepad?.startButton.wasPressedThisFrame ?? false) || (keyboard?.rKey.wasPressedThisFrame ?? false);
+            if (ControlInput.WasPressed(PilotAction.Arm)) _armToggle = !_armToggle;
+            if (ControlInput.WasPressed(PilotAction.Mode)) _mode = _mode == FlightMode.Acro ? FlightMode.Angle : FlightMode.Acro;
+            state.resetPressed = AllowReset && ControlInput.WasPressed(PilotAction.Reset);
 
-            if (armPressed) _armToggle = !_armToggle;
-            if (modePressed) _mode = _mode == FlightMode.Acro ? FlightMode.Angle : FlightMode.Acro;
-            if (state.resetPressed)
-            {
-                _armToggle = false;
-                _keyboardThrottle = 0f;
-            }
             // A crash disarms the drone; drop the toggle so the next press arms instead of disarming.
             if (drone.Crashed) _armToggle = false;
 
-            bool rcArm = ActiveSource == InputSource.RcTransmitter && rcMapping.useArmChannel;
-            if (!rcArm) state.armSwitch = _armToggle;
+            bool joystickArm = ActiveSource == InputSource.Joystick && s.jsUseArmAxis;
+            if (!joystickArm) state.armSwitch = _armToggle;
+            bool joystickMode = ActiveSource == InputSource.Joystick && s.jsUseModeAxis;
+            if (!joystickMode) state.mode = _mode;
 
-            bool rcMode = ActiveSource == InputSource.RcTransmitter && rcMapping.useModeChannel;
-            if (!rcMode) state.mode = _mode;
+            if (droneCamera != null)
+            {
+                if (ControlInput.WasPressed(PilotAction.TiltUp)) SetTilt(droneCamera.TiltDeg + TiltStep);
+                if (ControlInput.WasPressed(PilotAction.TiltDown)) SetTilt(droneCamera.TiltDeg - TiltStep);
+            }
 
-            HandleCameraTilt(gamepad, keyboard);
+            if (ActiveSource == InputSource.KeyboardMouse) CaptureCursor();
+            else ReleaseCursor();
+
             drone.SetInput(state);
         }
 
-        InputSource ResolveSource(Gamepad gamepad, Keyboard keyboard, Joystick joystick)
+        void SetTilt(float tilt)
         {
-            switch (preferredSource)
+            droneCamera.TiltDeg = tilt;
+            ControlSettings.Current.cameraTilt = droneCamera.TiltDeg;
+        }
+
+        static InputSource ResolveSource(ControlDevice preferred, Joystick joystick, Gamepad gamepad)
+        {
+            switch (preferred)
             {
-                case InputSource.RcTransmitter when joystick != null: return InputSource.RcTransmitter;
-                case InputSource.Gamepad when gamepad != null: return InputSource.Gamepad;
-                case InputSource.Keyboard when keyboard != null: return InputSource.Keyboard;
+                case ControlDevice.Joystick when joystick != null: return InputSource.Joystick;
+                case ControlDevice.Gamepad when gamepad != null: return InputSource.Gamepad;
+                case ControlDevice.KeyboardMouse: return InputSource.KeyboardMouse;
             }
-            if (joystick != null) return InputSource.RcTransmitter;
+            if (joystick != null) return InputSource.Joystick;
             if (gamepad != null) return InputSource.Gamepad;
-            return InputSource.Keyboard;
+            return InputSource.KeyboardMouse;
         }
 
-        void ReadRc(Joystick joystick, ref DroneInputState s)
+        void ReadJoystick(ControlSettings s, Joystick js, ref DroneInputState state)
         {
-            float db = rcMapping.deadband;
-            s.roll = Deadband(rcMapping.roll.Read(joystick) ?? 0f, db);
-            s.pitch = Deadband(rcMapping.pitch.Read(joystick) ?? 0f, db);
-            s.yaw = Deadband(rcMapping.yaw.Read(joystick) ?? 0f, db);
-            s.throttle = Mathf.Clamp01(((rcMapping.throttle.Read(joystick) ?? -1f) + 1f) * 0.5f);
-            if (rcMapping.useArmChannel)
-                s.armSwitch = (rcMapping.arm.Read(joystick) ?? -1f) > 0f;
-            if (rcMapping.useModeChannel)
-                s.mode = (rcMapping.mode.Read(joystick) ?? -1f) > 0f ? FlightMode.Angle : FlightMode.Acro;
+            float db = s.jsDeadband;
+            state.roll = Deadband(s.jsRoll.ReadBipolar(js) ?? 0f, db);
+            state.pitch = Deadband(s.jsPitch.ReadBipolar(js) ?? 0f, db);
+            state.yaw = Deadband(s.jsYaw.ReadBipolar(js) ?? 0f, db);
+            state.throttle = Mathf.Clamp01(s.jsThrottle.ReadUnipolar(js) ?? 0f);
+            if (s.jsUseArmAxis)
+                // Switch centre is calibrated at the DISARM position, so require a clear throw.
+                state.armSwitch = (s.jsArm.ReadBipolar(js) ?? -1f) > 0.5f;
+            if (s.jsUseModeAxis)
+                state.mode = (s.jsMode.ReadBipolar(js) ?? -1f) > 0.5f ? FlightMode.Angle : FlightMode.Acro;
         }
 
-        void ReadGamepad(Gamepad gamepad, ref DroneInputState s)
+        void ReadGamepad(ControlSettings s, Gamepad gp, ref DroneInputState state)
         {
-            Vector2 left = gamepad.leftStick.ReadUnprocessedValue();
-            Vector2 right = gamepad.rightStick.ReadUnprocessedValue();
-            // Mode 2: left stick throttle/yaw, right stick pitch/roll. Spring-centred throttle: centre = 50%.
-            s.throttle = Mathf.Clamp01((left.y + 1f) * 0.5f);
-            s.yaw = Deadband(left.x, gamepadDeadzone);
-            s.pitch = Deadband(right.y, gamepadDeadzone);
-            s.roll = Deadband(right.x, gamepadDeadzone);
+            // Unprocessed: the Input System's default stick deadzone (0.125) is far too large for FPV.
+            Vector2 left = gp.leftStick.ReadUnprocessedValue();
+            Vector2 right = gp.rightStick.ReadUnprocessedValue();
+            float dz = s.gpDeadzone;
+
+            state.yaw = Curve(Deadband(left.x, dz), s.gpExpo);
+            state.roll = Curve(Deadband(right.x, dz), s.gpExpo);
+            state.pitch = Curve(Deadband(right.y, dz), s.gpExpo) * (s.gpInvertPitch ? -1f : 1f);
+
+            float ly = Deadband(left.y, dz);
+            // Spring-centred throttle: released stick counts as "throttle at rest" for arming.
+            state.throttleAtRest = ly <= 0.1f &&
+                (s.gpThrottleMode == GamepadThrottleMode.CenterIsHalf || s.gpThrottleMode == GamepadThrottleMode.CenterIsHover);
+            switch (s.gpThrottleMode)
+            {
+                case GamepadThrottleMode.CenterIsHalf:
+                    state.throttle = Mathf.Clamp01((left.y + 1f) * 0.5f);
+                    break;
+                case GamepadThrottleMode.CenterIsHover:
+                    float hover = drone.Config != null ? drone.Config.HoverThrottle : 0.5f;
+                    state.throttle = ly >= 0f ? Mathf.Lerp(hover, 1f, ly) : Mathf.Lerp(hover, 0f, -ly);
+                    break;
+                case GamepadThrottleMode.Incremental:
+                    _heldThrottle = Mathf.Clamp01(_heldThrottle + ly * s.gpIncrementalSpeed * Time.deltaTime);
+                    state.throttle = _heldThrottle;
+                    break;
+                case GamepadThrottleMode.Trigger:
+                    state.throttle = Mathf.Clamp01(gp.rightTrigger.ReadUnprocessedValue());
+                    break;
+            }
         }
 
-        void ReadKeyboard(Keyboard kb, ref DroneInputState s)
+        void ReadKeyboardMouse(ControlSettings s, ref DroneInputState state)
         {
-            if (kb.wKey.isPressed) _keyboardThrottle += keyboardThrottleSpeed * Time.deltaTime;
-            if (kb.sKey.isPressed) _keyboardThrottle -= keyboardThrottleSpeed * Time.deltaTime;
-            if (kb.xKey.wasPressedThisFrame) _keyboardThrottle = 0f;
-            _keyboardThrottle = Mathf.Clamp01(_keyboardThrottle);
+            if (ControlInput.IsHeld(PilotAction.ThrottleUp)) _heldThrottle += s.kbThrottleSpeed * Time.deltaTime;
+            if (ControlInput.IsHeld(PilotAction.ThrottleDown)) _heldThrottle -= s.kbThrottleSpeed * Time.deltaTime;
+            if (ControlInput.WasPressed(PilotAction.ThrottleCut)) _heldThrottle = 0f;
 
-            s.throttle = _keyboardThrottle;
-            s.yaw = Axis(kb.aKey.isPressed, kb.dKey.isPressed) * keyboardStick;
-            s.pitch = Axis(kb.downArrowKey.isPressed, kb.upArrowKey.isPressed) * keyboardStick;
-            s.roll = Axis(kb.leftArrowKey.isPressed, kb.rightArrowKey.isPressed) * keyboardStick;
+            var mouse = Mouse.current;
+            if (mouse != null)
+            {
+                _heldThrottle += mouse.scroll.ReadValue().y * 0.0005f;
+
+                // Mouse is a virtual stick for pitch/roll: movement deflects it, it springs back to centre.
+                Vector2 delta = mouse.delta.ReadValue();
+                _mouseStick.x += delta.x * s.mouseSensitivity;
+                _mouseStick.y += delta.y * s.mouseSensitivity * (s.mouseInvertY ? -1f : 1f);
+                if (s.mouseReturn > 0f)
+                    _mouseStick = Vector2.MoveTowards(_mouseStick, Vector2.zero, s.mouseReturn * Time.deltaTime);
+                _mouseStick = Vector2.ClampMagnitude(_mouseStick, 1f);
+                if (mouse.middleButton.wasPressedThisFrame) _mouseStick = Vector2.zero;
+            }
+            _heldThrottle = Mathf.Clamp01(_heldThrottle);
+
+            state.throttle = _heldThrottle;
+            state.roll = _mouseStick.x;
+            state.pitch = _mouseStick.y; // mouse forward (up) = stick forward = nose down
+            float yaw = (ControlInput.IsHeld(PilotAction.YawRight) ? 1f : 0f) - (ControlInput.IsHeld(PilotAction.YawLeft) ? 1f : 0f);
+            state.yaw = yaw * s.kbYaw;
         }
 
-        void HandleCameraTilt(Gamepad gamepad, Keyboard keyboard)
+        static void CaptureCursor()
         {
-            if (droneCamera == null) return;
-            if ((gamepad?.dpad.up.wasPressedThisFrame ?? false) || (keyboard?.rightBracketKey.wasPressedThisFrame ?? false))
-                droneCamera.TiltDeg += tiltStep;
-            if ((gamepad?.dpad.down.wasPressedThisFrame ?? false) || (keyboard?.leftBracketKey.wasPressedThisFrame ?? false))
-                droneCamera.TiltDeg -= tiltStep;
+            if (Cursor.lockState == CursorLockMode.Locked) return;
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
         }
 
-        static float Axis(bool negative, bool positive) => (positive ? 1f : 0f) - (negative ? 1f : 0f);
+        static void ReleaseCursor()
+        {
+            if (Cursor.lockState == CursorLockMode.None) return;
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+        }
+
+        static float Curve(float v, float expo) => expo <= 0f ? v : v * (1f - expo) + v * v * v * expo;
 
         static float Deadband(float v, float db)
         {

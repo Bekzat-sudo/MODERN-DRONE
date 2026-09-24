@@ -68,7 +68,10 @@ namespace ModernDrone.Vehicles
             Shape(flames, 0.5f * size);
             var vel = flames.velocityOverLifetime;
             vel.enabled = true;
+            // All three axes must use the same curve mode.
+            vel.x = new ParticleSystem.MinMaxCurve(0f, 0f);
             vel.y = new ParticleSystem.MinMaxCurve(1.5f, 3f);
+            vel.z = new ParticleSystem.MinMaxCurve(0f, 0f);
 
             var smoke = Emitter(root.transform, "Smoke", Alpha, looping: true);
             main = smoke.main;
@@ -84,6 +87,7 @@ namespace ModernDrone.Vehicles
             vel.enabled = true;
             vel.y = new ParticleSystem.MinMaxCurve(2f, 3.5f);
             vel.x = new ParticleSystem.MinMaxCurve(0.3f, 0.8f); // light wind
+            vel.z = new ParticleSystem.MinMaxCurve(0f, 0f);
 
             PlayAll(root);
             return root;

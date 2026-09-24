@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using ModernDrone.Core;
+using ModernDrone.Missions;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -22,14 +23,14 @@ namespace ModernDrone.Editor
         const float MaxHeight = 60f;
         const int Resolution = 513;
 
-        static Vector3 Center => new Vector3(Size * 0.5f, 0f, Size * 0.5f);
+        internal static Vector3 Center => new Vector3(Size * 0.5f, 0f, Size * 0.5f);
 
         [MenuItem("Modern Drone/Setup/Build Proving Ground Scene")]
         public static void Build()
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
-            var terrain = CreateTerrain();
+            var terrain = CreateTerrain(TerrainDataPath);
             CreateLighting();
             CreateTreeLines(terrain);
             CreateFlightGates(terrain);
@@ -38,15 +39,16 @@ namespace ModernDrone.Editor
             PlaceTank(terrain, Center + new Vector3(-45f, 0f, 170f), 90f, "Tank_Side");
             PlaceTank(terrain, Center + new Vector3(45f, 0f, 170f), 0f, "Tank_Rear");
             CreateSpawn(terrain);
+            CreateMissionRig("Полигон", "", 0);
 
             EditorSceneManager.SaveScene(scene, ScenePath);
-            AddToBuildSettings(ScenePath);
+            AddToBuildSettings(ScenePath, 1);
             Debug.Log($"[ModernDrone] Proving ground built: {ScenePath}");
         }
 
-        static Terrain CreateTerrain()
+        internal static Terrain CreateTerrain(string terrainDataPath)
         {
-            AssetDatabase.DeleteAsset(TerrainDataPath);
+            AssetDatabase.DeleteAsset(terrainDataPath);
             var data = new TerrainData { heightmapResolution = Resolution };
             data.size = new Vector3(Size, MaxHeight, Size);
 
@@ -71,7 +73,7 @@ namespace ModernDrone.Editor
             // URP terrain reads smoothness from diffuse alpha; keep it matte.
             var grassTex = SolidTexture("Grass", new Color(0.36f, 0.40f, 0.22f, 0.05f));
             var grass = new TerrainLayer { name = "Grass", diffuseTexture = grassTex, tileSize = new Vector2(10f, 10f) };
-            AssetDatabase.CreateAsset(data, TerrainDataPath);
+            AssetDatabase.CreateAsset(data, terrainDataPath);
             AssetDatabase.AddObjectToAsset(grassTex, data);
             AssetDatabase.AddObjectToAsset(grass, data);
             data.terrainLayers = new[] { grass };
@@ -97,7 +99,7 @@ namespace ModernDrone.Editor
             return tex;
         }
 
-        static void CreateLighting()
+        internal static void CreateLighting()
         {
             var sun = new GameObject("Sun").AddComponent<Light>();
             sun.type = LightType.Directional;
@@ -118,7 +120,7 @@ namespace ModernDrone.Editor
         }
 
         /// <summary>Windbreak tree lines along field edges: the main cover in steppe terrain.</summary>
-        static void CreateTreeLines(Terrain terrain)
+        internal static void CreateTreeLines(Terrain terrain)
         {
             var root = new GameObject("TreeLines");
             var mat = GetMaterial("TreeLine", new Color(0.18f, 0.26f, 0.12f));
@@ -174,16 +176,17 @@ namespace ModernDrone.Editor
             bar.isStatic = true;
         }
 
-        static void PlaceTank(Terrain terrain, Vector3 pos, float yaw, string name)
+        internal static GameObject PlaceTank(Terrain terrain, Vector3 pos, float yaw, string name)
         {
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(VehicleBuilder.TankPrefabPath) ?? VehicleBuilder.BuildTank();
             var tank = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
             tank.name = name;
             pos.y = terrain.SampleHeight(pos);
             tank.transform.SetPositionAndRotation(pos, Quaternion.Euler(0f, yaw, 0f));
+            return tank;
         }
 
-        static void CreateSpawn(Terrain terrain)
+        internal static void CreateSpawn(Terrain terrain)
         {
             var pos = Center + new Vector3(0f, 0f, -40f);
             pos.y = terrain.SampleHeight(pos) + 0.1f;
@@ -228,11 +231,30 @@ namespace ModernDrone.Editor
             return mat;
         }
 
-        static void AddToBuildSettings(string path)
+        /// <summary>Killcam camera plus mission controller. Zero sorties = free flight.</summary>
+        internal static MissionController CreateMissionRig(string name, string briefing, int sorties)
+        {
+            var camGo = new GameObject("Killcam");
+            var cam = camGo.AddComponent<Camera>();
+            cam.farClipPlane = 3000f;
+            cam.fieldOfView = 55f;
+            cam.enabled = false; // enabled by the killcam only while replaying
+            camGo.AddComponent<AudioListener>().enabled = false;
+            var killcam = camGo.AddComponent<Killcam>();
+            killcam.SetAssets(MissionAssets.LoadKillcamAssets());
+
+            var mission = new GameObject("Mission").AddComponent<MissionController>();
+            mission.Configure(name, briefing, sorties);
+            mission.gameObject.AddComponent<ModernDrone.UI.PauseMenu>();
+            return mission;
+        }
+
+        /// <summary>Adds the scene at the given build index (0 = the scene the game starts in).</summary>
+        internal static void AddToBuildSettings(string path, int index)
         {
             var scenes = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
             scenes.RemoveAll(s => s.path == path || s.path == "Assets/Scenes/SampleScene.unity");
-            scenes.Insert(0, new EditorBuildSettingsScene(path, true));
+            scenes.Insert(Mathf.Min(index, scenes.Count), new EditorBuildSettingsScene(path, true));
             EditorBuildSettings.scenes = scenes.ToArray();
         }
     }

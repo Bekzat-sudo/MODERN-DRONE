@@ -13,6 +13,12 @@
   builder, not the scene by hand.
 - Damage/ballistics math should be plain C# (no MonoBehaviour) so it can be unit-tested.
 
+- Scenes: MainMenu (build index 0) -> Mission_01 / ProvingGround. `Modern Drone/Setup/Rebuild Everything` regenerates
+  prefabs and all scenes from the builders in `Editor/`.
+- Pilot control settings live in `ControlSettings` (JSON at `Application.persistentDataPath/controls.json`), edited by
+  the in-game settings menu (`UI/SettingsMenu.cs`). Don't hardcode keys/axes in gameplay code — use `ControlInput`.
+- Play mode only ticks while unfocused if `PlayerSettings.runInBackground` is on (needed for automated play checks).
+
 ## Workflow
 - The Unity Editor runs on this folder (main checkout); edit files here, not in `.claude/worktrees`.
 - Remote: https://github.com/Bekzat-sudo/MODERN-DRONE

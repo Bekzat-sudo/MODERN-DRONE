@@ -31,6 +31,11 @@ namespace ModernDrone.Missions
         public bool FuzeLive { get; private set; }
         public StrikeReport LastReport { get; private set; }
 
+        public event System.Action<StrikeReport> StrikeResolved;
+
+        /// <summary>Show the built-in strike summary overlay (off when a killcam presents it).</summary>
+        public bool ShowReportOverlay { get; set; } = true;
+
         public void SetWarhead(WarheadData data) => warhead = data;
 
         void Awake()
@@ -70,6 +75,7 @@ namespace ModernDrone.Missions
             rb.linearVelocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
             rb.isKinematic = true;
+            StrikeResolved?.Invoke(LastReport);
         }
 
         void Rearm()
@@ -81,7 +87,7 @@ namespace ModernDrone.Missions
 
         void OnGUI()
         {
-            if (LastReport == null || Time.time - LastReport.time > reportDuration) return;
+            if (!ShowReportOverlay || LastReport == null || Time.time - LastReport.time > reportDuration) return;
             if (_style == null || _style.fontSize != Mathf.RoundToInt(Screen.height * 0.024f))
                 _style = new GUIStyle(GUI.skin.label)
                 {
