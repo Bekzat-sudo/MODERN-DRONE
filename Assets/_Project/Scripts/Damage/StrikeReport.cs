@@ -75,7 +75,8 @@ namespace ModernDrone.Damage
             {
                 var vehicle = kv.Key;
                 sb.Append(vehicle.DisplayName).Append(": ").Append(DamageNames.Ru(vehicle.State));
-                if (vehicle.State == kv.Value && vehicle.State == KillState.None)
+                bool anyModuleHit = hits.Exists(h => h.module.Owner == vehicle && h.after != h.before);
+                if (vehicle.State == kv.Value && vehicle.State == KillState.None && !anyModuleHit)
                     sb.Append(armorPenetrated ? " (пробитие)" : " (не пробито)");
                 sb.AppendLine();
             }

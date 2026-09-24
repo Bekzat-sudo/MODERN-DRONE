@@ -8,7 +8,9 @@ namespace ModernDrone.Missions
         /// <summary>Mobility or firepower kill is enough.</summary>
         OutOfAction,
         /// <summary>Must be destroyed outright (detonation or burn-out).</summary>
-        Destroyed
+        Destroyed,
+        /// <summary>Emitters (EW, radar): sensors / antennas knocked out is enough.</summary>
+        Silenced
     }
 
     public enum MissionOutcome
@@ -30,6 +32,7 @@ namespace ModernDrone.Missions
         public static bool IsNeutralized(KillState state, TargetRequirement requirement) => requirement switch
         {
             TargetRequirement.Destroyed => (state & KillState.Destroyed) != 0,
+            TargetRequirement.Silenced => (state & (KillState.Sensors | KillState.Destroyed)) != 0,
             _ => (state & (KillState.Mobility | KillState.Firepower | KillState.Destroyed)) != 0
         };
 

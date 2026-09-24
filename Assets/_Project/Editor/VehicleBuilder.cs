@@ -1,5 +1,7 @@
 using ModernDrone.Core;
 using ModernDrone.Damage;
+using ModernDrone.Missions;
+using ModernDrone.Video;
 using ModernDrone.Vehicles;
 using UnityEditor;
 using UnityEngine;
@@ -14,6 +16,7 @@ namespace ModernDrone.Editor
     public static class VehicleBuilder
     {
         public const string TankPrefabPath = "Assets/_Project/Prefabs/Vehicles/Tank_Placeholder.prefab";
+        public const string EwStationPrefabPath = "Assets/_Project/Prefabs/Vehicles/EwStation_Placeholder.prefab";
         const string MatDir = "Assets/_Project/Art/Materials";
 
         static Material _hullMat, _trackMat, _eraMat, _moduleMat;
@@ -99,6 +102,68 @@ namespace ModernDrone.Editor
             var prefab = PrefabUtility.SaveAsPrefabAsset(root, TankPrefabPath);
             Object.DestroyImmediate(root);
             Debug.Log($"[ModernDrone] Vehicle prefab built: {TankPrefabPath}");
+            return prefab;
+        }
+
+        /// <summary>
+        /// Truck-mounted EW station: thin-skinned cab and shelter, generator inside, antenna panels on a mast.
+        /// Jams while an antenna and the generator survive.
+        /// </summary>
+        [MenuItem("Modern Drone/Setup/Build EW Station Prefab")]
+        public static GameObject BuildEwStation()
+        {
+            _hullMat = GetMaterial("VehicleGreen", new Color(0.29f, 0.33f, 0.22f));
+            _trackMat = GetMaterial("VehicleTrack", new Color(0.12f, 0.12f, 0.11f));
+            _moduleMat = GetMaterial("VehicleModule", new Color(0.5f, 0.5f, 0.5f));
+            var antennaMat = GetMaterial("EwAntenna", new Color(0.75f, 0.75f, 0.7f));
+
+            var root = new GameObject("EwStation_Placeholder") { tag = "Vehicle" };
+            var t = root.transform;
+
+            // Chassis and wheels: physical hull layer (not armor).
+            Box("Chassis", t, _trackMat, GameLayers.VehicleHull, new Vector3(0f, 0.85f, 0f), new Vector3(2.3f, 0.45f, 7.2f));
+            foreach (float z in new[] { 2.4f, -1.2f, -2.6f })
+            foreach (float x in new[] { -1.05f, 1.05f })
+                Box("Wheel", t, _trackMat, GameLayers.VehicleHull, new Vector3(x, 0.55f, z), new Vector3(0.4f, 1.1f, 1.1f));
+
+            // Cab (front) — thin plates.
+            Plate("Cab_Front", t, new Vector3(0f, 1.9f, 3.55f), new Vector3(2.4f, 1.8f, 0.06f), 8f);
+            Plate("Cab_Side_L", t, new Vector3(-1.2f, 1.9f, 2.7f), new Vector3(0.06f, 1.8f, 1.7f), 8f);
+            Plate("Cab_Side_R", t, new Vector3(1.2f, 1.9f, 2.7f), new Vector3(0.06f, 1.8f, 1.7f), 8f);
+            Plate("Cab_Roof", t, new Vector3(0f, 2.8f, 2.7f), new Vector3(2.4f, 0.06f, 1.7f), 8f);
+            Plate("Cab_Back", t, new Vector3(0f, 1.9f, 1.85f), new Vector3(2.4f, 1.8f, 0.06f), 8f);
+
+            // Shelter (kung) with the electronics.
+            Plate("Shelter_Side_L", t, new Vector3(-1.25f, 2.25f, -0.9f), new Vector3(0.06f, 2.3f, 4.8f), 10f);
+            Plate("Shelter_Side_R", t, new Vector3(1.25f, 2.25f, -0.9f), new Vector3(0.06f, 2.3f, 4.8f), 10f);
+            Plate("Shelter_Front", t, new Vector3(0f, 2.25f, 1.5f), new Vector3(2.5f, 2.3f, 0.06f), 10f);
+            Plate("Shelter_Rear", t, new Vector3(0f, 2.25f, -3.3f), new Vector3(2.5f, 2.3f, 0.06f), 10f);
+            Plate("Shelter_Roof", t, new Vector3(0f, 3.4f, -0.9f), new Vector3(2.5f, 0.06f, 4.8f), 10f);
+
+            Module("Module_Engine", t, ModuleType.Engine, 120f, 30f, new Vector3(0f, 1.3f, 3.0f), new Vector3(1.4f, 0.6f, 1.0f));
+            Module("Module_ControlStation", t, ModuleType.ControlStation, 60f, 10f, new Vector3(0f, 1.9f, 2.6f), new Vector3(1.8f, 0.9f, 1.0f));
+            Module("Module_Fuel", t, ModuleType.FuelTank, 60f, 10f, new Vector3(1.0f, 0.85f, 0.8f), new Vector3(0.5f, 0.5f, 1.2f));
+            Module("Module_Generator", t, ModuleType.Generator, 80f, 25f, new Vector3(0f, 1.8f, -2.5f), new Vector3(1.4f, 1.1f, 1.2f), visible: true);
+            Module("Module_Electronics", t, ModuleType.ControlStation, 60f, 10f, new Vector3(0f, 2.2f, -0.4f), new Vector3(2.0f, 1.4f, 1.6f));
+
+            // Mast with two antenna panels: exposed, lightly built.
+            var mast = Box("Mast", t, antennaMat, GameLayers.VehicleHull, new Vector3(0f, 6.2f, -1.4f), new Vector3(0.15f, 5.6f, 0.15f));
+            Object.DestroyImmediate(mast.GetComponent<Collider>()); // too thin to matter; keeps fly-through fair
+            var antennaA = Box("Antenna_A", t, antennaMat, GameLayers.Module, new Vector3(0f, 9.1f, -1.4f), new Vector3(1.6f, 0.9f, 0.12f));
+            antennaA.AddComponent<VehicleModule>().Configure(ModuleType.Antenna, 50f, 5f);
+            var antennaB = Box("Antenna_B", t, antennaMat, GameLayers.Module, new Vector3(0f, 8.0f, -1.4f), new Vector3(0.12f, 0.9f, 1.6f));
+            antennaB.AddComponent<VehicleModule>().Configure(ModuleType.Antenna, 50f, 5f);
+
+            var model = root.AddComponent<VehicleDamageModel>();
+            model.SetDisplayName("Станция РЭБ (заглушка)");
+            root.AddComponent<VehicleEffects>();
+            var jammer = root.AddComponent<SignalJammer>();
+            jammer.Configure(280f, 0.92f, JamBands.Both, antennaA.transform);
+            root.AddComponent<JammerStation>();
+
+            var prefab = PrefabUtility.SaveAsPrefabAsset(root, EwStationPrefabPath);
+            Object.DestroyImmediate(root);
+            Debug.Log($"[ModernDrone] EW station prefab built: {EwStationPrefabPath}");
             return prefab;
         }
 

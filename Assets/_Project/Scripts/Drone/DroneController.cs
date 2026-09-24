@@ -8,7 +8,8 @@ namespace ModernDrone.Drone
     {
         None,
         Throttle,
-        Crash
+        Crash,
+        Failsafe
     }
 
     public struct DroneTelemetry
@@ -76,6 +77,24 @@ namespace ModernDrone.Drone
 
         public event Action<Collision> OnCrash;
         public event Action OnReset;
+        public event Action OnFailsafe;
+
+        /// <summary>Control link lost long enough to trigger failsafe (drone disarmed and dropped).</summary>
+        public bool Failsafe { get; private set; }
+
+        /// <summary>Control latency applied to stick inputs, s (set by the link model).</summary>
+        public float InputLatency { get; set; }
+
+        /// <summary>Control link quality 0..1 (set by the link model; 1 when no link model is present).</summary>
+        public float LinkQuality { get; private set; } = 1f;
+
+        const float FailsafeThreshold = 0.1f;
+        const float FailsafeHoldTime = 0.5f;
+        float _linkLostTime;
+        float _extraMass;
+        readonly System.Collections.Generic.Queue<(float time, DroneInputState state)> _inputQueue =
+            new System.Collections.Generic.Queue<(float, DroneInputState)>();
+        DroneInputState _applied;
 
         /// <summary>Velocity at the start of the last physics step, before any collision response.</summary>
         public Vector3 PreImpactVelocity { get; private set; }
@@ -102,7 +121,7 @@ namespace ModernDrone.Drone
                 config.name += " (Runtime)";
             }
             _rb = GetComponent<Rigidbody>();
-            _rb.mass = config.TotalMass;
+            _rb.mass = config.TotalMass + _extraMass;
             _rb.linearDamping = 0f;
             _rb.angularDamping = 0f;
             _rb.useGravity = true;
@@ -117,6 +136,41 @@ namespace ModernDrone.Drone
             _battery = new BatteryModel(config.cells, config.capacityMah, config.internalResistance);
             _homePosition = transform.position;
             _homeRotation = transform.rotation;
+        }
+
+        /// <summary>Feeds the current control link quality; a lost link triggers failsafe after a short hold.</summary>
+        public void SetLinkQuality(float quality) => LinkQuality = Mathf.Clamp01(quality);
+
+        /// <summary>Additional carried mass (e.g. fiber spool), kg. Thrust is unchanged, so agility drops.</summary>
+        public void SetExtraMass(float kg)
+        {
+            _extraMass = Mathf.Max(0f, kg);
+            if (_rb != null) _rb.mass = config.TotalMass + _extraMass;
+        }
+
+        /// <summary>Stick input as received by the flight controller: delayed by latency, frozen while the link is down.</summary>
+        DroneInputState ReceivedInput()
+        {
+            if (LinkQuality < FailsafeThreshold) return _applied; // hold the last received command
+            if (InputLatency <= 0f) return _applied = _input;
+            float cutoff = Time.time - InputLatency;
+            while (_inputQueue.Count > 0 && _inputQueue.Peek().time <= cutoff)
+                _applied = _inputQueue.Dequeue().state;
+            return _applied;
+        }
+
+        void UpdateFailsafe(float dt)
+        {
+            if (!Armed || LinkQuality >= FailsafeThreshold)
+            {
+                _linkLostTime = 0f;
+                return;
+            }
+            _linkLostTime += dt;
+            if (_linkLostTime < FailsafeHoldTime) return;
+            Failsafe = true;
+            Armed = false;
+            OnFailsafe?.Invoke();
         }
 
         /// <summary>Applies the pilot's rate profile from the control settings.</summary>
@@ -136,11 +190,13 @@ namespace ModernDrone.Drone
         public void SetInput(in DroneInputState state)
         {
             _input = state;
+            _inputQueue.Enqueue((Time.time, state));
+            while (_inputQueue.Count > 64) _inputQueue.Dequeue();
 
             if (state.armSwitch && !_prevArmSwitch && !Armed)
             {
                 bool throttleLow = state.throttleAtRest || state.throttle < 0.05f;
-                ArmBlock = Crashed ? ArmBlockReason.Crash : !throttleLow ? ArmBlockReason.Throttle : ArmBlockReason.None;
+                ArmBlock = Crashed ? ArmBlockReason.Crash : Failsafe ? ArmBlockReason.Failsafe : !throttleLow ? ArmBlockReason.Throttle : ArmBlockReason.None;
                 if (ArmBlock == ArmBlockReason.None)
                 {
                     Armed = true;
@@ -163,6 +219,9 @@ namespace ModernDrone.Drone
             Armed = false;
             Crashed = false;
             ArmBlock = ArmBlockReason.None;
+            Failsafe = false;
+            _linkLostTime = 0f;
+            _inputQueue.Clear();
             _prevArmSwitch = true; // require the arm switch to be cycled after a reset
             _fc.Reset();
             _battery.Reset();
@@ -196,13 +255,16 @@ namespace ModernDrone.Drone
             Vector3 omegaBody = transform.InverseTransformDirection(_rb.angularVelocity);
             float maxThrust = config.MaxThrustPerMotor;
 
+            UpdateFailsafe(dt);
             if (Armed)
             {
                 _armedTime += dt;
+                var received = ReceivedInput();
+                received.mode = _input.mode;
                 Vector3 worldUpInBody = transform.InverseTransformDirection(Vector3.up);
-                Vector3 alpha = _fc.Compute(_input, omegaBody, worldUpInBody, dt);
+                Vector3 alpha = _fc.Compute(received, omegaBody, worldUpInBody, dt);
                 Vector3 torque = Vector3.Scale(alpha, config.inertia);
-                float t = Mathf.Clamp01(_input.throttle);
+                float t = Mathf.Clamp01(received.throttle);
                 float collective = t * t * maxThrust * QuadMixer.MotorCount;
                 QuadMixer.Mix(collective, torque, config.ArmOffset, config.yawTorqueCoefficient, maxThrust, _desired);
             }

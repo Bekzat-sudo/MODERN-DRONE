@@ -148,8 +148,9 @@ namespace ModernDrone.Damage
                 || AnyDestroyed(ModuleType.AmmoRack) || AllDestroyed(ModuleType.Launcher))
                 k |= KillState.Firepower;
 
-            bool hasSensors = Has(ModuleType.Optics) || Has(ModuleType.Radar);
-            bool sensorsLeft = _modules.Exists(m => (m.Type == ModuleType.Optics || m.Type == ModuleType.Radar) && m.State != ModuleState.Destroyed);
+            bool IsSensor(ModuleType type) => type == ModuleType.Optics || type == ModuleType.Radar || type == ModuleType.Antenna;
+            bool hasSensors = _modules.Exists(m => IsSensor(m.Type));
+            bool sensorsLeft = _modules.Exists(m => IsSensor(m.Type) && m.State != ModuleState.Destroyed);
             if (hasSensors && !sensorsLeft)
                 k |= KillState.Sensors;
 

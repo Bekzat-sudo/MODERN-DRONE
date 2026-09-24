@@ -17,6 +17,9 @@
   prefabs and all scenes from the builders in `Editor/`.
 - Pilot control settings live in `ControlSettings` (JSON at `Application.persistentDataPath/controls.json`), edited by
   the in-game settings menu (`UI/SettingsMenu.cs`). Don't hardcode keys/axes in gameplay code — use `ControlInput`.
+- Link/video: `Video/LinkModel.cs` (pure rules), `Missions/DroneLink.cs` (per-frame sampling, failsafe, fiber spool),
+  `Art/Shaders/AnalogVideo.shader` via the URP Full Screen Pass on `Assets/Settings/PC_Renderer.asset`
+  (installed by `Modern Drone/Setup/Install Video Feed Effect`). EW emitters are `SignalJammer` + `JammerStation`.
 - Play mode only ticks while unfocused if `PlayerSettings.runInBackground` is on (needed for automated play checks).
 
 ## Workflow

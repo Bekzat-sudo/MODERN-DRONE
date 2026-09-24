@@ -232,7 +232,7 @@ namespace ModernDrone.Editor
         }
 
         /// <summary>Killcam camera plus mission controller. Zero sorties = free flight.</summary>
-        internal static MissionController CreateMissionRig(string name, string briefing, int sorties)
+        internal static MissionController CreateMissionRig(string name, string briefing, int sorties, int fiberSorties = 0)
         {
             var camGo = new GameObject("Killcam");
             var cam = camGo.AddComponent<Camera>();
@@ -244,7 +244,7 @@ namespace ModernDrone.Editor
             killcam.SetAssets(MissionAssets.LoadKillcamAssets());
 
             var mission = new GameObject("Mission").AddComponent<MissionController>();
-            mission.Configure(name, briefing, sorties);
+            mission.Configure(name, briefing, sorties, fiberSorties);
             mission.gameObject.AddComponent<ModernDrone.UI.PauseMenu>();
             return mission;
         }

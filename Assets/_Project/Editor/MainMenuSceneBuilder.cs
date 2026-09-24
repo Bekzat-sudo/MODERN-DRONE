@@ -55,11 +55,14 @@ namespace ModernDrone.Editor
         [MenuItem("Modern Drone/Setup/Rebuild Everything")]
         public static void RebuildAll()
         {
+            VideoFeedSetup.Install();
             WarheadAssets.CreateAll();
             VehicleBuilder.BuildTank();
+            VehicleBuilder.BuildEwStation();
             DroneRigBuilder.BuildPrefab();
             ProvingGroundBuilder.Build();
             MissionSceneBuilder.Build();
+            MissionSceneBuilder.BuildMission02();
             Build();
             EditorSceneManager.OpenScene(ScenePath);
         }

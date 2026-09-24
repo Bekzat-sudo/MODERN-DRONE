@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using ModernDrone.Damage;
 using ModernDrone.Drone;
+using ModernDrone.Video;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
@@ -12,6 +13,7 @@ namespace ModernDrone.Missions
     public enum MissionPhase
     {
         Briefing,
+        Loadout,
         Flying,
         Killcam,
         DroneLost,
@@ -26,7 +28,10 @@ namespace ModernDrone.Missions
     {
         [SerializeField] string missionName = "Свободный полёт";
         [TextArea(3, 8)] [SerializeField] string briefing = "";
+        [Tooltip("Radio (analog) drones available.")]
         [SerializeField] int sorties = 4;
+        [Tooltip("Fiber-optic drones available.")]
+        [SerializeField] int fiberSorties;
         [SerializeField] DroneController drone;
         [SerializeField] Killcam killcam;
         [SerializeField] float droneLostDelay = 2f;
@@ -36,6 +41,10 @@ namespace ModernDrone.Missions
         DroneWarhead _warhead;
         DroneInput _input;
         int _sortiesFlown;
+        int _radioLeft, _fiberLeft;
+        LinkType _choice;
+        DroneLink _link;
+        string _lostMessage = "ДРОН ПОТЕРЯН";
         float _missionTime;
         MissionOutcome _outcome;
         GUIStyle _title, _body, _small;
@@ -43,15 +52,16 @@ namespace ModernDrone.Missions
         public MissionPhase Phase { get; private set; }
         public bool FreeFlight => _targets.Count == 0;
         public int SortiesFlown => _sortiesFlown;
-        public int Sorties => sorties;
+        public int Sorties => sorties + fiberSorties;
         public MissionOutcome Outcome => _outcome;
         public IReadOnlyList<MissionTarget> Targets => _targets;
 
-        public void Configure(string name, string briefingText, int sortieCount)
+        public void Configure(string name, string briefingText, int radioDrones, int fiberDrones = 0)
         {
             missionName = name;
             briefing = briefingText;
-            sorties = sortieCount;
+            sorties = radioDrones;
+            fiberSorties = fiberDrones;
         }
 
         void Awake()
@@ -60,18 +70,23 @@ namespace ModernDrone.Missions
             if (killcam == null) killcam = FindAnyObjectByType<Killcam>(FindObjectsInactive.Include);
             _warhead = drone.GetComponent<DroneWarhead>();
             _input = drone.GetComponent<DroneInput>();
+            _link = drone.GetComponent<DroneLink>();
+            _radioLeft = sorties;
+            _fiberLeft = fiberSorties;
             _targets.AddRange(FindObjectsByType<MissionTarget>(FindObjectsSortMode.InstanceID));
         }
 
         void OnEnable()
         {
             drone.OnCrash += OnDroneCrash;
+            drone.OnFailsafe += OnFailsafe;
             if (_warhead != null) _warhead.StrikeResolved += OnStrike;
         }
 
         void OnDisable()
         {
             drone.OnCrash -= OnDroneCrash;
+            drone.OnFailsafe -= OnFailsafe;
             if (_warhead != null) _warhead.StrikeResolved -= OnStrike;
         }
 
@@ -84,7 +99,7 @@ namespace ModernDrone.Missions
             else
             {
                 Phase = MissionPhase.Briefing;
-                _input.enabled = false;
+                _input.Suspended = true;
             }
         }
 
@@ -95,7 +110,9 @@ namespace ModernDrone.Missions
                 _missionTime += Time.deltaTime;
 
             if (Phase == MissionPhase.Briefing && ConfirmPressed())
-                BeginFlying();
+                PrepareSortie();
+            else if (Phase == MissionPhase.Loadout)
+                UpdateLoadout();
             else if (Phase == MissionPhase.Debrief && RestartPressed())
                 SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
         }
@@ -103,14 +120,14 @@ namespace ModernDrone.Missions
         void BeginFlying()
         {
             Phase = MissionPhase.Flying;
-            _input.enabled = true;
+            _input.Suspended = false;
         }
 
         void OnStrike(StrikeReport report)
         {
             if (Phase != MissionPhase.Flying) return;
             Phase = MissionPhase.Killcam;
-            _input.enabled = false;
+            _input.Suspended = true;
             if (killcam != null)
                 StartCoroutine(killcam.Play(report, EndSortie));
             else
@@ -123,13 +140,53 @@ namespace ModernDrone.Missions
             StartCoroutine(CheckLost());
         }
 
+        void OnFailsafe()
+        {
+            if (Phase != MissionPhase.Flying) return;
+            _lostMessage = _link != null && _link.Type == LinkType.Fiber ? "ОБРЫВ ОПТОВОЛОКНА" : "СВЯЗЬ ПОТЕРЯНА";
+            Phase = MissionPhase.DroneLost;
+            _input.Suspended = true;
+            StartCoroutine(DelayThen(droneLostDelay, EndSortie));
+        }
+
+        /// <summary>Picks the next drone: asks the pilot when both types are left.</summary>
+        void PrepareSortie()
+        {
+            if (_radioLeft > 0 && _fiberLeft > 0)
+            {
+                Phase = MissionPhase.Loadout;
+                _input.Suspended = true;
+                _choice = LinkType.Radio;
+                return;
+            }
+            LaunchSortie(_radioLeft > 0 ? LinkType.Radio : LinkType.Fiber);
+        }
+
+        void UpdateLoadout()
+        {
+            var kb = Keyboard.current;
+            var pad = Gamepad.current;
+            bool left = (kb != null && kb.leftArrowKey.wasPressedThisFrame) || (pad != null && pad.dpad.left.wasPressedThisFrame);
+            bool right = (kb != null && kb.rightArrowKey.wasPressedThisFrame) || (pad != null && pad.dpad.right.wasPressedThisFrame);
+            if (left || right) _choice = _choice == LinkType.Radio ? LinkType.Fiber : LinkType.Radio;
+            if (ConfirmPressed()) LaunchSortie(_choice);
+        }
+
+        void LaunchSortie(LinkType type)
+        {
+            if (type == LinkType.Fiber) _fiberLeft--; else _radioLeft--;
+            _link?.SetType(type);
+            _lostMessage = "ДРОН ПОТЕРЯН";
+            BeginFlying();
+        }
+
         IEnumerator CheckLost()
         {
             // The warhead may detonate from the same collision; its callback can run after ours.
             yield return new WaitForFixedUpdate();
             if (Phase != MissionPhase.Flying || (_warhead != null && _warhead.Detonated)) yield break;
             Phase = MissionPhase.DroneLost;
-            _input.enabled = false;
+            _input.Suspended = true;
             yield return DelayThen(droneLostDelay, EndSortie);
         }
 
@@ -147,18 +204,19 @@ namespace ModernDrone.Missions
                 BeginFlying();
                 return;
             }
+            _lostMessage = "ДРОН ПОТЕРЯН";
 
             _sortiesFlown++;
-            _outcome = MissionRules.Evaluate(CollectStates(), _sortiesFlown, sorties);
+            _outcome = MissionRules.Evaluate(CollectStates(), _sortiesFlown, Sorties);
             if (_outcome == MissionOutcome.InProgress)
             {
                 drone.ResetToHome();
-                BeginFlying();
+                PrepareSortie();
             }
             else
             {
                 Phase = MissionPhase.Debrief;
-                _input.enabled = false;
+                _input.Suspended = true;
             }
         }
 
@@ -201,11 +259,15 @@ namespace ModernDrone.Missions
                 case MissionPhase.Flying:
                     int done = 0;
                     foreach (var t in _targets) if (t.Neutralized) done++;
+                    string kind = _link != null && _link.Type == LinkType.Fiber ? "ОПТОВОЛОКНО" : "РАДИО";
                     GUI.Label(new Rect(0, h * 0.09f, w, _small.fontSize * 1.5f),
-                        $"ДРОН {_sortiesFlown + 1}/{sorties}   ЦЕЛИ {done}/{_targets.Count}", _small);
+                        $"ДРОН {_sortiesFlown + 1}/{Sorties} · {kind}   ЦЕЛИ {done}/{_targets.Count}", _small);
                     break;
                 case MissionPhase.DroneLost:
-                    GUI.Label(new Rect(0, h * 0.4f, w, _title.fontSize * 1.5f), "ДРОН ПОТЕРЯН", _title);
+                    GUI.Label(new Rect(0, h * 0.4f, w, _title.fontSize * 1.5f), _lostMessage, _title);
+                    break;
+                case MissionPhase.Loadout:
+                    Panel(new Rect(w * 0.3f, h * 0.3f, w * 0.4f, h * 0.36f), "ВЫБОР ДРОНА", LoadoutText(), "← → — выбор,  SPACE / A — взлёт");
                     break;
                 case MissionPhase.Debrief:
                     string header = _outcome == MissionOutcome.Success ? "ЗАДАЧА ВЫПОЛНЕНА" : "ЗАДАЧА НЕ ВЫПОЛНЕНА";
@@ -218,14 +280,21 @@ namespace ModernDrone.Missions
         {
             var sb = new StringBuilder(briefing);
             sb.AppendLine().AppendLine();
-            sb.AppendLine($"Дронов: {sorties}");
+            sb.AppendLine(fiberSorties > 0 ? $"Дронов: {sorties} радио + {fiberSorties} оптоволокно" : $"Дронов: {sorties}");
             sb.AppendLine("Цели:");
             foreach (var t in _targets)
-                sb.AppendLine($"  • {t.Label} — {(t.Requirement == TargetRequirement.Destroyed ? "уничтожить" : "вывести из строя")}");
+                sb.AppendLine($"  • {t.Label} — {RequirementText(t.Requirement)}");
             var src = _input != null ? _input.ActiveSource : InputSource.KeyboardMouse;
             sb.AppendLine().Append($"Арм: {ControlInput.HintFor(PilotAction.Arm, src)}   Режим: {ControlInput.HintFor(PilotAction.Mode, src)}   Пауза / настройки: {ControlInput.HintFor(PilotAction.Pause, src)}");
             return sb.ToString();
         }
+
+        static string RequirementText(TargetRequirement r) => r switch
+        {
+            TargetRequirement.Destroyed => "уничтожить",
+            TargetRequirement.Silenced => "подавить (антенны / генератор)",
+            _ => "вывести из строя"
+        };
 
         string DebriefText()
         {
@@ -234,11 +303,18 @@ namespace ModernDrone.Missions
             foreach (var t in _targets)
                 sb.AppendLine($"{t.Label}: {DamageNames.Ru(t.Model.State)}  (+{MissionRules.Score(t.Model.State)})");
             sb.AppendLine();
-            sb.AppendLine($"Израсходовано дронов: {_sortiesFlown}/{sorties}");
+            sb.AppendLine($"Израсходовано дронов: {_sortiesFlown}/{Sorties}");
             int s = (int)_missionTime;
             sb.AppendLine($"Время: {s / 60:00}:{s % 60:00}");
-            sb.AppendLine().Append($"ОЧКИ: {MissionRules.TotalScore(states, _sortiesFlown, sorties, _outcome)}");
+            sb.AppendLine().Append($"ОЧКИ: {MissionRules.TotalScore(states, _sortiesFlown, Sorties, _outcome)}");
             return sb.ToString();
+        }
+
+        string LoadoutText()
+        {
+            string Mark(LinkType t) => _choice == t ? "▶ " : "   ";
+            return $"{Mark(LinkType.Radio)}Радио (аналог) — осталось {_radioLeft}\n     лёгкий и манёвренный, но уязвим к РЭБ и рельефу\n\n" +
+                   $"{Mark(LinkType.Fiber)}Оптоволокно — осталось {_fiberLeft}\n     не глушится, катушка 5 км, тяжелее";
         }
 
         void Panel(Rect r, string header, string text, string footer)
@@ -249,7 +325,8 @@ namespace ModernDrone.Missions
             GUI.color = prev;
             float pad = r.height * 0.05f;
             GUI.Label(new Rect(r.x, r.y + pad, r.width, _title.fontSize * 1.5f), header, _title);
-            GUI.Label(new Rect(r.x + pad, r.y + pad * 2.5f, r.width - pad * 2, r.height - pad * 4), text, _body);
+            float bodyTop = r.y + pad + _title.fontSize * 2f;
+            GUI.Label(new Rect(r.x + pad, bodyTop, r.width - pad * 2, r.yMax - bodyTop - pad * 2f), text, _body);
             GUI.Label(new Rect(r.x, r.yMax - pad * 1.5f, r.width, _small.fontSize * 1.5f), footer, _small);
         }
 

@@ -88,6 +88,27 @@ namespace ModernDrone.Tests
         }
 
         [UnityTest]
+        public IEnumerator LinkLoss_HoldsBriefly_ThenFailsafeDisarms()
+        {
+            bool fired = false;
+            _drone.OnFailsafe += () => fired = true;
+            Arm(FlightMode.Angle);
+            _drone.SetLinkQuality(0f);
+            Fly(new DroneInputState { mode = FlightMode.Angle, throttle = Hover }, 0.3f);
+            Assert.IsTrue(_drone.Armed, "short dropouts are ridden through");
+            Fly(new DroneInputState { mode = FlightMode.Angle, throttle = Hover }, 0.4f);
+            Assert.IsFalse(_drone.Armed);
+            Assert.IsTrue(_drone.Failsafe && fired);
+
+            _drone.SetLinkQuality(1f);
+            _drone.SetInput(new DroneInputState());
+            _drone.SetInput(new DroneInputState { armSwitch = true });
+            Assert.IsFalse(_drone.Armed, "cannot re-arm after failsafe without a reset");
+            Assert.AreEqual(ArmBlockReason.Failsafe, _drone.ArmBlock);
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator AngleMode_HoverStaysLevel()
         {
             Arm(FlightMode.Angle);

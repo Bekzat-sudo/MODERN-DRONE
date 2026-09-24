@@ -16,7 +16,9 @@ namespace ModernDrone.Damage
         Radar,
         Launcher,
         ControlStation,
-        Generator
+        Generator,
+        /// <summary>EW / comms antenna; counts as a sensor.</summary>
+        Antenna
     }
 
     public enum ModuleState
@@ -80,6 +82,7 @@ namespace ModernDrone.Damage
             ModuleType.Launcher => "Пусковая",
             ModuleType.ControlStation => "Пост управления",
             ModuleType.Generator => "Генератор",
+            ModuleType.Antenna => "Антенна",
             _ => t.ToString()
         };
 

@@ -34,6 +34,12 @@ namespace ModernDrone.Drone
         /// <summary>Missions disable the pilot's reset key: a lost drone is handled by the mission.</summary>
         public bool AllowReset { get; set; } = true;
 
+        /// <summary>
+        /// While suspended (briefing, killcam, menus owned by the mission) sticks and buttons are not sent to the drone,
+        /// but the active device is still tracked so on-screen hints stay correct.
+        /// </summary>
+        public bool Suspended { get; set; }
+
         /// <summary>Current virtual mouse stick (x = roll, y = pitch).</summary>
         public Vector2 MouseStick => _mouseStick;
 
@@ -43,7 +49,11 @@ namespace ModernDrone.Drone
             droneCamera = GetComponentInChildren<DroneCamera>();
         }
 
-        void Awake() => _mode = ControlSettings.Current.startMode;
+        void Awake()
+        {
+            _mode = ControlSettings.Current.startMode;
+            ActiveSource = ResolveSource(ControlSettings.Current.device, ControlInput.PreferredJoystick, Gamepad.current);
+        }
 
         void OnEnable()
         {
@@ -93,6 +103,11 @@ namespace ModernDrone.Drone
             var joystick = ControlInput.PreferredJoystick;
             var gamepad = Gamepad.current;
             ActiveSource = ResolveSource(s.device, joystick, gamepad);
+            if (Suspended)
+            {
+                ReleaseCursor();
+                return;
+            }
 
             var state = new DroneInputState();
             switch (ActiveSource)

@@ -28,6 +28,7 @@ namespace ModernDrone.UI
             _settings = new SettingsMenu(_gui);
 
             _rows.Add(MenuRow.Button("Задача 1: Стоянка у посадки", () => GameScenes.Load(GameScenes.Mission01)));
+            _rows.Add(MenuRow.Button("Задача 2: Прикрытие РЭБ", () => GameScenes.Load(GameScenes.Mission02)));
             _rows.Add(MenuRow.Button("Полигон — свободный полёт", () => GameScenes.Load(GameScenes.ProvingGround)));
             _rows.Add(MenuRow.Button("Настройки управления", () => { _settings.Open(); _inSettings = true; }));
             _rows.Add(MenuRow.Header(""));

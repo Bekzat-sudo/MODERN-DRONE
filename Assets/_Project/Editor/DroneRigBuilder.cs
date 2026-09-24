@@ -71,6 +71,9 @@ namespace ModernDrone.Editor
             SetRef(warhead, "warhead", WarheadAssets.Load(WarheadAssets.ShapedChargePath));
             SetRef(warhead, "visual", root.transform.Find("Visual"));
 
+            var link = root.AddComponent<DroneLink>();
+            SetRef(link, "cableMaterial", GetMaterial("FiberCable", new Color(0.05f, 0.05f, 0.05f)));
+
             var prefab = PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
             Object.DestroyImmediate(root);
             Debug.Log($"[ModernDrone] Drone prefab built: {PrefabPath}");

@@ -1,5 +1,6 @@
 using System.Globalization;
 using ModernDrone.Drone;
+using ModernDrone.Video;
 using UnityEngine;
 
 namespace ModernDrone.UI
@@ -50,6 +51,17 @@ namespace ModernDrone.UI
             // Corners
             Label(new Rect(pad, pad, 400, line), t.mode == FlightMode.Acro ? "ACRO" : "ANGL");
             Label(new Rect(pad, pad + line, 400, line), input != null ? SourceName(input.ActiveSource) : "");
+            if (VideoFeed.HasLink)
+            {
+                var link = VideoFeed.Current;
+                bool lowLq = link.control < 0.3f;
+                Label(new Rect(pad, pad + line * 2, 500, line), $"LQ {link.control * 100f:0}  VID {link.video * 100f:0}", lowLq ? Color.red : textColor);
+                if (link.type == LinkType.Fiber)
+                    Label(new Rect(pad, pad + line * 3, 500, line), $"SPOOL {link.cableUsed / 1000f:0.00}/{link.spoolLength / 1000f:0.0}km",
+                        link.cableUsed > link.spoolLength * 0.85f ? Color.red : textColor);
+                else if (link.jam > 0.05f)
+                    Label(new Rect(pad, pad + line * 3, 500, line), $"EW {link.jam * 100f:0}%", Color.red);
+            }
             LabelRight(new Rect(w - pad - 400, pad, 400, line), FormatTime(t.flightTime));
             Label(new Rect(w * 0.5f - 150, pad, 300, line), $"{Compass(t.headingDeg)} {t.headingDeg:000}", textColor, TextAnchor.MiddleCenter);
 
@@ -71,14 +83,19 @@ namespace ModernDrone.UI
 
             // Centre warnings
             var source = input != null ? input.ActiveSource : InputSource.KeyboardMouse;
-            string warning = t.crashed ? $"CRASH  [{ControlInput.HintFor(PilotAction.Reset, source)}]"
+            var linkNow = VideoFeed.HasLink ? VideoFeed.Current : default;
+            string warning = linkNow.cableCut ? "CABLE CUT"
+                : drone.Failsafe ? "FAILSAFE"
+                : t.crashed ? $"CRASH  [{ControlInput.HintFor(PilotAction.Reset, source)}]"
                 : drone.ArmBlock == ArmBlockReason.Throttle ? "ARM BLOCKED: THROTTLE"
+                : drone.ArmBlock == ArmBlockReason.Failsafe ? "ARM BLOCKED: FAILSAFE"
                 : !t.armed ? $"DISARMED  [{ControlInput.HintFor(PilotAction.Arm, source)}]"
-                : lowBat ? "LOW BATTERY" : null;
+                : lowBat ? "LOW BATTERY"
+                : VideoFeed.HasLink && linkNow.control < 0.3f ? "LOW LQ" : null;
             if (warning != null)
             {
                 var r = new Rect(0, h * 0.62f, w, _big.fontSize * 1.4f);
-                Shadowed(r, warning, _big, t.crashed || lowBat || drone.ArmBlock != ArmBlockReason.None ? Color.red : textColor);
+                Shadowed(r, warning, _big, t.crashed || lowBat || drone.Failsafe || linkNow.cableCut || (VideoFeed.HasLink && linkNow.control < 0.3f) || drone.ArmBlock != ArmBlockReason.None ? Color.red : textColor);
             }
         }
 
