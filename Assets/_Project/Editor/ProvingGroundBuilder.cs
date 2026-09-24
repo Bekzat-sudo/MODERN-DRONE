@@ -1,0 +1,252 @@
+using System.Collections.Generic;
+using ModernDrone.Core;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+using UnityEngine.Rendering;
+
+namespace ModernDrone.Editor
+{
+    /// <summary>
+    /// Generates the ProvingGround test scene: 2x2 km terrain with gentle hills,
+    /// tree lines, flight gates and a placeholder target vehicle.
+    /// The scene is fully procedural and can be regenerated from the menu at any time.
+    /// </summary>
+    public static class ProvingGroundBuilder
+    {
+        const string ScenePath = "Assets/_Project/Scenes/ProvingGround.unity";
+        const string TerrainDataPath = "Assets/_Project/Scenes/ProvingGround_Terrain.asset";
+        const string MatDir = "Assets/_Project/Art/Materials";
+
+        const float Size = 2000f;
+        const float MaxHeight = 60f;
+        const int Resolution = 513;
+
+        static Vector3 Center => new Vector3(Size * 0.5f, 0f, Size * 0.5f);
+
+        [MenuItem("Modern Drone/Setup/Build Proving Ground Scene")]
+        public static void Build()
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
+            var terrain = CreateTerrain();
+            CreateLighting();
+            CreateTreeLines(terrain);
+            CreateFlightGates(terrain);
+            CreatePlaceholderTank(terrain, Center + new Vector3(0f, 0f, 150f));
+            CreateSpawn(terrain);
+
+            EditorSceneManager.SaveScene(scene, ScenePath);
+            AddToBuildSettings(ScenePath);
+            Debug.Log($"[ModernDrone] Proving ground built: {ScenePath}");
+        }
+
+        static Terrain CreateTerrain()
+        {
+            AssetDatabase.DeleteAsset(TerrainDataPath);
+            var data = new TerrainData { heightmapResolution = Resolution };
+            data.size = new Vector3(Size, MaxHeight, Size);
+
+            var heights = new float[Resolution, Resolution];
+            var rng = new System.Random(1337);
+            float ox = rng.Next(0, 10000), oz = rng.Next(0, 10000);
+            var mid = new Vector2(Resolution * 0.5f, Resolution * 0.5f);
+
+            for (int z = 0; z < Resolution; z++)
+            for (int x = 0; x < Resolution; x++)
+            {
+                float u = x / (float)Resolution, v = z / (float)Resolution;
+                float h = Mathf.PerlinNoise(ox + u * 3f, oz + v * 3f) * 0.6f
+                        + Mathf.PerlinNoise(ox + u * 12f, oz + v * 12f) * 0.12f;
+                // Flatten a field around the centre for the launch site and target area.
+                float distMeters = Vector2.Distance(new Vector2(x, z), mid) / Resolution * Size;
+                float blend = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(150f, 400f, distMeters));
+                heights[z, x] = Mathf.Lerp(0.25f, h, blend);
+            }
+            data.SetHeights(0, 0, heights);
+
+            // URP terrain reads smoothness from diffuse alpha; keep it matte.
+            var grassTex = SolidTexture("Grass", new Color(0.36f, 0.40f, 0.22f, 0.05f));
+            var grass = new TerrainLayer { name = "Grass", diffuseTexture = grassTex, tileSize = new Vector2(10f, 10f) };
+            AssetDatabase.CreateAsset(data, TerrainDataPath);
+            AssetDatabase.AddObjectToAsset(grassTex, data);
+            AssetDatabase.AddObjectToAsset(grass, data);
+            data.terrainLayers = new[] { grass };
+            AssetDatabase.SaveAssets();
+
+            var go = Terrain.CreateTerrainGameObject(data);
+            go.name = "Terrain";
+            go.layer = GameLayers.Terrain;
+            go.isStatic = true;
+            var terrain = go.GetComponent<Terrain>();
+            if (GraphicsSettings.currentRenderPipeline != null)
+                terrain.materialTemplate = GraphicsSettings.currentRenderPipeline.defaultTerrainMaterial;
+            return terrain;
+        }
+
+        static Texture2D SolidTexture(string name, Color c)
+        {
+            var tex = new Texture2D(4, 4) { name = name };
+            var px = new Color[16];
+            for (int i = 0; i < px.Length; i++) px[i] = c;
+            tex.SetPixels(px);
+            tex.Apply();
+            return tex;
+        }
+
+        static void CreateLighting()
+        {
+            var sun = new GameObject("Sun").AddComponent<Light>();
+            sun.type = LightType.Directional;
+            sun.intensity = 1.3f;
+            sun.shadows = LightShadows.Soft;
+            sun.color = new Color(1f, 0.96f, 0.88f);
+            sun.transform.rotation = Quaternion.Euler(38f, -35f, 0f);
+            RenderSettings.sun = sun;
+
+            RenderSettings.fog = true;
+            RenderSettings.fogMode = FogMode.ExponentialSquared;
+            RenderSettings.fogColor = new Color(0.66f, 0.70f, 0.74f);
+            RenderSettings.fogDensity = 0.0009f; // haze: ~50% visibility loss at 1 km
+            RenderSettings.ambientMode = AmbientMode.Trilight;
+            RenderSettings.ambientSkyColor = new Color(0.62f, 0.68f, 0.78f);
+            RenderSettings.ambientEquatorColor = new Color(0.50f, 0.52f, 0.48f);
+            RenderSettings.ambientGroundColor = new Color(0.25f, 0.24f, 0.20f);
+        }
+
+        /// <summary>Windbreak tree lines along field edges: the main cover in steppe terrain.</summary>
+        static void CreateTreeLines(Terrain terrain)
+        {
+            var root = new GameObject("TreeLines");
+            var mat = GetMaterial("TreeLine", new Color(0.18f, 0.26f, 0.12f));
+            var rng = new System.Random(42);
+            float[] rows = { 350f, 700f, 1300f, 1650f };
+            foreach (float z in rows)
+            {
+                for (float x = 100f; x < Size - 100f; x += 6f)
+                {
+                    if (rng.NextDouble() < 0.08) continue; // gaps in the tree line
+                    float h = 8f + (float)rng.NextDouble() * 7f;
+                    float w = 4f + (float)rng.NextDouble() * 3f;
+                    var p = new Vector3(x, 0f, z + (float)(rng.NextDouble() - 0.5) * 8f);
+                    p.y = terrain.SampleHeight(p) + h * 0.5f;
+                    var tree = Box("Tree", root.transform, mat, GameLayers.Environment);
+                    tree.transform.SetPositionAndRotation(p, Quaternion.Euler(0f, (float)rng.NextDouble() * 360f, 0f));
+                    tree.transform.localScale = new Vector3(w, h, w);
+                    tree.isStatic = true;
+                }
+            }
+        }
+
+        static void CreateFlightGates(Terrain terrain)
+        {
+            var root = new GameObject("FlightGates");
+            var mat = GetMaterial("Gate", new Color(1f, 0.45f, 0.05f));
+            const int count = 8;
+            const float radius = 90f;
+            for (int i = 0; i < count; i++)
+            {
+                float a = i / (float)count * Mathf.PI * 2f;
+                var pos = Center + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * radius;
+                pos.y = terrain.SampleHeight(pos);
+                var gate = new GameObject($"Gate_{i:00}");
+                gate.transform.SetParent(root.transform);
+                gate.transform.SetPositionAndRotation(pos, Quaternion.LookRotation(new Vector3(-Mathf.Sin(a), 0f, Mathf.Cos(a))));
+
+                float lift = i % 2 == 0 ? 0f : 4f; // alternate ground-level and elevated gates
+                float top = lift + 2.5f;
+                Bar(gate.transform, mat, new Vector3(-1.6f, top * 0.5f, 0f), new Vector3(0.2f, top, 0.2f));
+                Bar(gate.transform, mat, new Vector3(1.6f, top * 0.5f, 0f), new Vector3(0.2f, top, 0.2f));
+                Bar(gate.transform, mat, new Vector3(0f, top, 0f), new Vector3(3.4f, 0.2f, 0.2f));
+                if (lift > 0f)
+                    Bar(gate.transform, mat, new Vector3(0f, lift, 0f), new Vector3(3.4f, 0.2f, 0.2f));
+            }
+        }
+
+        static void Bar(Transform parent, Material mat, Vector3 localPos, Vector3 scale)
+        {
+            var bar = Box("Bar", parent, mat, GameLayers.Environment);
+            bar.transform.localPosition = localPos;
+            bar.transform.localScale = scale;
+            bar.isStatic = true;
+        }
+
+        /// <summary>
+        /// T-72-sized box stack for scale and flight-approach practice. The real armor
+        /// plates and internal modules arrive in M2.
+        /// </summary>
+        static void CreatePlaceholderTank(Terrain terrain, Vector3 pos)
+        {
+            pos.y = terrain.SampleHeight(pos);
+            var mat = GetMaterial("VehicleGreen", new Color(0.29f, 0.33f, 0.22f));
+            var root = new GameObject("Target_TankPlaceholder") { tag = "Vehicle" };
+            root.transform.SetPositionAndRotation(pos, Quaternion.Euler(0f, 20f, 0f));
+
+            Part(root.transform, "Hull", mat, new Vector3(0f, 0.95f, 0f), new Vector3(3.6f, 1.1f, 6.9f));
+            Part(root.transform, "Track_L", mat, new Vector3(-1.6f, 0.45f, 0f), new Vector3(0.6f, 0.9f, 6.9f));
+            Part(root.transform, "Track_R", mat, new Vector3(1.6f, 0.45f, 0f), new Vector3(0.6f, 0.9f, 6.9f));
+            Part(root.transform, "Turret", mat, new Vector3(0f, 1.85f, 0.4f), new Vector3(2.2f, 0.7f, 2.4f));
+            Part(root.transform, "Gun", mat, new Vector3(0f, 1.9f, 3.9f), new Vector3(0.18f, 0.18f, 4.6f));
+        }
+
+        static void Part(Transform parent, string name, Material mat, Vector3 localPos, Vector3 scale)
+        {
+            var go = Box(name, parent, mat, GameLayers.VehicleHull);
+            go.transform.localPosition = localPos;
+            go.transform.localRotation = Quaternion.identity;
+            go.transform.localScale = scale;
+        }
+
+        static void CreateSpawn(Terrain terrain)
+        {
+            var pos = Center + new Vector3(0f, 0f, -40f);
+            pos.y = terrain.SampleHeight(pos) + 0.1f;
+            new GameObject("DroneSpawn") { tag = "Respawn" }.transform.position = pos;
+
+            var pad = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            pad.name = "LaunchPad";
+            pad.layer = GameLayers.Environment;
+            pad.transform.position = pos - Vector3.up * 0.05f;
+            pad.transform.localScale = new Vector3(1.5f, 0.05f, 1.5f);
+            pad.GetComponent<Renderer>().sharedMaterial = GetMaterial("Pad", new Color(0.35f, 0.35f, 0.35f));
+
+            // Temporary overview camera until the FPV camera exists (M1).
+            var cam = new GameObject("Main Camera") { tag = "MainCamera" };
+            cam.AddComponent<Camera>().farClipPlane = 3000f;
+            cam.AddComponent<AudioListener>();
+            cam.transform.position = pos + new Vector3(0f, 1.5f, -3f);
+            cam.transform.LookAt(pos + new Vector3(0f, 1f, 190f));
+        }
+
+        static GameObject Box(string name, Transform parent, Material mat, int layer)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.name = name;
+            go.layer = layer;
+            go.transform.SetParent(parent, false);
+            go.GetComponent<Renderer>().sharedMaterial = mat;
+            return go;
+        }
+
+        static Material GetMaterial(string name, Color color)
+        {
+            string path = $"{MatDir}/{name}.mat";
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (mat != null) return mat;
+            var shader = Shader.Find("Universal Render Pipeline/Lit");
+            mat = new Material(shader);
+            mat.SetColor("_BaseColor", color);
+            mat.SetFloat("_Smoothness", 0.15f);
+            AssetDatabase.CreateAsset(mat, path);
+            return mat;
+        }
+
+        static void AddToBuildSettings(string path)
+        {
+            var scenes = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
+            scenes.RemoveAll(s => s.path == path || s.path == "Assets/Scenes/SampleScene.unity");
+            scenes.Insert(0, new EditorBuildSettingsScene(path, true));
+            EditorBuildSettings.scenes = scenes.ToArray();
+        }
+    }
+}
