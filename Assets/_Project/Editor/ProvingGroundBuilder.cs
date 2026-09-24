@@ -209,13 +209,14 @@ namespace ModernDrone.Editor
             pad.transform.position = pos - Vector3.up * 0.05f;
             pad.transform.localScale = new Vector3(1.5f, 0.05f, 1.5f);
             pad.GetComponent<Renderer>().sharedMaterial = GetMaterial("Pad", new Color(0.35f, 0.35f, 0.35f));
+            // A flattened capsule collider degenerates into a sphere; use a box instead.
+            Object.DestroyImmediate(pad.GetComponent<Collider>());
+            pad.AddComponent<BoxCollider>();
 
-            // Temporary overview camera until the FPV camera exists (M1).
-            var cam = new GameObject("Main Camera") { tag = "MainCamera" };
-            cam.AddComponent<Camera>().farClipPlane = 3000f;
-            cam.AddComponent<AudioListener>();
-            cam.transform.position = pos + new Vector3(0f, 1.5f, -3f);
-            cam.transform.LookAt(pos + new Vector3(0f, 1f, 190f));
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(DroneRigBuilder.PrefabPath) ?? DroneRigBuilder.BuildPrefab();
+            var drone = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+            // Rest on the pad: collider half-height above the surface.
+            drone.transform.SetPositionAndRotation(pos + Vector3.up * 0.1f, Quaternion.identity);
         }
 
         static GameObject Box(string name, Transform parent, Material mat, int layer)
