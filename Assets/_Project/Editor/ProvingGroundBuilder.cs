@@ -33,7 +33,10 @@ namespace ModernDrone.Editor
             CreateLighting();
             CreateTreeLines(terrain);
             CreateFlightGates(terrain);
-            CreatePlaceholderTank(terrain, Center + new Vector3(0f, 0f, 150f));
+            // Target row: front, side and rear aspects toward the launch site.
+            PlaceTank(terrain, Center + new Vector3(0f, 0f, 150f), 180f, "Tank_Front");
+            PlaceTank(terrain, Center + new Vector3(-45f, 0f, 170f), 90f, "Tank_Side");
+            PlaceTank(terrain, Center + new Vector3(45f, 0f, 170f), 0f, "Tank_Rear");
             CreateSpawn(terrain);
 
             EditorSceneManager.SaveScene(scene, ScenePath);
@@ -171,30 +174,13 @@ namespace ModernDrone.Editor
             bar.isStatic = true;
         }
 
-        /// <summary>
-        /// T-72-sized box stack for scale and flight-approach practice. The real armor
-        /// plates and internal modules arrive in M2.
-        /// </summary>
-        static void CreatePlaceholderTank(Terrain terrain, Vector3 pos)
+        static void PlaceTank(Terrain terrain, Vector3 pos, float yaw, string name)
         {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(VehicleBuilder.TankPrefabPath) ?? VehicleBuilder.BuildTank();
+            var tank = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+            tank.name = name;
             pos.y = terrain.SampleHeight(pos);
-            var mat = GetMaterial("VehicleGreen", new Color(0.29f, 0.33f, 0.22f));
-            var root = new GameObject("Target_TankPlaceholder") { tag = "Vehicle" };
-            root.transform.SetPositionAndRotation(pos, Quaternion.Euler(0f, 20f, 0f));
-
-            Part(root.transform, "Hull", mat, new Vector3(0f, 0.95f, 0f), new Vector3(3.6f, 1.1f, 6.9f));
-            Part(root.transform, "Track_L", mat, new Vector3(-1.6f, 0.45f, 0f), new Vector3(0.6f, 0.9f, 6.9f));
-            Part(root.transform, "Track_R", mat, new Vector3(1.6f, 0.45f, 0f), new Vector3(0.6f, 0.9f, 6.9f));
-            Part(root.transform, "Turret", mat, new Vector3(0f, 1.85f, 0.4f), new Vector3(2.2f, 0.7f, 2.4f));
-            Part(root.transform, "Gun", mat, new Vector3(0f, 1.9f, 3.9f), new Vector3(0.18f, 0.18f, 4.6f));
-        }
-
-        static void Part(Transform parent, string name, Material mat, Vector3 localPos, Vector3 scale)
-        {
-            var go = Box(name, parent, mat, GameLayers.VehicleHull);
-            go.transform.localPosition = localPos;
-            go.transform.localRotation = Quaternion.identity;
-            go.transform.localScale = scale;
+            tank.transform.SetPositionAndRotation(pos, Quaternion.Euler(0f, yaw, 0f));
         }
 
         static void CreateSpawn(Terrain terrain)

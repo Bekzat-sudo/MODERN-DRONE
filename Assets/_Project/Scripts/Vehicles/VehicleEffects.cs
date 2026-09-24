@@ -1,0 +1,84 @@
+using ModernDrone.Damage;
+using UnityEngine;
+
+namespace ModernDrone.Vehicles
+{
+    /// <summary>Visual consequences of vehicle damage: fire, ammo detonation, turret toss, burnt paint.</summary>
+    [RequireComponent(typeof(VehicleDamageModel))]
+    public sealed class VehicleEffects : MonoBehaviour
+    {
+        static readonly int BaseColor = Shader.PropertyToID("_BaseColor");
+
+        [SerializeField] Transform turret;
+        [SerializeField] float turretTossImpulse = 9f;
+        [SerializeField] float burntDarkness = 0.22f;
+
+        VehicleDamageModel _model;
+        GameObject _fire;
+
+        void Awake()
+        {
+            _model = GetComponent<VehicleDamageModel>();
+            if (turret == null) turret = transform.Find("Turret");
+        }
+
+        void OnEnable()
+        {
+            _model.FireStarted += OnFireStarted;
+            _model.Destroyed += OnDestroyed;
+        }
+
+        void OnDisable()
+        {
+            _model.FireStarted -= OnFireStarted;
+            _model.Destroyed -= OnDestroyed;
+        }
+
+        void OnFireStarted(VehicleDamageModel model, VehicleModule origin)
+        {
+            Vector3 pos = origin != null ? origin.transform.position : transform.position + Vector3.up;
+            _fire = SimpleVfx.Fire(transform, pos + Vector3.up * 0.8f, 1f);
+        }
+
+        void OnDestroyed(VehicleDamageModel model, DestructionCause cause)
+        {
+            Darken();
+            if (cause == DestructionCause.AmmoDetonation)
+            {
+                Vector3 center = turret != null ? turret.position : transform.position + Vector3.up * 1.5f;
+                SimpleVfx.Explosion(center, 2.5f);
+                TossTurret();
+                if (_fire == null)
+                    _fire = SimpleVfx.Fire(transform, transform.position + Vector3.up * 1.5f, 1.4f);
+            }
+            else if (cause == DestructionCause.BurnedOut && _fire != null)
+            {
+                // Flames die down, smoke remains.
+                var flames = _fire.transform.Find("Flames");
+                if (flames != null) flames.GetComponent<ParticleSystem>().Stop();
+            }
+        }
+
+        void TossTurret()
+        {
+            if (turret == null) return;
+            turret.SetParent(null, true);
+            var rb = turret.gameObject.AddComponent<Rigidbody>();
+            rb.mass = 1f;
+            rb.AddForce((Vector3.up + Random.insideUnitSphere * 0.3f) * turretTossImpulse, ForceMode.VelocityChange);
+            rb.AddTorque(Random.insideUnitSphere * 2f, ForceMode.VelocityChange);
+        }
+
+        void Darken()
+        {
+            var block = new MaterialPropertyBlock();
+            foreach (var r in GetComponentsInChildren<Renderer>())
+            {
+                if (r is ParticleSystemRenderer || r.sharedMaterial == null || !r.sharedMaterial.HasProperty(BaseColor)) continue;
+                r.GetPropertyBlock(block);
+                block.SetColor(BaseColor, r.sharedMaterial.GetColor(BaseColor) * burntDarkness);
+                r.SetPropertyBlock(block);
+            }
+        }
+    }
+}

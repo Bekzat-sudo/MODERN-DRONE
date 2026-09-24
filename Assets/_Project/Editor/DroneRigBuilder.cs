@@ -1,5 +1,6 @@
 using ModernDrone.Core;
 using ModernDrone.Drone;
+using ModernDrone.Missions;
 using ModernDrone.UI;
 using UnityEditor;
 using UnityEngine;
@@ -65,6 +66,10 @@ namespace ModernDrone.Editor
             for (int i = 0; i < props.Length; i++)
                 arr.GetArrayElementAtIndex(i).objectReferenceValue = props[i];
             so.ApplyModifiedPropertiesWithoutUndo();
+
+            var warhead = root.AddComponent<DroneWarhead>();
+            SetRef(warhead, "warhead", WarheadAssets.Load(WarheadAssets.ShapedChargePath));
+            SetRef(warhead, "visual", root.transform.Find("Visual"));
 
             var prefab = PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
             Object.DestroyImmediate(root);

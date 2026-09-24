@@ -64,6 +64,10 @@ namespace ModernDrone.Drone
         public bool ManualStepping { get; set; }
 
         public event Action<Collision> OnCrash;
+        public event Action OnReset;
+
+        /// <summary>Velocity at the start of the last physics step, before any collision response.</summary>
+        public Vector3 PreImpactVelocity { get; private set; }
 
         /// <summary>Assigns a config at runtime (e.g. tests or loadout selection) and rebuilds the simulation.</summary>
         public void Initialize(DroneConfig cfg)
@@ -135,6 +139,14 @@ namespace ModernDrone.Drone
             transform.SetPositionAndRotation(_homePosition, _homeRotation);
             _rb.linearVelocity = Vector3.zero;
             _rb.angularVelocity = Vector3.zero;
+            OnReset?.Invoke();
+        }
+
+        /// <summary>Ends the flight immediately (payload detonated, shot down...).</summary>
+        public void MarkDestroyed()
+        {
+            Crashed = true;
+            Armed = false;
         }
 
         void FixedUpdate()
@@ -145,6 +157,7 @@ namespace ModernDrone.Drone
 
         public void Step(float dt)
         {
+            PreImpactVelocity = _rb.linearVelocity;
             Vector3 up = transform.up;
             Vector3 omegaBody = transform.InverseTransformDirection(_rb.angularVelocity);
             float maxThrust = config.MaxThrustPerMotor;
