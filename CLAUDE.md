@@ -27,3 +27,9 @@
 ## Workflow
 - The Unity Editor runs on this folder (main checkout); edit files here, not in `.claude/worktrees`.
 - Remote: https://github.com/Bekzat-sudo/MODERN-DRONE
+
+## Rule: verify against sources
+- Before every change or addition to game mechanics (flight physics, link/EW behaviour, damage rules) or to
+  vehicle/drone characteristics and functionality, check public sources on the internet (docs, specs, reputable
+  articles) and note the source in the commit message or a code comment. Keep numbers at the level of publicly
+  reported figures; gameplay balance numbers that are deliberately abstract must be marked as such.

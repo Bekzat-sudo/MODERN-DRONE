@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Text;
+using ModernDrone.Core;
 using ModernDrone.Damage;
 using ModernDrone.Drone;
 using ModernDrone.Video;
@@ -34,6 +35,8 @@ namespace ModernDrone.Missions
         [SerializeField] int fiberSorties;
         [Tooltip("Warheads the pilot can choose from before each sortie (first = default).")]
         [SerializeField] WarheadData[] warheads = new WarheadData[0];
+        [Tooltip("Targets that must be neutralized; 0 = all.")]
+        [SerializeField] int requiredTargets;
         [SerializeField] DroneController drone;
         [SerializeField] Killcam killcam;
         [SerializeField] float droneLostDelay = 2f;
@@ -48,6 +51,9 @@ namespace ModernDrone.Missions
         int _warheadChoice;
         int _loadoutRow;
         int _decoyStrikes;
+        readonly List<ModernDrone.Vehicles.Convoy> _convoys = new List<ModernDrone.Vehicles.Convoy>();
+        bool _convoysStarted;
+        bool _recorded;
         DroneLink _link;
         string _lostMessage = "ДРОН ПОТЕРЯН";
         float _missionTime;
@@ -62,6 +68,10 @@ namespace ModernDrone.Missions
         public IReadOnlyList<MissionTarget> Targets => _targets;
 
         public void SetWarheads(WarheadData[] options) => warheads = options ?? new WarheadData[0];
+
+        public void SetRequiredTargets(int count) => requiredTargets = count;
+
+        int Required => requiredTargets > 0 ? Mathf.Min(requiredTargets, _targets.Count) : _targets.Count;
 
         public void Configure(string name, string briefingText, int radioDrones, int fiberDrones = 0)
         {
@@ -81,6 +91,8 @@ namespace ModernDrone.Missions
             _radioLeft = sorties;
             _fiberLeft = fiberSorties;
             _targets.AddRange(FindObjectsByType<MissionTarget>(FindObjectsSortMode.InstanceID));
+            _convoys.AddRange(FindObjectsByType<ModernDrone.Vehicles.Convoy>(FindObjectsSortMode.None));
+            foreach (var c in _convoys) c.VehicleEscaped += OnVehicleEscaped;
         }
 
         void OnEnable()
@@ -196,7 +208,7 @@ namespace ModernDrone.Missions
         void OnShotDown()
         {
             if (Phase != MissionPhase.Flying) return;
-            _lostMessage = "ДРОН СБИТ ПВО";
+            _lostMessage = drone.ShotDownCause ?? "ДРОН СБИТ";
             Phase = MissionPhase.DroneLost;
             _input.Suspended = true;
             StartCoroutine(DelayThen(droneLostDelay, EndSortie));
@@ -209,6 +221,11 @@ namespace ModernDrone.Missions
                 if (type == LinkType.Fiber) _fiberLeft--; else _radioLeft--;
             }
             _link?.SetType(type);
+            if (!_convoysStarted)
+            {
+                _convoysStarted = true;
+                foreach (var c in _convoys) c.Begin();
+            }
             if (warheads.Length > 0 && _warhead != null) _warhead.SetWarhead(warheads[Mathf.Clamp(_warheadChoice, 0, warheads.Length - 1)]);
             _lostMessage = "ДРОН ПОТЕРЯН";
             BeginFlying();
@@ -241,24 +258,57 @@ namespace ModernDrone.Missions
             _lostMessage = "ДРОН ПОТЕРЯН";
 
             _sortiesFlown++;
-            _outcome = MissionRules.Evaluate(CollectStates(), _sortiesFlown, Sorties);
+            _outcome = MissionRules.Evaluate(CollectStates(), _sortiesFlown, Sorties, Required, EscapedCount());
             if (_outcome == MissionOutcome.InProgress)
             {
                 drone.ResetToHome();
                 PrepareSortie();
             }
             else
-            {
-                Phase = MissionPhase.Debrief;
-                _input.Suspended = true;
-            }
+                EnterDebrief();
         }
 
         List<(KillState, TargetRequirement)> CollectStates()
         {
             _states.Clear();
-            foreach (var t in _targets) _states.Add((t.Model.State, t.Requirement));
+            foreach (var t in _targets)
+                if (!IsEscaped(t)) _states.Add((t.Model.State, t.Requirement));
             return _states;
+        }
+
+        bool IsEscaped(MissionTarget t)
+        {
+            foreach (var c in _convoys)
+                if (c.IsEscaped(t.Model)) return true;
+            return false;
+        }
+
+        int EscapedCount()
+        {
+            int n = 0;
+            foreach (var t in _targets) if (IsEscaped(t)) n++;
+            return n;
+        }
+
+        /// <summary>A convoy vehicle left the area: end early if the task can no longer be completed.</summary>
+        void OnVehicleEscaped(VehicleDamageModel _)
+        {
+            if (FreeFlight || Phase == MissionPhase.Debrief || Phase == MissionPhase.Killcam) return;
+            var outcome = MissionRules.Evaluate(CollectStates(), 0, int.MaxValue, Required, EscapedCount());
+            if (outcome != MissionOutcome.Failure) return;
+            _outcome = MissionOutcome.Failure;
+            EnterDebrief();
+        }
+
+        void EnterDebrief()
+        {
+            Phase = MissionPhase.Debrief;
+            _input.Suspended = true;
+            if (_recorded) return;
+            _recorded = true;
+            int score = MissionRules.TotalScore(CollectStates(), _sortiesFlown, Sorties, _outcome);
+            MissionProgress.Current.Record(SceneManager.GetActiveScene().name, _outcome == MissionOutcome.Success, score);
+            MissionProgress.Save();
         }
 
         static bool ConfirmPressed()
@@ -293,10 +343,10 @@ namespace ModernDrone.Missions
                     break;
                 case MissionPhase.Flying:
                     int done = 0;
-                    foreach (var t in _targets) if (t.Neutralized) done++;
+                    foreach (var t in _targets) if (t.Neutralized && !IsEscaped(t)) done++;
                     string kind = _link != null && _link.Type == LinkType.Fiber ? "ОПТОВОЛОКНО" : "РАДИО";
                     GUI.Label(new Rect(0, h * 0.09f, w, _small.fontSize * 1.5f),
-                        $"ДРОН {_sortiesFlown + 1}/{Sorties} · {kind}   ЦЕЛИ {done}/{_targets.Count}", _small);
+                        $"ДРОН {_sortiesFlown + 1}/{Sorties} · {kind}   ЦЕЛИ {done}/{Required}", _small);
                     break;
                 case MissionPhase.DroneLost:
                     GUI.Label(new Rect(0, h * 0.4f, w, _title.fontSize * 1.5f), _lostMessage, _title);
@@ -317,7 +367,7 @@ namespace ModernDrone.Missions
             var sb = new StringBuilder(briefing);
             sb.AppendLine().AppendLine();
             sb.AppendLine(fiberSorties > 0 ? $"Дронов: {sorties} радио + {fiberSorties} оптоволокно" : $"Дронов: {sorties}");
-            sb.AppendLine("Цели:");
+            sb.AppendLine(Required < _targets.Count ? $"Цели (нужно {Required} из {_targets.Count}):" : "Цели:");
             foreach (var t in _targets)
                 sb.AppendLine($"  • {t.Label} — {RequirementText(t.Requirement)}");
             var src = _input != null ? _input.ActiveSource : InputSource.KeyboardMouse;
@@ -337,7 +387,7 @@ namespace ModernDrone.Missions
             var states = CollectStates();
             var sb = new StringBuilder();
             foreach (var t in _targets)
-                sb.AppendLine($"{t.Label}: {DamageNames.Ru(t.Model.State)}  (+{MissionRules.Score(t.Model.State)})");
+                sb.AppendLine(IsEscaped(t) ? $"{t.Label}: ушла" : $"{t.Label}: {DamageNames.Ru(t.Model.State)}  (+{MissionRules.Score(t.Model.State)})");
             sb.AppendLine();
             sb.AppendLine($"Израсходовано дронов: {_sortiesFlown}/{Sorties}");
             if (_decoyStrikes > 0) sb.AppendLine($"Из них по макетам: {_decoyStrikes}");

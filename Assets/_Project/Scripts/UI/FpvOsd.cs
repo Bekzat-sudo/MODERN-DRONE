@@ -79,15 +79,16 @@ namespace ModernDrone.UI
             Label(new Rect(w * 0.5f - 150, h - pad - line, 300, line), $"H {t.distanceHome:0}m", textColor, TextAnchor.MiddleCenter);
 
             DrawCrosshair(w * 0.5f, h * 0.5f, h * 0.02f);
-            DrawThreat(w, h);
+            if (t.armed && !t.crashed) DrawThreat(w, h);
             DrawHorizon(w, h, t);
 
             // Centre warnings
             var source = input != null ? input.ActiveSource : InputSource.KeyboardMouse;
             var linkNow = VideoFeed.HasLink ? VideoFeed.Current : default;
+            string crash = input != null && !input.AllowReset ? "CRASH" : $"CRASH  [{ControlInput.HintFor(PilotAction.Reset, source)}]";
             string warning = linkNow.cableCut ? "CABLE CUT"
                 : drone.Failsafe ? "FAILSAFE"
-                : t.crashed ? $"CRASH  [{ControlInput.HintFor(PilotAction.Reset, source)}]"
+                : t.crashed ? crash
                 : drone.ArmBlock == ArmBlockReason.Throttle ? "ARM BLOCKED: THROTTLE"
                 : drone.ArmBlock == ArmBlockReason.Failsafe ? "ARM BLOCKED: FAILSAFE"
                 : !t.armed ? $"DISARMED  [{ControlInput.HintFor(PilotAction.Arm, source)}]"
@@ -100,24 +101,60 @@ namespace ModernDrone.UI
             }
         }
 
-        /// <summary>Air-defence track / lock warning with a progress bar.</summary>
+        /// <summary>Enemy observation (detection bar) and interceptor warning with an on-screen marker or edge arrow.</summary>
         void DrawThreat(float w, float h)
         {
-            float lockLevel = ModernDrone.Core.ThreatWarning.Lock;
-            if (lockLevel <= 0f) return;
-            bool locking = lockLevel > 0.7f;
-            if (locking && Mathf.Repeat(Time.unscaledTime, 0.4f) > 0.2f) return; // blink
-            string text = locking ? "ЗАХВАТ!" : "ОБНАРУЖЕН ПВО";
             float y = h * 0.2f;
-            Shadowed(new Rect(0, y, w, _big.fontSize * 1.4f), text, _big, Color.red);
+            if (ModernDrone.Core.InterceptorWarning.Active)
+            {
+                float dist = ModernDrone.Core.InterceptorWarning.Distance;
+                bool close = dist < 60f;
+                if (!close || Mathf.Repeat(Time.unscaledTime, 0.3f) < 0.2f)
+                    Shadowed(new Rect(0, y, w, _big.fontSize * 1.4f), $"ПЕРЕХВАТЧИК {dist:0}м", _big, close ? Color.red : new Color(1f, 0.6f, 0.2f));
+                DrawInterceptorMarker(w, h, ModernDrone.Core.InterceptorWarning.Position);
+                return;
+            }
+
+            float detection = ModernDrone.Core.ThreatWarning.Lock;
+            if (detection <= 0f) return;
+            Shadowed(new Rect(0, y, w, _big.fontSize * 1.4f), "ОБНАРУЖЕН", _big, detection > 0.7f ? Color.red : new Color(1f, 0.6f, 0.2f));
             float bw = w * 0.2f, bh = Mathf.Max(4f, h * 0.008f);
             var bar = new Rect(w * 0.5f - bw * 0.5f, y + _big.fontSize * 1.5f, bw, bh);
             var prev = GUI.color;
             GUI.color = new Color(0f, 0f, 0f, 0.6f);
             GUI.DrawTexture(bar, Texture2D.whiteTexture);
             GUI.color = Color.red;
-            GUI.DrawTexture(new Rect(bar.x, bar.y, bar.width * lockLevel, bar.height), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(bar.x, bar.y, bar.width * detection, bar.height), Texture2D.whiteTexture);
             GUI.color = prev;
+        }
+
+        void DrawInterceptorMarker(float w, float h, Vector3 world)
+        {
+            if (_fpvCamera == null) return;
+            Vector3 sp = _fpvCamera.WorldToScreenPoint(world);
+            bool behind = sp.z < 0f;
+            var guiPos = new Vector2(sp.x, h - sp.y);
+            float size = h * 0.025f;
+            bool onScreen = !behind && guiPos.x > 0 && guiPos.x < w && guiPos.y > 0 && guiPos.y < h;
+            if (onScreen)
+            {
+                // Diamond around the interceptor.
+                Line(guiPos + new Vector2(0, -size), guiPos + new Vector2(size, 0), 2f);
+                Line(guiPos + new Vector2(size, 0), guiPos + new Vector2(0, size), 2f);
+                Line(guiPos + new Vector2(0, size), guiPos + new Vector2(-size, 0), 2f);
+                Line(guiPos + new Vector2(-size, 0), guiPos + new Vector2(0, -size), 2f);
+                return;
+            }
+            // Off-screen: arrow on a ring around the centre pointing toward it.
+            Vector2 c = new Vector2(w * 0.5f, h * 0.5f);
+            Vector2 dir = guiPos - c;
+            if (behind) dir = -dir;
+            if (dir.sqrMagnitude < 1f) dir = Vector2.down;
+            dir.Normalize();
+            Vector2 tip = c + dir * h * 0.3f;
+            Vector2 side = new Vector2(-dir.y, dir.x) * size * 0.7f;
+            Line(tip, tip - dir * size * 1.4f + side, 3f);
+            Line(tip, tip - dir * size * 1.4f - side, 3f);
         }
 
         void DrawCrosshair(float cx, float cy, float size)

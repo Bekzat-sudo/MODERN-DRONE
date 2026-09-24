@@ -51,7 +51,10 @@ namespace ModernDrone.Drone
             var b = s.Binding(action);
             string path = source == InputSource.Gamepad ? b.gamepad : source == InputSource.Joystick ? b.joystick : b.keyboard;
             if (string.IsNullOrEmpty(path)) path = b.keyboard;
-            return DisplayName(path).ToUpperInvariant();
+            // Prefer the device's own control name (e.g. "Menu" on Xbox) over the generic path.
+            InputDevice device = source == InputSource.Gamepad ? Gamepad.current : source == InputSource.Joystick ? (InputDevice)PreferredJoystick : Keyboard.current;
+            var control = device != null && !string.IsNullOrEmpty(path) ? InputControlPath.TryFindControl(device, path) : null;
+            return (control != null ? control.displayName : DisplayName(path)).ToUpperInvariant();
         }
 
         public static string DisplayName(string path) => string.IsNullOrEmpty(path)

@@ -194,12 +194,42 @@ namespace ModernDrone.Editor
             {
                 VehicleCatalog.Ifv, VehicleCatalog.Apc, VehicleCatalog.Spg, VehicleCatalog.TankCage, VehicleCatalog.DecoyTank,
                 VehicleCatalog.Howitzer, VehicleCatalog.Mlrs, VehicleCatalog.Truck, VehicleCatalog.SamLauncher,
-                VehicleCatalog.SamRadar, VehicleCatalog.Spaag
+                VehicleCatalog.SamRadar, VehicleCatalog.Spaag, VehicleCatalog.InterceptorSite
             };
             for (int i = 0; i < park.Length; i++)
             {
                 var pos = Center + new Vector3(-160f + i * 32f, 0f, 260f);
                 PlacePrefab(terrain, park[i], pos, 180f);
+            }
+        }
+
+        /// <summary>Dirt road strip following the terrain along the given points (visual only, no collider).</summary>
+        internal static void CreateRoad(Terrain terrain, Vector3[] points)
+        {
+            var root = new GameObject("Road");
+            var mat = GetMaterial("Dirt", new Color(0.36f, 0.31f, 0.22f));
+            const float step = 8f;
+            for (int i = 1; i < points.Length; i++)
+            {
+                Vector3 a = points[i - 1], b = points[i];
+                Vector3 flat = new Vector3(b.x - a.x, 0f, b.z - a.z);
+                int n = Mathf.CeilToInt(flat.magnitude / step);
+                for (int k = 0; k < n; k++)
+                {
+                    Vector3 p0 = Vector3.Lerp(a, b, k / (float)n), p1 = Vector3.Lerp(a, b, (k + 1) / (float)n);
+                    Vector3 mid = (p0 + p1) * 0.5f;
+                    mid.y = terrain.SampleHeight(mid) + 0.03f;
+                    float h0 = terrain.SampleHeight(p0), h1 = terrain.SampleHeight(p1);
+                    Vector3 dir = new Vector3(p1.x - p0.x, h1 - h0, p1.z - p0.z);
+                    var seg = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    Object.DestroyImmediate(seg.GetComponent<Collider>());
+                    seg.name = "RoadSegment";
+                    seg.transform.SetParent(root.transform);
+                    seg.transform.SetPositionAndRotation(mid, Quaternion.LookRotation(dir));
+                    seg.transform.localScale = new Vector3(5f, 0.05f, dir.magnitude + 0.5f);
+                    seg.GetComponent<Renderer>().sharedMaterial = mat;
+                    seg.isStatic = true;
+                }
             }
         }
 

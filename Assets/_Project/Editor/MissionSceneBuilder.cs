@@ -84,10 +84,12 @@ namespace ModernDrone.Editor
         const string Terrain03Path = "Assets/_Project/Scenes/Mission_03_Terrain.asset";
 
         const string Briefing03 =
-            "За лесополосой в ~350 м к северу — огневые позиции: САУ, две буксируемые гаубицы и прикрывающий их ЗРПК.\n\n" +
-            "ЗРПК видит дрон над посадкой и выше ~8 м. Удержание захвата ~4 с — и дрон сбит. Держитесь ниже крон, " +
-            "ныряйте в разрывы посадки, прячьтесь за рельефом — захват срывается.\n\n" +
-            "Разведка сообщает о возможных макетах техники. Осколочная БЧ эффективна по орудиям и РЛС, кумулятивная — по броне.";
+            "За лесополосой в ~350 м к северу — огневые позиции: САУ и две буксируемые гаубицы. " +
+            "Их прикрывает расчёт дронов-перехватчиков.\n\n" +
+            "Расчёт замечает дрон над посадкой и выше ~5 м и через пару секунд поднимает перехватчик. " +
+            "Он быстрее, но разворачивается шире: уходите резким манёвром, ныряйте в лесополосу, держитесь низко. " +
+            "Выбейте антенну на мачте или пост оператора — и перехватчики останутся без управления.\n\n" +
+            "Разведка сообщает о возможных макетах техники. Осколочная БЧ эффективна по орудиям и расчёту, кумулятивная — по броне.";
 
         [MenuItem("Modern Drone/Setup/Build Mission 03 Scene")]
         public static void BuildMission03()
@@ -100,7 +102,7 @@ namespace ModernDrone.Editor
             var c = ProvingGroundBuilder.Center;
 
             // North of the tree line (z = 1300): the SPAAG covers the gun line.
-            TargetAt(terrain, VehicleCatalog.Spaag, new Vector3(c.x + 30f, 0f, 1335f), 190f, "ЗРПК", TargetRequirement.Silenced);
+            TargetAt(terrain, VehicleCatalog.InterceptorSite, new Vector3(c.x + 30f, 0f, 1340f), 190f, "Расчёт перехватчиков", TargetRequirement.Silenced);
             TargetAt(terrain, VehicleCatalog.Spg, new Vector3(c.x - 70f, 0f, 1345f), 170f, "САУ", TargetRequirement.OutOfAction);
             TargetAt(terrain, VehicleCatalog.Howitzer, new Vector3(c.x + 110f, 0f, 1355f), 180f, "Гаубица №1", TargetRequirement.OutOfAction);
             TargetAt(terrain, VehicleCatalog.Howitzer, new Vector3(c.x + 135f, 0f, 1358f), 180f, "Гаубица №2", TargetRequirement.OutOfAction);
@@ -115,10 +117,58 @@ namespace ModernDrone.Editor
             Debug.Log($"[ModernDrone] Mission scene built: {Scene03Path}");
         }
 
-        static void TargetAt(Terrain terrain, string prefab, Vector3 pos, float yaw, string label, TargetRequirement req)
+        static GameObject TargetAt(Terrain terrain, string prefab, Vector3 pos, float yaw, string label, TargetRequirement req)
         {
             var go = ProvingGroundBuilder.PlacePrefab(terrain, prefab, pos, yaw, label);
             go.AddComponent<MissionTarget>().Configure(label, req);
+            return go;
+        }
+
+        const string Scene04Path = "Assets/_Project/Scenes/Mission_04.unity";
+        const string Terrain04Path = "Assets/_Project/Scenes/Mission_04_Terrain.asset";
+
+        const string Briefing04 =
+            "По грунтовке за лесополосой, в ~500 м к северу, с запада на восток идёт колонна: БТР, грузовик, РСЗО и танк.\n\n" +
+            "Задача: вывести из строя 3 машины из 4, пока колонна не ушла. Подбитая машина встаёт и задерживает остальных; " +
+            "после первого попадания колонна ускоряется и ставит дым.\n\n" +
+            "Дорогу прикрывает расчёт дронов-перехватчиков к северу от неё. Колонна тронется с вашим первым взлётом.";
+
+        [MenuItem("Modern Drone/Setup/Build Mission 04 Scene")]
+        public static void BuildMission04()
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var terrain = ProvingGroundBuilder.CreateTerrain(Terrain04Path);
+            ProvingGroundBuilder.CreateLighting();
+            ProvingGroundBuilder.CreateTreeLines(terrain);
+            ProvingGroundBuilder.CreateSpawn(terrain);
+
+            var road = new[]
+            {
+                new Vector3(260f, 0f, 1470f), new Vector3(600f, 0f, 1500f), new Vector3(1000f, 0f, 1515f),
+                new Vector3(1400f, 0f, 1495f), new Vector3(1780f, 0f, 1465f)
+            };
+            ProvingGroundBuilder.CreateRoad(terrain, road);
+
+            var column = new System.Collections.Generic.List<ModernDrone.Damage.VehicleDamageModel>();
+            (string prefab, string label)[] order =
+            {
+                (VehicleCatalog.Apc, "БТР"), (VehicleCatalog.Truck, "Грузовик"),
+                (VehicleCatalog.Mlrs, "РСЗО"), (VehicleBuilder.TankPrefabPath, "Танк")
+            };
+            foreach (var (prefab, label) in order)
+                column.Add(TargetAt(terrain, prefab, road[0], 90f, label, TargetRequirement.OutOfAction).GetComponent<ModernDrone.Damage.VehicleDamageModel>());
+
+            var convoy = new GameObject("Convoy").AddComponent<ModernDrone.Vehicles.Convoy>();
+            convoy.Configure(road, column, 7f);
+
+            ProvingGroundBuilder.PlacePrefab(terrain, VehicleCatalog.InterceptorSite, new Vector3(1060f, 0f, 1580f), 200f, "Расчёт перехватчиков");
+
+            var mission = ProvingGroundBuilder.CreateMissionRig("Задача 4: Колонна", Briefing04, 5, 1);
+            mission.SetRequiredTargets(3);
+
+            EditorSceneManager.SaveScene(scene, Scene04Path);
+            ProvingGroundBuilder.AddToBuildSettings(Scene04Path, 4);
+            Debug.Log($"[ModernDrone] Mission scene built: {Scene04Path}");
         }
 
         static void Target(Terrain terrain, Vector3 pos, float yaw, string label)

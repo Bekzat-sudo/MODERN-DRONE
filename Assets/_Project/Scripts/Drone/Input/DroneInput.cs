@@ -77,6 +77,7 @@ namespace ModernDrone.Drone
             {
                 drone.ApplyPilotRates(s.rollRates, s.pitchRates, s.yawRates);
                 drone.Config.maxAngle = Mathf.Clamp(s.angleMaxTilt, 10f, 80f);
+                drone.Config.setpointCutoffHz = Mathf.Clamp(s.stickSmoothingHz, 0f, 100f);
             }
             if (droneCamera != null)
             {

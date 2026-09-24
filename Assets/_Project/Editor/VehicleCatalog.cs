@@ -26,6 +26,7 @@ namespace ModernDrone.Editor
         public const string Truck = Dir + "Truck_Placeholder.prefab";
         public const string DecoyTank = Dir + "Decoy_Tank.prefab";
         public const string TankCage = Dir + "Tank_Cage.prefab";
+        public const string InterceptorSite = Dir + "InterceptorSite_Placeholder.prefab";
 
         static readonly Color Green = new Color(0.29f, 0.33f, 0.22f);
 
@@ -43,6 +44,7 @@ namespace ModernDrone.Editor
             BuildTruck();
             BuildDecoyTank();
             BuildTankWithCage();
+            BuildInterceptorSite();
             Debug.Log("[ModernDrone] Vehicle catalog built.");
         }
 
@@ -204,17 +206,13 @@ namespace ModernDrone.Editor
 
             k.Module("Module_Launcher_L", ModuleType.Launcher, 70f, 10f, v(-1.3f, 0.1f, 0.2f), v(0.7f, 0.6f, 2.4f), turret, visible: true);
             k.Module("Module_Launcher_R", ModuleType.Launcher, 70f, 10f, v(1.3f, 0.1f, 0.2f), v(0.7f, 0.6f, 2.4f), turret, visible: true);
-            GameObject muzzle = null;
             foreach (float x in new[] { -0.6f, 0.6f })
             {
                 var barrel = k.Visual(x < 0 ? "Gun_L" : "Gun_R", v(x, -0.2f, 1.9f), v(0.08f, 0.08f, 2.2f), k.Dark, turret);
                 k.Module(x < 0 ? "Module_Gun_L" : "Module_Gun_R", ModuleType.Gun, 60f, 10f, Vector3.zero, Vector3.one * 1.2f, barrel.transform);
-                muzzle = barrel;
             }
 
             k.Finish("ЗРПК (заглушка)");
-            var threat = k.Root.AddComponent<AirDefenseThreat>();
-            threat.Configure(search, muzzle.transform, 900f, MissionAssets.LoadKillcamAssets().line);
             k.Save(Spaag);
         }
 
@@ -271,6 +269,36 @@ namespace ModernDrone.Editor
             k.Module("Module_Cargo", ModuleType.AmmoRack, 50f, 5f, v(0, 1.6f, -1.6f), v(1.8f, 0.8f, 3.0f), visible: true, mat: VehicleKit.Material("CrateWood", new Color(0.42f, 0.35f, 0.22f)));
             k.Finish("Грузовик снабжения (заглушка)");
             k.Save(Truck);
+        }
+
+        /// <summary>
+        /// Interceptor-drone team: pickup with a launch table and drone stock, observation mast with an antenna,
+        /// and a camouflaged operator post next to it.
+        /// </summary>
+        static void BuildInterceptorSite()
+        {
+            var k = new VehicleKit("InterceptorSite_Placeholder", Green);
+            TruckBase(k, 5.5f, 5f);
+            var table = k.Visual("LaunchTable", v(0, 1.35f, -1.4f), v(1.8f, 0.08f, 1.8f), k.Dark);
+            k.Module("Module_DroneStock", ModuleType.AmmoRack, 40f, 5f, v(0.6f, 1.6f, -2.3f), v(0.9f, 0.5f, 0.6f), visible: true,
+                mat: VehicleKit.Material("CrateWood", new Color(0.42f, 0.35f, 0.22f)));
+
+            // Observation mast a few metres from the truck.
+            k.Visual("Mast", v(-3.5f, 3.5f, -1.0f), v(0.1f, 7.0f, 0.1f), k.Metal, collider: false);
+            var antenna = k.Module("Module_Antenna", ModuleType.Antenna, 40f, 5f, v(-3.5f, 7.2f, -1.0f), v(0.6f, 0.6f, 0.1f), visible: true, mat: k.Metal);
+
+            // Operator post under a camo net.
+            var net = VehicleKit.Material("CamoNet", new Color(0.24f, 0.28f, 0.17f));
+            k.Visual("CamoNet", v(4.0f, 1.3f, -1.5f), v(3.0f, 0.05f, 3.0f), net);
+            foreach (float x in new[] { 2.6f, 5.4f })
+            foreach (float z in new[] { -2.9f, -0.1f })
+                k.Visual("Pole", v(x, 0.65f, z), v(0.06f, 1.3f, 0.06f), k.Dark, collider: false);
+            k.Module("Module_OperatorPost", ModuleType.ControlStation, 60f, 5f, v(4.0f, 0.6f, -1.5f), v(1.6f, 1.1f, 1.6f), visible: true, mat: k.ModuleMat);
+
+            k.Finish("Расчёт перехватчиков (заглушка)");
+            var site = k.Root.AddComponent<ModernDrone.Missions.InterceptorSite>();
+            site.Configure(antenna.transform, table.transform, VehicleKit.Material("InterceptorBody", new Color(0.18f, 0.18f, 0.2f)));
+            k.Save(InterceptorSite);
         }
 
         // ------------------------------------------------------------------ towed artillery

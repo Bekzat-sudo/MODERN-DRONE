@@ -221,6 +221,7 @@ namespace ModernDrone.Drone
             Crashed = false;
             ArmBlock = ArmBlockReason.None;
             Failsafe = false;
+            ShotDownCause = null;
             _linkLostTime = 0f;
             _inputQueue.Clear();
             _prevArmSwitch = true; // require the arm switch to be cycled after a reset
@@ -236,10 +237,14 @@ namespace ModernDrone.Drone
             OnReset?.Invoke();
         }
 
-        /// <summary>Hit by air defence: the drone drops and the sortie is lost.</summary>
-        public void ShootDown()
+        /// <summary>Why the drone was lost to enemy action (shown to the pilot).</summary>
+        public string ShotDownCause { get; private set; }
+
+        /// <summary>Killed by enemy action (interceptor, ...): the drone drops and the sortie is lost.</summary>
+        public void ShootDown(string cause = "ДРОН СБИТ")
         {
             if (Crashed) return;
+            ShotDownCause = cause;
             MarkDestroyed();
             OnShotDown?.Invoke();
         }

@@ -43,10 +43,12 @@ namespace ModernDrone.Drone
         [Tooltip("Current drawn by one motor at full output, A.")]
         public float maxCurrentPerMotor = 35f;
 
-        [Header("Rates (Betaflight)")]
-        public AxisRates rollRates = new AxisRates(1.0f, 0.7f, 0f);
-        public AxisRates pitchRates = new AxisRates(1.0f, 0.7f, 0f);
-        public AxisRates yawRates = new AxisRates(1.0f, 0.5f, 0f);
+        [Header("Rates (Betaflight Actual Rates; soft cinematic profile, oscarliang.com/rates)")]
+        public AxisRates rollRates = new AxisRates(100f, 650f, 0.6f);
+        public AxisRates pitchRates = new AxisRates(100f, 650f, 0.6f);
+        public AxisRates yawRates = new AxisRates(100f, 500f, 0.5f);
+        [Tooltip("Stick setpoint low-pass cutoff, Hz (Betaflight RC smoothing: ~10 Hz cinematic, ~20 Hz typical).")]
+        public float setpointCutoffHz = 12f;
 
         [Header("Rate controller (output: angular accel, rad/s^2)")]
         public PidGains pitchPid = new PidGains(18f, 6f, 0f, 40f);

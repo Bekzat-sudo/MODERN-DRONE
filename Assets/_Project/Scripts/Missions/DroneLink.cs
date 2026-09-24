@@ -49,13 +49,22 @@ namespace ModernDrone.Missions
             _fpvCamera = GetComponentInChildren<Camera>();
         }
 
-        void OnEnable() => _drone.OnReset += ResetLink;
+        void OnEnable()
+        {
+            _drone.OnReset += ResetLink;
+            UnityEngine.Rendering.RenderPipelineManager.beginCameraRendering += OnBeginCamera;
+        }
 
         void OnDisable()
         {
             _drone.OnReset -= ResetLink;
+            UnityEngine.Rendering.RenderPipelineManager.beginCameraRendering -= OnBeginCamera;
             VideoFeed.Clear();
         }
+
+        /// <summary>The full-screen video pass runs for every camera; enable its effect only for the FPV feed.</summary>
+        void OnBeginCamera(UnityEngine.Rendering.ScriptableRenderContext _, Camera cam) =>
+            VideoFeed.SetEnabled(cam == _fpvCamera && !GamePause.IsPaused);
 
         void Start()
         {
@@ -111,7 +120,6 @@ namespace ModernDrone.Missions
             _telemetry.failsafe = _drone.Failsafe;
 
             VideoFeed.Publish(_telemetry);
-            VideoFeed.SetEnabled(_fpvCamera != null && _fpvCamera.enabled && !GamePause.IsPaused);
             UpdateCableVisual();
         }
 

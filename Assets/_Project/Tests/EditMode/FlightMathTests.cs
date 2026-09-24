@@ -7,24 +7,26 @@ namespace ModernDrone.Tests
     public class FlightMathTests
     {
         [Test]
-        public void Rates_MatchBetaflightFormula()
+        public void Rates_MatchBetaflightActualRatesFormula()
         {
-            var r = new AxisRates(1.0f, 0.7f, 0f);
+            var r = new AxisRates(100f, 650f, 0f);
             Assert.AreEqual(0f, RatesProfile.EvaluateDeg(0f, r), 1e-4f);
-            Assert.AreEqual(200f / 0.3f, RatesProfile.EvaluateDeg(1f, r), 0.01f);
-            Assert.AreEqual(100f / 0.65f, RatesProfile.EvaluateDeg(0.5f, r), 0.01f);
+            Assert.AreEqual(650f, RatesProfile.EvaluateDeg(1f, r), 0.01f);
+            // expo 0: 0.5*100 + 550*0.5*0.5 = 187.5
+            Assert.AreEqual(187.5f, RatesProfile.EvaluateDeg(0.5f, r), 0.01f);
             Assert.AreEqual(-RatesProfile.EvaluateDeg(0.5f, r), RatesProfile.EvaluateDeg(-0.5f, r), 1e-4f);
         }
 
         [Test]
         public void Rates_ExpoSoftensCentreButKeepsEndpoint()
         {
-            var linear = new AxisRates(1.0f, 0.7f, 0f);
-            var expo = new AxisRates(1.0f, 0.7f, 0.5f);
-            Assert.Less(RatesProfile.EvaluateDeg(0.3f, expo), RatesProfile.EvaluateDeg(0.3f, linear));
+            var linear = new AxisRates(100f, 650f, 0f);
+            var expo = new AxisRates(100f, 650f, 0.6f);
+            Assert.Less(RatesProfile.EvaluateDeg(0.4f, expo), RatesProfile.EvaluateDeg(0.4f, linear));
             Assert.AreEqual(RatesProfile.EvaluateDeg(1f, linear), RatesProfile.EvaluateDeg(1f, expo), 0.01f);
+            // Near centre the slope is the centre sensitivity.
+            Assert.AreEqual(1f, RatesProfile.EvaluateDeg(0.01f, expo), 0.05f);
         }
-
         [Test]
         public void Mixer_RoundTripsTorqueWhenUnsaturated()
         {

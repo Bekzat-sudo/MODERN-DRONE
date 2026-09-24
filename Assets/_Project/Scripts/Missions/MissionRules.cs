@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using ModernDrone.Damage;
+using UnityEngine;
 
 namespace ModernDrone.Missions
 {
@@ -47,15 +48,21 @@ namespace ModernDrone.Missions
             return 0;
         }
 
+        /// <param name="targets">Targets still in the area.</param>
         /// <param name="sortiesFlown">Sorties already finished (drone expended).</param>
+        /// <param name="required">Targets that must be neutralized; 0 = all of them.</param>
+        /// <param name="escaped">Targets that left the area and can no longer be engaged.</param>
         public static MissionOutcome Evaluate(IReadOnlyList<(KillState state, TargetRequirement requirement)> targets,
-            int sortiesFlown, int sortiesTotal)
+            int sortiesFlown, int sortiesTotal, int required = 0, int escaped = 0)
         {
-            bool allDone = targets.Count > 0;
+            int total = targets.Count + escaped;
+            int need = required > 0 ? Mathf.Min(required, total) : total;
+            int done = 0;
             foreach (var t in targets)
-                if (!IsNeutralized(t.state, t.requirement)) { allDone = false; break; }
+                if (IsNeutralized(t.state, t.requirement)) done++;
 
-            if (allDone) return MissionOutcome.Success;
+            if (total > 0 && done >= need) return MissionOutcome.Success;
+            if (done + (targets.Count - done) < need) return MissionOutcome.Failure; // too many escaped
             if (sortiesFlown >= sortiesTotal) return MissionOutcome.Failure;
             return MissionOutcome.InProgress;
         }

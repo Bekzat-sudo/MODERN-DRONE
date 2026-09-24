@@ -27,13 +27,25 @@ namespace ModernDrone.UI
             Cursor.visible = true;
             _settings = new SettingsMenu(_gui);
 
-            _rows.Add(MenuRow.Button("Задача 1: Стоянка у посадки", () => GameScenes.Load(GameScenes.Mission01)));
-            _rows.Add(MenuRow.Button("Задача 2: Прикрытие РЭБ", () => GameScenes.Load(GameScenes.Mission02)));
-            _rows.Add(MenuRow.Button("Задача 3: Огневые позиции", () => GameScenes.Load(GameScenes.Mission03)));
+            AddMission("Задача 1: Стоянка у посадки", GameScenes.Mission01);
+            AddMission("Задача 2: Прикрытие РЭБ", GameScenes.Mission02);
+            AddMission("Задача 3: Огневые позиции", GameScenes.Mission03);
+            AddMission("Задача 4: Колонна", GameScenes.Mission04);
             _rows.Add(MenuRow.Button("Полигон — свободный полёт", () => GameScenes.Load(GameScenes.ProvingGround)));
             _rows.Add(MenuRow.Button("Настройки управления", () => { _settings.Open(); _inSettings = true; }));
             _rows.Add(MenuRow.Header(""));
             _rows.Add(MenuRow.Button("Выход", GameScenes.Quit));
+        }
+
+        void AddMission(string label, string scene) =>
+            _rows.Add(MenuRow.Button(label, () => GameScenes.Load(scene), () => ProgressText(scene)));
+
+        /// <summary>Completion mark and best score from saved progress.</summary>
+        static string ProgressText(string scene)
+        {
+            var e = MissionProgress.Current.entries.Find(x => x.mission == scene);
+            if (e == null || e.attempts == 0) return "";
+            return e.completed ? $"✔ {e.bestScore}" : $"не выполнена · {e.bestScore}";
         }
 
         void Update()

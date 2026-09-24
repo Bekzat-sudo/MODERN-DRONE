@@ -3,18 +3,25 @@ using UnityEngine;
 
 namespace ModernDrone.Drone
 {
-    /// <summary>Per-axis stick-to-rate settings using the Betaflight "BETAFLIGHT" rates formula.</summary>
+    /// <summary>
+    /// Per-axis stick-to-rate settings in Betaflight "Actual Rates" form (the Betaflight default since 4.3):
+    /// rotation rate at centre stick, rate at full stick, and expo that shapes the curve between them.
+    /// Source: betaflight/src/main/fc/rc.c applyActualRates(); ranges per oscarliang.com/rates.
+    /// </summary>
     [Serializable]
     public struct AxisRates
     {
-        [Range(0.01f, 2.55f)] public float rcRate;
-        [Range(0f, 0.99f)] public float superRate;
+        [Tooltip("Centre sensitivity, deg/s (slope of the curve at centre stick).")]
+        [Range(10f, 500f)] public float centerRate;
+        [Tooltip("Rotation rate at full stick deflection, deg/s.")]
+        [Range(50f, 1500f)] public float maxRate;
+        [Tooltip("0..1: higher = softer around centre, same max rate.")]
         [Range(0f, 1f)] public float expo;
 
-        public AxisRates(float rcRate, float superRate, float expo)
+        public AxisRates(float centerRate, float maxRate, float expo)
         {
-            this.rcRate = rcRate;
-            this.superRate = superRate;
+            this.centerRate = centerRate;
+            this.maxRate = maxRate;
             this.expo = expo;
         }
 
@@ -24,30 +31,18 @@ namespace ModernDrone.Drone
 
     public static class RatesProfile
     {
-        const float MaxRate = 1998f;
-
         /// <summary>
-        /// Maps a stick value in [-1, 1] to a rotation rate in deg/s, matching Betaflight's
-        /// applyBetaflightRates(): expo on |stick|^3, RC rate scaled by 200, super rate as 1/(1 - |stick|*sr).
+        /// Maps a stick value in [-1, 1] to a rotation rate in deg/s:
+        /// rate = x * center + max(0, max - center) * |x| * (x^5 * expo + x * (1 - expo)).
         /// </summary>
         public static float EvaluateDeg(float stick, AxisRates r)
         {
-            stick = Mathf.Clamp(stick, -1f, 1f);
-            float abs = Mathf.Abs(stick);
-
-            float cmd = stick;
-            if (r.expo > 0f)
-                cmd = stick * abs * abs * abs * r.expo + stick * (1f - r.expo);
-
-            float rcRate = r.rcRate;
-            if (rcRate > 2f)
-                rcRate += (rcRate - 2f) * 14.54f;
-
-            float rate = 200f * rcRate * cmd;
-            if (r.superRate > 0f)
-                rate *= 1f / Mathf.Clamp(1f - abs * r.superRate, 0.01f, 1f);
-
-            return Mathf.Clamp(rate, -MaxRate, MaxRate);
+            float x = Mathf.Clamp(stick, -1f, 1f);
+            float abs = Mathf.Abs(x);
+            float x5 = x * x * x * x * x;
+            float expof = abs * (x5 * r.expo + x * (1f - r.expo));
+            float stickMovement = Mathf.Max(0f, r.maxRate - r.centerRate);
+            return x * r.centerRate + stickMovement * expof;
         }
 
         public static float EvaluateRad(float stick, AxisRates r) => EvaluateDeg(stick, r) * Mathf.Deg2Rad;

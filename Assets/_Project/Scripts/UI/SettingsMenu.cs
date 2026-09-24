@@ -263,6 +263,8 @@ namespace ModernDrone.UI
 
         void FlightRows()
         {
+            _rows.Add(MenuRow.Header("Плавность"));
+            _rows.Add(MenuRow.Slider("Сглаживание стиков, Гц (меньше — плавнее)", () => S.stickSmoothingHz, v => { S.stickSmoothingHz = v; ControlSettings.NotifyChanged(); }, 4f, 60f, 1f, "0"));
             RateRows("Крен", () => S.rollRates, v => S.rollRates = v);
             RateRows("Тангаж", () => S.pitchRates, v => S.pitchRates = v);
             RateRows("Рыскание", () => S.yawRates, v => S.yawRates = v);
@@ -276,9 +278,9 @@ namespace ModernDrone.UI
         void RateRows(string axis, Func<AxisRates> get, Action<AxisRates> set)
         {
             _rows.Add(MenuRow.Header($"{axis}: макс. {get().MaxRateDeg:0} °/с"));
-            _rows.Add(MenuRow.Slider("  RC Rate", () => get().rcRate, v => { var r = get(); r.rcRate = v; set(r); Changed(); }, 0.1f, 2.5f, 0.05f));
-            _rows.Add(MenuRow.Slider("  Super Rate", () => get().superRate, v => { var r = get(); r.superRate = v; set(r); Changed(); }, 0f, 0.95f, 0.05f));
-            _rows.Add(MenuRow.Slider("  Expo", () => get().expo, v => { var r = get(); r.expo = v; set(r); Changed(); }, 0f, 1f, 0.05f));
+            _rows.Add(MenuRow.Slider("  Центр, °/с", () => get().centerRate, v => { var r = get(); r.centerRate = v; set(r); Changed(); }, 20f, 400f, 10f, "0"));
+            _rows.Add(MenuRow.Slider("  Максимум, °/с", () => get().maxRate, v => { var r = get(); r.maxRate = v; set(r); Changed(); }, 100f, 1400f, 25f, "0"));
+            _rows.Add(MenuRow.Slider("  Экспо", () => get().expo, v => { var r = get(); r.expo = v; set(r); Changed(); }, 0f, 1f, 0.05f));
         }
 
         void Changed()

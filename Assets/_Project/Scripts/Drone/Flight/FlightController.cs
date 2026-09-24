@@ -16,6 +16,9 @@ namespace ModernDrone.Drone
 
         public Vector3 TargetRate { get; private set; }
 
+        // Smoothed stick values (roll, pitch, yaw): PT1 low-pass like Betaflight RC smoothing.
+        Vector3 _sticks;
+
         public FlightController(DroneConfig cfg)
         {
             _cfg = cfg;
@@ -30,24 +33,37 @@ namespace ModernDrone.Drone
             _yaw.Reset();
             _roll.Reset();
             TargetRate = Vector3.zero;
+            _sticks = Vector3.zero;
+        }
+
+        /// <summary>First-order low-pass of the stick setpoints (no-op if the cutoff is 0).</summary>
+        Vector3 SmoothSticks(in DroneInputState input, float dt)
+        {
+            var raw = new Vector3(input.roll, input.pitch, input.yaw);
+            if (_cfg.setpointCutoffHz <= 0f) return _sticks = raw;
+            float rc = 1f / (2f * Mathf.PI * _cfg.setpointCutoffHz);
+            float k = dt / (dt + rc);
+            _sticks += (raw - _sticks) * k;
+            return _sticks;
         }
 
         /// <param name="omegaBody">Angular velocity in body space, rad/s.</param>
         /// <param name="worldUpInBody">World up vector expressed in body space.</param>
         public Vector3 Compute(in DroneInputState input, Vector3 omegaBody, Vector3 worldUpInBody, float dt)
         {
-            float yawRate = RatesProfile.EvaluateRad(input.yaw, _cfg.yawRates);
+            Vector3 sticks = SmoothSticks(input, dt);
+            float yawRate = RatesProfile.EvaluateRad(sticks.z, _cfg.yawRates);
 
             Vector3 target;
             if (input.mode == FlightMode.Acro)
             {
-                float pitchRate = RatesProfile.EvaluateRad(input.pitch, _cfg.pitchRates);
-                float rollRate = RatesProfile.EvaluateRad(input.roll, _cfg.rollRates);
+                float pitchRate = RatesProfile.EvaluateRad(sticks.y, _cfg.pitchRates);
+                float rollRate = RatesProfile.EvaluateRad(sticks.x, _cfg.rollRates);
                 target = new Vector3(pitchRate, yawRate, -rollRate);
             }
             else
             {
-                Vector3 level = AngleModeRate(input.roll, input.pitch, worldUpInBody,
+                Vector3 level = AngleModeRate(sticks.x, sticks.y, worldUpInBody,
                     _cfg.maxAngle, _cfg.angleGain, _cfg.angleMaxRate * Mathf.Deg2Rad);
                 target = new Vector3(level.x, yawRate, level.z);
             }

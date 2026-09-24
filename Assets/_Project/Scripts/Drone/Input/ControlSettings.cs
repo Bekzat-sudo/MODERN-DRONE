@@ -120,6 +120,10 @@ namespace ModernDrone.Drone
     {
         const string FileName = "controls.json";
 
+        /// <summary>Bumped when defaults change in a way saved files must be migrated.</summary>
+        public int version = CurrentVersion;
+        public const int CurrentVersion = 2;
+
         public ControlDevice device = ControlDevice.Auto;
         [Tooltip("Display name of the preferred joystick; empty = first found.")]
         public string joystickName = "";
@@ -158,12 +162,15 @@ namespace ModernDrone.Drone
         public float kbYaw = 0.6f;
 
         [Header("Flight")]
-        public FlightMode startMode = FlightMode.Angle;
+        [Tooltip("Acro holds the attitude when the stick is released (no self-levelling).")]
+        public FlightMode startMode = FlightMode.Acro;
         [Tooltip("Maximum tilt in Angle mode, degrees.")]
         public float angleMaxTilt = 45f;
-        public AxisRates rollRates = new AxisRates(1.0f, 0.7f, 0f);
-        public AxisRates pitchRates = new AxisRates(1.0f, 0.7f, 0f);
-        public AxisRates yawRates = new AxisRates(1.0f, 0.5f, 0f);
+        public AxisRates rollRates = new AxisRates(100f, 650f, 0.6f);
+        public AxisRates pitchRates = new AxisRates(100f, 650f, 0.6f);
+        public AxisRates yawRates = new AxisRates(100f, 500f, 0.5f);
+        [Tooltip("Stick smoothing (setpoint low-pass), Hz. Lower = smoother, laggier.")]
+        public float stickSmoothingHz = 12f;
         public float cameraTilt = 25f;
         public float cameraFov = 118f;
 
@@ -214,7 +221,7 @@ namespace ModernDrone.Drone
                 if (File.Exists(FilePath))
                 {
                     var s = JsonUtility.FromJson<ControlSettings>(File.ReadAllText(FilePath));
-                    if (s != null) return s;
+                    if (s != null) return Migrate(s);
                 }
             }
             catch (Exception e)
@@ -222,6 +229,25 @@ namespace ModernDrone.Drone
                 Debug.LogWarning($"[ModernDrone] Could not read control settings, using defaults: {e.Message}");
             }
             return new ControlSettings();
+        }
+
+        /// <summary>
+        /// v2: Actual Rates replaced the old RC-rate fields (old values no longer parse, so they are reset), and the
+        /// default start mode became Acro.
+        /// </summary>
+        static ControlSettings Migrate(ControlSettings s)
+        {
+            if (s.version < 2)
+            {
+                var d = new ControlSettings();
+                s.rollRates = d.rollRates;
+                s.pitchRates = d.pitchRates;
+                s.yawRates = d.yawRates;
+                s.stickSmoothingHz = d.stickSmoothingHz;
+                s.startMode = FlightMode.Acro;
+            }
+            s.version = CurrentVersion;
+            return s;
         }
 
         public static void Save()

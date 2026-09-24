@@ -49,6 +49,35 @@ namespace ModernDrone.Vehicles
             Object.Destroy(root, 6f);
         }
 
+        /// <summary>Dense grey smoke cloud laid by a vehicle's smoke grenades; drifts and thins out over ~30 s.</summary>
+        public static void SmokeScreen(Vector3 position)
+        {
+            var root = new GameObject("VFX_SmokeScreen");
+            root.transform.position = position + Vector3.up * 1.5f;
+            var smoke = Emitter(root.transform, "Smoke", Alpha, looping: false);
+            var main = smoke.main;
+            main.duration = 6f;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(18f, 26f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(2f, 6f);
+            main.startSize = new ParticleSystem.MinMaxCurve(6f, 11f);
+            main.startColor = new Color(0.62f, 0.63f, 0.6f, 0.85f);
+            main.gravityModifier = -0.01f;
+            var emission = smoke.emission;
+            emission.rateOverTime = 14f;
+            emission.SetBursts(new[] { new ParticleSystem.Burst(0f, 30) });
+            FadeOut(smoke, new Color(0.7f, 0.7f, 0.68f), new Color(0.75f, 0.75f, 0.75f));
+            var shape = smoke.shape;
+            shape.shapeType = ParticleSystemShapeType.Hemisphere;
+            shape.radius = 6f;
+            var vel = smoke.velocityOverLifetime;
+            vel.enabled = true;
+            vel.x = new ParticleSystem.MinMaxCurve(0.4f, 1.0f);
+            vel.y = new ParticleSystem.MinMaxCurve(0.1f, 0.4f);
+            vel.z = new ParticleSystem.MinMaxCurve(-0.2f, 0.2f);
+            PlayAll(root);
+            Object.Destroy(root, 34f);
+        }
+
         /// <summary>Looping flames with a smoke column, parented so it follows the vehicle.</summary>
         public static GameObject Fire(Transform parent, Vector3 worldPosition, float size)
         {
