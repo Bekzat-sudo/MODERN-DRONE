@@ -13,6 +13,8 @@ namespace ModernDrone.Drone
 
         void Reset() => drone = GetComponentInParent<DroneController>();
 
+        public void SetProps(Transform[] propTransforms) => props = propTransforms;
+
         void LateUpdate()
         {
             if (drone == null) return;

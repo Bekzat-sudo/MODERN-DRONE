@@ -42,3 +42,6 @@
 - **2S19M1 MSTA-S SPH** by [Jeyhun1985](https://sketchfab.com/3d-models/2s19m1-msta-s-sph-a783cc3364164eda907d2fd98a8d5152) on Sketchfab,
   licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). `Assets/_Project/Art/Models/Vehicles/Msta/msta_s.glb`;
   turret split out, decimated to ~110k triangles.
+- **FPV-dron NonStop** by [Viktor_](https://sketchfab.com/3d-models/fpv-dron-nonstop-c75dea6e3ae441ac87f292efb17f5bae) on Sketchfab,
+  licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). `Assets/_Project/Art/Models/FPV_NonStop/nonstop.glb`;
+  rescaled to 10" props, re-oriented, props split out, textures reduced to 2K.

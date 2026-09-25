@@ -137,16 +137,39 @@ namespace ModernDrone.Drone
             _rb.inertiaTensorRotation = Quaternion.identity;
             ApplyMass();
 
-            // Placeholder visual and collider follow the frame size (prefab visual is built for a 0.3 m diagonal).
             var col = GetComponent<BoxCollider>();
             if (col != null) col.size = config.colliderSize;
-            var visual = transform.Find("Visual");
-            if (visual != null) visual.localScale = Vector3.one * (config.motorDiagonal / 0.3f);
+            ApplyModel();
 
             _fc = new FlightController(config);
             _battery = new BatteryModel(config.cells, config.capacityMah, config.internalResistance);
             _homePosition = transform.position;
             _homeRotation = transform.rotation;
+        }
+
+        static readonly string[] PropNames = { "Prop_FR", "Prop_FL", "Prop_RR", "Prop_RL" };
+
+        /// <summary>Swaps the Visual child to this config's model and moves the FPV camera onto the model's lens.</summary>
+        void ApplyModel()
+        {
+            var visual = transform.Find("Visual");
+            if (visual == null || config.visualPrefab == null) return;
+            if (visual.childCount != 1 || visual.GetChild(0).name != config.visualPrefab.name)
+            {
+                for (int i = visual.childCount - 1; i >= 0; i--)
+                {
+                    var child = visual.GetChild(i).gameObject;
+                    child.SetActive(false);
+                    if (Application.isPlaying) Destroy(child); else DestroyImmediate(child);
+                }
+                var model = Instantiate(config.visualPrefab, visual, false);
+                model.name = config.visualPrefab.name;
+            }
+            var parts = visual.GetComponentsInChildren<Transform>(true);
+            var props = GetComponent<PropVisuals>();
+            if (props != null) props.SetProps(System.Array.ConvertAll(PropNames, n => System.Array.Find(parts, t => t.name == n)));
+            var cam = GetComponentInChildren<DroneCamera>(true);
+            if (cam != null) cam.SetMount(config.cameraPosition);
         }
 
         /// <summary>Feeds the current control link quality; a lost link triggers failsafe after a short hold.</summary>

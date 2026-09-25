@@ -36,7 +36,8 @@ namespace ModernDrone.Missions
         [Tooltip("Warheads the pilot can choose from before each sortie (first = default).")]
         [SerializeField] WarheadData[] warheads = new WarheadData[0];
         [Tooltip("Drone classes the pilot can choose from (index 1 = default when present).")]
-        [SerializeField] DroneConfig[] droneClasses = new DroneConfig[0];
+        [UnityEngine.Serialization.FormerlySerializedAs("droneClasses")]
+        [SerializeField] DroneConfig[] droneModels = new DroneConfig[0];
         [Tooltip("Targets that must be neutralized; 0 = all.")]
         [SerializeField] int requiredTargets;
         [SerializeField] DroneController drone;
@@ -73,7 +74,7 @@ namespace ModernDrone.Missions
 
         public void SetRequiredTargets(int count) => requiredTargets = count;
 
-        public void SetDroneClasses(DroneConfig[] classes) => droneClasses = classes ?? new DroneConfig[0];
+        public void SetDroneModels(DroneConfig[] models) => droneModels = models ?? new DroneConfig[0];
 
         int Required => requiredTargets > 0 ? Mathf.Min(requiredTargets, _targets.Count) : _targets.Count;
 
@@ -191,9 +192,9 @@ namespace ModernDrone.Missions
         void PrepareSortie()
         {
             _choice = FreeFlight || _radioLeft > 0 ? LinkType.Radio : LinkType.Fiber;
-            if (_droneChoice < 0) _droneChoice = Mathf.Clamp(1, 0, Mathf.Max(0, droneClasses.Length - 1));
+            if (_droneChoice < 0) _droneChoice = 0;
             _loadoutRows.Clear();
-            if (droneClasses.Length > 1) _loadoutRows.Add(LoadoutRow.Drone);
+            if (droneModels.Length > 1) _loadoutRows.Add(LoadoutRow.Drone);
             if (ChooseLink) _loadoutRows.Add(LoadoutRow.Link);
             if (warheads.Length > 1) _loadoutRows.Add(LoadoutRow.Warhead);
             if (_loadoutRows.Count == 0)
@@ -222,7 +223,7 @@ namespace ModernDrone.Missions
                 int step = right ? 1 : -1;
                 switch (_loadoutRows[_loadoutRow])
                 {
-                    case LoadoutRow.Drone: _droneChoice = (_droneChoice + step + droneClasses.Length) % droneClasses.Length; break;
+                    case LoadoutRow.Drone: _droneChoice = (_droneChoice + step + droneModels.Length) % droneModels.Length; break;
                     case LoadoutRow.Link: _choice = _choice == LinkType.Radio ? LinkType.Fiber : LinkType.Radio; break;
                     case LoadoutRow.Warhead: _warheadChoice = (_warheadChoice + step + warheads.Length) % warheads.Length; break;
                 }
@@ -244,9 +245,9 @@ namespace ModernDrone.Missions
             {
                 if (type == LinkType.Fiber) _fiberLeft--; else _radioLeft--;
             }
-            if (droneClasses.Length > 0)
+            if (droneModels.Length > 0)
             {
-                var cfg = droneClasses[Mathf.Clamp(_droneChoice, 0, droneClasses.Length - 1)];
+                var cfg = droneModels[Mathf.Clamp(_droneChoice, 0, droneModels.Length - 1)];
                 if (drone.Config == null || !drone.Config.name.StartsWith(cfg.name))
                 {
                     drone.Initialize(cfg);
@@ -439,7 +440,7 @@ namespace ModernDrone.Missions
                 switch (_loadoutRows[i])
                 {
                     case LoadoutRow.Drone:
-                        var cfg = droneClasses[Mathf.Clamp(_droneChoice, 0, droneClasses.Length - 1)];
+                        var cfg = droneModels[Mathf.Clamp(_droneChoice, 0, droneModels.Length - 1)];
                         sb.AppendLine($"{cursor}Дрон:  ‹ {cfg.displayName} ›");
                         sb.AppendLine("      " + cfg.summary);
                         break;
@@ -453,9 +454,9 @@ namespace ModernDrone.Missions
                         var w = warheads[Mathf.Clamp(_warheadChoice, 0, warheads.Length - 1)];
                         sb.AppendLine($"{cursor}Боевая часть:  ‹ {w.displayName} ›");
                         sb.AppendLine("      " + WarheadHint(w));
-                        if (droneClasses.Length > 0)
+                        if (droneModels.Length > 0)
                         {
-                            var dc = droneClasses[Mathf.Clamp(_droneChoice, 0, droneClasses.Length - 1)];
+                            var dc = droneModels[Mathf.Clamp(_droneChoice, 0, droneModels.Length - 1)];
                             float twr = dc.frameMass * dc.thrustToWeight / (dc.frameMass + w.mass);
                             sb.AppendLine($"      масса {w.mass:0.0} кг · дрон {dc.frameMass + w.mass:0.0} кг · тяга/вес {twr:0.0}");
                         }

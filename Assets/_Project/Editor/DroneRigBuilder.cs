@@ -8,8 +8,8 @@ using UnityEngine;
 namespace ModernDrone.Editor
 {
     /// <summary>
-    /// Builds the default FPV drone prefab. The "Visual" child holds the imported model;
-    /// physics lives on the root and does not depend on it.
+    /// Builds the FPV drone prefab and the per-model visual prefabs. The "Visual" child holds the current model's visual
+    /// (swapped by DroneController when a different drone model is chosen); physics lives on the root.
     /// </summary>
     public static class DroneRigBuilder
     {
@@ -19,7 +19,9 @@ namespace ModernDrone.Editor
         [MenuItem("Modern Drone/Setup/Build Drone Prefab")]
         public static GameObject BuildPrefab()
         {
-            var config = DroneClasses.Load(DroneClasses.Standard);
+            VisualPrefab(Model.Fpv7, true);
+            VisualPrefab(Model.NonStop, true);
+            var config = DroneModels.LoadAll()[0];
 
             var root = new GameObject("FPV_Default");
             root.layer = GameLayers.Drone;
@@ -36,7 +38,7 @@ namespace ModernDrone.Editor
 
             var camGo = new GameObject("FpvCamera") { tag = "MainCamera" };
             camGo.transform.SetParent(root.transform, false);
-            camGo.transform.localPosition = new Vector3(0f, -0.003f, 0.095f); // at the model's FPV camera lens
+            camGo.transform.localPosition = config.cameraPosition; // at the model's FPV camera lens
             var cam = camGo.AddComponent<Camera>();
             cam.nearClipPlane = 0.03f;
             cam.farClipPlane = 3000f;
@@ -74,28 +76,44 @@ namespace ModernDrone.Editor
             return prefab;
         }
 
-        const string ModelPath = "Assets/_Project/Art/Models/FPV_Drone/fpv_drone.glb";
-        // Motor-to-motor diagonal of the imported model (measured from the frame mesh), metres.
-        const float ModelMotorDiagonal = 0.42f;
-        // Prop meshes split out of the model in Blender, pivots on the motor axes. Order matches QuadMixer.
+        public enum Model { Fpv7, NonStop }
+
+        const string VisualDir = "Assets/_Project/Prefabs/Drones/";
+        // Prop meshes split out of each model in Blender, pivots on the motor axes. Order matches QuadMixer.
         static readonly string[] PropNames = { "Prop_FR", "Prop_FL", "Prop_RR", "Prop_RL" };
 
         /// <summary>
-        /// "FPV Drone" by Jeyhun1985 (Sketchfab, CC BY), see CREDITS.md. Scaled to the 0.3 m reference diagonal that
-        /// DroneController rescales per class. Its props are separate meshes (split in Blender) and spin.
+        /// Visual prefab for a drone model: the imported model under one root, colliders stripped, Drone layer.
+        /// "FPV Drone" by Jeyhun1985 is scaled to a 0.3 m motor diagonal (7"); "FPV-dron NonStop" by Viktor_ is already
+        /// at 10" scale from Blender. See CREDITS.md.
         /// </summary>
+        public static GameObject VisualPrefab(Model model, bool rebuild = false)
+        {
+            string path = VisualDir + (model == Model.NonStop ? "Visual_NonStop.prefab" : "Visual_FPV7.prefab");
+            var existing = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            if (existing != null && !rebuild) return existing;
+            string glb = model == Model.NonStop
+                ? "Assets/_Project/Art/Models/FPV_NonStop/nonstop.glb"
+                : "Assets/_Project/Art/Models/FPV_Drone/fpv_drone.glb";
+            float scale = model == Model.NonStop ? 1f : 0.3f / 0.42f; // 0.42 m: diagonal measured on the 7" mesh
+
+            var root = new GameObject(model == Model.NonStop ? "Visual_NonStop" : "Visual_FPV7");
+            var inst = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(glb), root.transform);
+            inst.name = "Model";
+            inst.transform.localScale = Vector3.one * scale;
+            foreach (var c in root.GetComponentsInChildren<Collider>()) Object.DestroyImmediate(c);
+            foreach (var t in root.GetComponentsInChildren<Transform>()) t.gameObject.layer = GameLayers.Drone;
+            var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
+            Object.DestroyImmediate(root);
+            return prefab;
+        }
+
         static Transform[] BuildVisual(Transform root, DroneConfig config)
         {
             var visual = new GameObject("Visual").transform;
             visual.SetParent(root, false);
-
-            var model = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(ModelPath));
-            model.name = "FPV_Drone_Model";
-            model.transform.SetParent(visual, false);
-            model.transform.localScale = Vector3.one * (0.3f / ModelMotorDiagonal);
-            foreach (var c in model.GetComponentsInChildren<Collider>()) Object.DestroyImmediate(c);
-            foreach (var t in model.GetComponentsInChildren<Transform>()) t.gameObject.layer = GameLayers.Drone;
-
+            var model = Object.Instantiate(config.visualPrefab, visual);
+            model.name = config.visualPrefab.name;
             var all = model.GetComponentsInChildren<Transform>();
             return System.Array.ConvertAll(PropNames, n => System.Array.Find(all, t => t.name == n));
         }

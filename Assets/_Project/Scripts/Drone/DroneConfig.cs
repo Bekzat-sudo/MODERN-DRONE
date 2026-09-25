@@ -9,9 +9,13 @@ namespace ModernDrone.Drone
     [CreateAssetMenu(menuName = "Modern Drone/Drone Config", fileName = "DroneConfig")]
     public sealed class DroneConfig : ScriptableObject
     {
-        [Header("Class")]
+        [Header("Model")]
         public string displayName = "FPV 7\"";
         [TextArea] public string summary = "";
+        [Tooltip("Visual prefab of this drone model (props named Prop_FR/FL/RR/RL), placed under the drone's Visual child.")]
+        public GameObject visualPrefab;
+        [Tooltip("FPV camera mount: the model's camera lens, in drone space.")]
+        public Vector3 cameraPosition = new Vector3(0f, -0.003f, 0.095f);
 
         // Defaults describe a 7" long-range class quad. Airframe figures follow public hobby data
         // (AUW, thrust-to-weight classes: unmannedtechshop.co.uk TWR guide, oscarliang.com 7" reviews);

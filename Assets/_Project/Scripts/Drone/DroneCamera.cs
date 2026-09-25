@@ -30,10 +30,20 @@ namespace ModernDrone.Drone
             }
         }
 
+        bool _mountSet;
+
+        /// <summary>Moves the camera onto a model's lens (drone space).</summary>
+        public void SetMount(Vector3 localPosition)
+        {
+            _mountPosition = localPosition;
+            _mountSet = true;
+            transform.localPosition = localPosition;
+        }
+
         void Awake()
         {
             _camera = GetComponent<Camera>();
-            _mountPosition = transform.localPosition;
+            if (!_mountSet) _mountPosition = transform.localPosition;
             if (drone == null) drone = GetComponentInParent<DroneController>();
             if (drone != null && drone.Config != null)
             {
