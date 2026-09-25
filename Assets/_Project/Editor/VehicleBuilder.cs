@@ -98,6 +98,7 @@ namespace ModernDrone.Editor
             Module("Module_Optics", turret, ModuleType.Optics, 40f, 5f, new Vector3(-0.6f, 0.5f, 0.7f), new Vector3(0.3f, 0.25f, 0.3f), visible: true);
 
             VehicleKit.AttachModel(t, TankModelPath, new Vector3(0f, 0f, 0.4f), turret, "Turret");
+            new VehicleKit(root).SliceHull();
 
             var model = root.AddComponent<VehicleDamageModel>();
             model.SetDisplayName("Танк Т-72Б3");

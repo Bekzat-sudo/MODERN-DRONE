@@ -128,8 +128,8 @@ namespace ModernDrone.Editor
         const string Terrain04Path = "Assets/_Project/Scenes/Mission_04_Terrain.asset";
 
         const string Briefing04 =
-            "По грунтовке за лесополосой, в ~500 м к северу, с запада на восток идёт колонна: бронеавтомобиль «Тайфун», БТР, грузовик, РСЗО и танк.\n\n" +
-            "Задача: вывести из строя 3 машины из 5, пока колонна не ушла. Подбитая машина встаёт и задерживает остальных; " +
+            "По грунтовке за лесополосой, в ~500 м к северу, с запада на восток идёт колонна: бронеавтомобиль «Тайфун», БТР, грузовик, РСЗО, пусковая С-400 на марше и танк.\n\n" +
+            "Задача: вывести из строя 3 машины из 6, пока колонна не ушла. Подбитая машина встаёт и задерживает остальных; " +
             "после первого попадания колонна ускоряется и ставит дым.\n\n" +
             "Два участка дороги закрыты противодроновыми сетками — в сетке дрон застревает и чаще всего не взрывается, но в ней есть разрывы. " +
             "Техника отстреливается вблизи (до ~50 м), дорогу прикрывает расчёт дронов-перехватчиков. Колонна тронется с вашим первым взлётом.";
@@ -157,7 +157,7 @@ namespace ModernDrone.Editor
             (string prefab, string label)[] order =
             {
                 (VehicleCatalog.Mrap, "Тайфун"), (VehicleCatalog.Apc, "БТР"), (VehicleCatalog.Truck, "Грузовик"),
-                (VehicleCatalog.Mlrs, "РСЗО"), (VehicleBuilder.TankPrefabPath, "Танк")
+                (VehicleCatalog.Mlrs, "РСЗО"), (VehicleCatalog.SamLauncherTravel, "ПУ С-400"), (VehicleBuilder.TankPrefabPath, "Танк")
             };
             foreach (var (prefab, label) in order)
                 column.Add(TargetAt(terrain, prefab, road[0], 90f, label, TargetRequirement.OutOfAction).GetComponent<ModernDrone.Damage.VehicleDamageModel>());

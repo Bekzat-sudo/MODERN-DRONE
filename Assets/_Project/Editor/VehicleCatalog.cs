@@ -30,6 +30,7 @@ namespace ModernDrone.Editor
         public const string TankCage = Dir + "Tank_Cage.prefab";
         public const string InterceptorSite = Dir + "InterceptorSite_Placeholder.prefab";
         public const string Mrap = Dir + "MRAP_Typhoon.prefab";
+        public const string SamLauncherTravel = Dir + "SAM_Launcher_Travel.prefab";
         public const string Helicopter = Dir + "Helicopter_Mi28.prefab";
         const string ModelDir = "Assets/_Project/Art/Models/Vehicles/";
 
@@ -44,6 +45,7 @@ namespace ModernDrone.Editor
             BuildHowitzer();
             BuildSpaag();
             BuildSamLauncher();
+            BuildSamLauncherTravel();
             BuildSamRadar();
             BuildMlrs();
             BuildTruck();
@@ -168,6 +170,7 @@ namespace ModernDrone.Editor
             k.Module("Module_Fuel", ModuleType.FuelTank, 60f, 15f, v(1.0f, 1.4f, -1.6f), v(0.6f, 0.8f, 1.0f));
             k.Module("Module_AmmoRack", ModuleType.AmmoRack, 50f, 10f, v(0, 1.75f, 0.85f), v(0.7f, 0.5f, 0.7f));
             k.AttachModel(ModelDir + "BTR82/btr82.glb", Vector3.zero, turret, "Turret");
+            k.SliceHull();
             k.Finish("БТР-82А");
             k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
             k.Save(Apc);
@@ -234,38 +237,43 @@ namespace ModernDrone.Editor
         }
 
         /// <summary>
-        /// S-400 launcher: BAZ-64022 tractor with a 5P85SE2 semitrailer, four missile canisters, shown erected
-        /// (en.wikipedia.org/wiki/S-400_missile_system). Model "S-400 Triumf SAM system" by 42manako (CC BY-NC).
+        /// S-400 launcher: BAZ-64022 tractor with a 5P85SE2 semitrailer and four missile canisters
+        /// (en.wikipedia.org/wiki/S-400_missile_system). Model "S-400 Triumf SAM system" by 42manako (CC BY-NC),
+        /// straightened in Blender and re-posed with the canisters lying on the trailer; the pack pivots on the erector
+        /// hinge, so the same model serves the deployed launcher (canisters up) and the travelling one.
         /// </summary>
-        static void BuildSamLauncher()
+        static void BuildSamLauncher() => BuildSamLauncher(true, SamLauncher, "SAM_Launcher_Placeholder", "ПУ ЗРК С-400");
+
+        static void BuildSamLauncherTravel() => BuildSamLauncher(false, SamLauncherTravel, "SAM_Launcher_Travel", "ПУ ЗРК С-400 (на марше)");
+
+        static void BuildSamLauncher(bool erected, string path, string name, string label)
         {
-            var k = new VehicleKit("SAM_Launcher_Placeholder", Green);
-            // Tractor
-            k.Wheels(new[] { 8.0f, 5.6f, 4.2f }, 1.1f, 0.7f, 0.5f);
-            k.Visual("Tractor", v(0, 1.6f, 6.6f), v(2.5f, 1.8f, 4.8f), k.Dark);
+            var k = new VehicleKit(name, Green);
+            k.Wheels(new[] { 6.5f, 2.25f, 0.84f }, 1.1f, 0.68f, 0.5f);
+            k.Wheels(new[] { -4.33f, -5.86f }, 1.1f, 0.62f, 0.5f);
             k.Plate("Cab_Front", v(0, 2.4f, 9.0f), v(2.5f, 1.8f, 0.06f), 8f);
             k.Plate("Cab_Side_L", v(-1.25f, 2.4f, 8.2f), v(0.06f, 1.8f, 1.6f), 8f);
             k.Plate("Cab_Side_R", v(1.25f, 2.4f, 8.2f), v(0.06f, 1.8f, 1.6f), 8f);
             k.Plate("Cab_Roof", v(0, 3.3f, 8.2f), v(2.5f, 0.06f, 1.6f), 8f);
             k.Module("Module_ControlStation", ModuleType.ControlStation, 60f, 10f, v(0, 2.5f, 8.2f), v(2.2f, 1.4f, 1.4f));
-            k.Module("Module_Engine", ModuleType.Engine, 120f, 30f, v(0, 1.8f, 6.6f), v(1.8f, 1.2f, 1.6f));
-            k.Module("Module_Fuel", ModuleType.FuelTank, 60f, 10f, v(1.1f, 1.2f, 5.3f), v(0.5f, 0.6f, 1.2f));
-            // Semitrailer with the erector and its power unit
-            k.Wheels(new[] { -2.4f, -3.8f }, 1.1f, 0.6f, 0.5f);
-            k.Visual("Trailer", v(0, 1.5f, -2.0f), v(2.8f, 1.0f, 12.5f), k.Dark);
-            k.Visual("Equipment", v(0, 2.7f, 3.0f), v(2.4f, 2.0f, 1.6f), k.Dark);
-            k.Plate("Trailer_Shelter_L", v(-1.3f, 2.8f, 2.6f), v(0.06f, 1.4f, 2.0f), 6f);
-            k.Plate("Trailer_Shelter_R", v(1.3f, 2.8f, 2.6f), v(0.06f, 1.4f, 2.0f), 6f);
-            k.Module("Module_Generator", ModuleType.Generator, 70f, 15f, v(0, 2.8f, 2.6f), v(2.2f, 1.2f, 1.8f));
-            // Erected canisters at the rear: physical box for the fuze plus one launcher module each.
-            k.Visual("Canisters", v(0, 4.6f, -7.6f), v(2.0f, 8.2f, 2.0f), k.Dark);
+            k.Module("Module_Engine", ModuleType.Engine, 120f, 30f, v(0, 1.8f, 6.3f), v(1.8f, 1.2f, 1.6f));
+            k.Module("Module_Fuel", ModuleType.FuelTank, 60f, 10f, v(1.0f, 1.2f, 4.8f), v(0.5f, 0.6f, 1.2f));
+            k.Plate("Trailer_Shelter_L", v(-1.3f, 2.7f, 3.0f), v(0.06f, 1.4f, 2.0f), 6f);
+            k.Plate("Trailer_Shelter_R", v(1.3f, 2.7f, 3.0f), v(0.06f, 1.4f, 2.0f), 6f);
+            k.Module("Module_Generator", ModuleType.Generator, 70f, 15f, v(0, 2.7f, 3.0f), v(2.2f, 1.2f, 1.8f));
+
+            // Canister pack on the erector hinge, laid out in its travel pose (lying forward along the trailer).
+            var pack = k.Group("Canisters", v(0.007f, 2.134f, -6.913f));
+            k.Visual("PackHull", v(0, 0.73f, 2.5f), v(2.9f, 2.8f, 8.3f), k.Dark, pack);
             int i = 0;
-            foreach (float z in new[] { -7.2f, -8.0f })
-            foreach (float x in new[] { -0.45f, 0.45f })
-                k.Module($"Module_Canister_{i++}", ModuleType.Launcher, 60f, 10f, v(x, 4.6f, z), v(0.8f, 8.0f, 0.8f));
-            k.AttachModel(ModelDir + "S400/s400_launcher.glb");
-            k.Finish("ПУ ЗРК С-400");
-            k.Save(SamLauncher);
+            foreach (float y in new[] { 0.03f, 1.43f })
+            foreach (float x in new[] { -0.7f, 0.7f })
+                k.Module($"Module_Canister_{i++}", ModuleType.Launcher, 60f, 10f, v(x, y, 2.5f), v(1.3f, 1.3f, 8.2f), pack);
+            k.AttachModel(ModelDir + "S400/s400_launcher.glb", Vector3.zero, pack, "Canisters");
+            k.SliceHull(0.75f);
+            if (erected) pack.localRotation = Quaternion.Euler(-90f, 0f, 0f);
+            k.Finish(label);
+            k.Save(path);
         }
 
         static void BuildSamRadar()
@@ -322,6 +330,7 @@ namespace ModernDrone.Editor
             k.Visual("Tent", v(0, 2.55f, -1.8f), v(2.4f, 1.4f, 4.1f), k.Hull);
             k.Module("Module_Cargo", ModuleType.AmmoRack, 50f, 5f, v(0, 2.0f, -1.8f), v(2.1f, 1.6f, 3.8f));
             k.AttachModel(ModelDir + "Ural4320/ural4320.glb");
+            k.SliceHull();
             k.Finish("Урал-4320 (снабжение)");
             k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
             k.Save(Truck);
@@ -347,6 +356,7 @@ namespace ModernDrone.Editor
             k.Module("Module_Transmission", ModuleType.Transmission, 100f, 30f, v(0, 0.95f, 0.3f), v(1.0f, 0.5f, 4.5f));
             k.Module("Module_Fuel", ModuleType.FuelTank, 60f, 15f, v(1.0f, 1.3f, -1.4f), v(0.5f, 0.7f, 1.2f));
             k.AttachModel(ModelDir + "Typhoon/typhoon.glb");
+            k.SliceHull();
             k.Finish("КамАЗ «Тайфун-К»");
             k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
             k.Save(Mrap);
@@ -394,6 +404,7 @@ namespace ModernDrone.Editor
             k.Module("Module_Rotor", ModuleType.Rotor, 200f, 5f, v(0, 0.1f, 0), v(16.5f, 0.25f, 16.5f), rotor);
 
             k.AttachModel(ModelDir + "Mi28NM/mi28nm.glb", Vector3.zero, rotor, "Rotor");
+            k.SliceHull();
             k.Finish("Ми-28НМ");
             k.Root.AddComponent<HelicopterFlight>().Configure(new Vector3[0], rotor);
             k.Save(Helicopter);

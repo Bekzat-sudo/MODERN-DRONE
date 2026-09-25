@@ -140,20 +140,20 @@ namespace ModernDrone.Editor
         }
 
         /// <summary>Wheels along both sides; each side is one "Wheels" damage module.</summary>
-        public void Wheels(float[] zs, float halfTrack, float radius, float width, float hp = 90f)
+        public void Wheels(float[] zs, float halfTrack, float radius, float width, float hp = 90f, float x = 0f)
         {
             foreach (float side in new[] { -1f, 1f })
             {
                 float minZ = float.MaxValue, maxZ = float.MinValue;
                 foreach (float z in zs)
                 {
-                    Visual("Wheel", new Vector3(side * halfTrack, radius, z), new Vector3(radius * 2f, width * 0.5f, radius * 2f), Dark,
+                    Visual("Wheel", new Vector3(x + side * halfTrack, radius, z), new Vector3(radius * 2f, width * 0.5f, radius * 2f), Dark,
                         rot: Quaternion.Euler(0f, 0f, 90f), type: PrimitiveType.Cylinder);
                     minZ = Mathf.Min(minZ, z);
                     maxZ = Mathf.Max(maxZ, z);
                 }
                 Module(side < 0 ? "Module_Wheels_L" : "Module_Wheels_R", ModuleType.Wheels, hp, 20f,
-                    new Vector3(side * halfTrack, radius, (minZ + maxZ) * 0.5f), new Vector3(width, radius * 1.8f, maxZ - minZ + radius * 2f));
+                    new Vector3(x + side * halfTrack, radius, (minZ + maxZ) * 0.5f), new Vector3(width, radius * 1.8f, maxZ - minZ + radius * 2f));
             }
         }
 
@@ -190,6 +190,43 @@ namespace ModernDrone.Editor
 
         public void AttachModel(string path, Vector3 offset = default, Transform moving = null, string movingName = null) =>
             AttachModel(T, path, offset, moving, movingName);
+
+        /// <summary>
+        /// Physical hull that follows the attached model: one hull-layer box per <paramref name="step"/> metres of length,
+        /// sized to the model's outline in that slice. Percentiles drop thin whips and antennas. The contact fuze fires
+        /// on these; the jet ignores them. Use where hand-placed boxes cannot follow the shape (articulated rigs).
+        /// </summary>
+        public void SliceHull(float step = 1f, float percentile = 0.97f)
+        {
+            var visual = T.Find("Visual");
+            if (visual == null) return;
+            var pts = new System.Collections.Generic.List<Vector3>();
+            foreach (var mf in visual.GetComponentsInChildren<MeshFilter>())
+                foreach (var v in mf.sharedMesh.vertices) pts.Add(T.InverseTransformPoint(mf.transform.TransformPoint(v)));
+            if (pts.Count == 0) return;
+            float zMin = float.MaxValue, zMax = float.MinValue;
+            foreach (var p in pts) { zMin = Mathf.Min(zMin, p.z); zMax = Mathf.Max(zMax, p.z); }
+
+            var group = Group("HullSlices", Vector3.zero);
+            var xs = new System.Collections.Generic.List<float>();
+            var ys = new System.Collections.Generic.List<float>();
+            for (float z = zMin; z < zMax; z += step)
+            {
+                xs.Clear(); ys.Clear();
+                foreach (var p in pts)
+                    if (p.z >= z && p.z < z + step) { xs.Add(p.x); ys.Add(p.y); }
+                if (xs.Count < 20) continue;
+                xs.Sort(); ys.Sort();
+                float x0 = xs[(int)(xs.Count * (1f - percentile))], x1 = xs[(int)(xs.Count * percentile) - 1];
+                float y0 = ys[0], y1 = ys[(int)(ys.Count * 0.995f) - 1]; // height keeps all but the thinnest whips
+                var go = new GameObject("Slice");
+                go.layer = GameLayers.VehicleHull;
+                go.transform.SetParent(group, false);
+                var box = go.AddComponent<BoxCollider>();
+                box.center = new Vector3((x0 + x1) * 0.5f, (y0 + y1) * 0.5f, z + step * 0.5f);
+                box.size = new Vector3(x1 - x0, y1 - y0, step);
+            }
+        }
 
         public VehicleDamageModel Finish(string displayName, bool decoy = false)
         {
