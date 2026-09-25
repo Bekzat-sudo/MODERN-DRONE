@@ -270,6 +270,10 @@ namespace ModernDrone.Editor
             foreach (float x in new[] { -0.7f, 0.7f })
                 k.Module($"Module_Canister_{i++}", ModuleType.Launcher, 60f, 10f, v(x, y, 2.5f), v(1.3f, 1.3f, 8.2f), pack);
             k.AttachModel(ModelDir + "S400/s400_launcher.glb", Vector3.zero, pack, "Canisters");
+            // Outriggers (jack beams and foot pads) are deployed only at a firing position.
+            if (!erected)
+                foreach (var t in k.T.GetComponentsInChildren<Transform>(true))
+                    if (t.name == "Outriggers") t.gameObject.SetActive(false);
             k.SliceHull(0.75f);
             if (erected) pack.localRotation = Quaternion.Euler(-90f, 0f, 0f);
             k.Finish(label);
