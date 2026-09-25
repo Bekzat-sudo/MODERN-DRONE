@@ -174,6 +174,12 @@ namespace ModernDrone.Drone
         public float cameraTilt = 25f;
         public float cameraFov = 118f;
 
+        [Header("Display & audio")]
+        public bool fullscreen = true;
+        public bool vSync = true;
+        [Range(0f, 1f)] public float masterVolume = 1f;
+        [Range(0f, 1f)] public float motorVolume = 1f;
+
         public ActionBinding[] bindings = DefaultBindings();
 
         static ControlSettings _current;
@@ -249,6 +255,25 @@ namespace ModernDrone.Drone
             s.version = CurrentVersion;
             return s;
         }
+
+        /// <summary>Applies display and audio settings (on start and whenever settings change).</summary>
+        public static void ApplyGlobal()
+        {
+            var s = Current;
+            QualitySettings.vSyncCount = s.vSync ? 1 : 0;
+            if (!Application.isEditor) Screen.fullScreen = s.fullscreen;
+            AudioListener.volume = Mathf.Clamp01(s.masterVolume);
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        static void ApplyOnStart()
+        {
+            ApplyGlobal();
+            Changed -= OnChangedApply;
+            Changed += OnChangedApply;
+        }
+
+        static void OnChangedApply(ControlSettings _) => ApplyGlobal();
 
         public static void Save()
         {

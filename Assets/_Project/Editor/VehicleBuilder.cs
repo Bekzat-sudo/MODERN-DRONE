@@ -220,6 +220,7 @@ namespace ModernDrone.Editor
             mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
             mat.SetColor("_BaseColor", color);
             mat.SetFloat("_Smoothness", 0.15f);
+            mat.enableInstancing = true; // many identical parts (trees, plates) batch on the GPU
             AssetDatabase.CreateAsset(mat, path);
             return mat;
         }

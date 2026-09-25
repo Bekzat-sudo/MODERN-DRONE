@@ -42,7 +42,7 @@ namespace ModernDrone.Drone
             for (int i = 0; i < spin.Length; i++) avg += spin[i];
             avg /= Mathf.Max(1, spin.Length);
             _targetFreq = Mathf.Lerp(idleFrequency, maxFrequency, avg);
-            _targetGain = avg > 0.01f ? volume * Mathf.Lerp(0.25f, 1f, avg) : 0f;
+            _targetGain = avg > 0.01f ? volume * ControlSettings.Current.motorVolume * Mathf.Lerp(0.25f, 1f, avg) : 0f;
         }
 
         void OnAudioFilterRead(float[] data, int channels)

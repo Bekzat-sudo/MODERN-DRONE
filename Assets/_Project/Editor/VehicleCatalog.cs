@@ -85,7 +85,7 @@ namespace ModernDrone.Editor
             k.Module("Module_Fuel_L", ModuleType.FuelTank, 70f, 15f, v(-0.8f, 1.0f, -2.8f), v(0.5f, 0.8f, 0.5f));
             k.Module("Module_Fuel_R", ModuleType.FuelTank, 70f, 15f, v(0.8f, 1.0f, -2.8f), v(0.5f, 0.8f, 0.5f));
             k.Finish("БМП (заглушка)");
-            k.Root.AddComponent<CloseInDefense>().Configure(null, 50f);
+            k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
             k.Save(Ifv);
         }
 
@@ -121,7 +121,7 @@ namespace ModernDrone.Editor
             k.Module("Module_ControlStation", ModuleType.ControlStation, 90f, 25f, v(-0.9f, 1.1f, 2.6f), v(0.9f, 0.7f, 1.0f));
             k.Module("Module_Fuel", ModuleType.FuelTank, 70f, 15f, v(0.9f, 1.0f, 2.6f), v(0.7f, 0.8f, 1.0f));
             k.Finish("САУ (заглушка)");
-            k.Root.AddComponent<CloseInDefense>().Configure(null, 50f);
+            k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
             k.Save(Spg);
         }
 
@@ -155,7 +155,7 @@ namespace ModernDrone.Editor
             k.Module("Module_Fuel", ModuleType.FuelTank, 60f, 15f, v(1.0f, 1.2f, -1.0f), v(0.5f, 0.8f, 1.0f));
             k.Module("Module_AmmoRack", ModuleType.AmmoRack, 50f, 10f, v(0, 1.6f, 0.8f), v(0.6f, 0.5f, 0.6f));
             k.Finish("БТР (заглушка)");
-            k.Root.AddComponent<CloseInDefense>().Configure(null, 50f);
+            k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
             k.Save(Apc);
         }
 
@@ -259,7 +259,7 @@ namespace ModernDrone.Editor
             k.Module("Module_Rockets", ModuleType.AmmoRack, 60f, 10f, Vector3.zero, v(1.9f, 1.1f, 3.0f), pod, visible: true, mat: k.Hull);
             k.Module("Module_Launcher", ModuleType.Launcher, 70f, 20f, v(0, -0.75f, 0), v(0.8f, 0.4f, 0.8f), pod);
             k.Finish("РСЗО (заглушка)");
-            k.Root.AddComponent<CloseInDefense>().Configure(null, 50f);
+            k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
             k.Save(Mlrs);
         }
 
@@ -272,7 +272,7 @@ namespace ModernDrone.Editor
             k.Visual("Bed_Rear", v(0, 1.4f, -3.85f), v(2.3f, 0.6f, 0.05f), k.Hull);
             k.Module("Module_Cargo", ModuleType.AmmoRack, 50f, 5f, v(0, 1.6f, -1.6f), v(1.8f, 0.8f, 3.0f), visible: true, mat: VehicleKit.Material("CrateWood", new Color(0.42f, 0.35f, 0.22f)));
             k.Finish("Грузовик снабжения (заглушка)");
-            k.Root.AddComponent<CloseInDefense>().Configure(null, 50f);
+            k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
             k.Save(Truck);
         }
 
@@ -301,7 +301,7 @@ namespace ModernDrone.Editor
             k.Module("Module_OperatorPost", ModuleType.ControlStation, 60f, 5f, v(4.0f, 0.6f, -1.5f), v(1.6f, 1.1f, 1.6f), visible: true, mat: k.ModuleMat);
 
             k.Finish("Расчёт перехватчиков (заглушка)");
-            k.Root.AddComponent<CloseInDefense>().Configure(null, 50f);
+            k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
             var site = k.Root.AddComponent<ModernDrone.Missions.InterceptorSite>();
             site.Configure(antenna.transform, table.transform, VehicleKit.Material("InterceptorBody", new Color(0.18f, 0.18f, 0.2f)));
             k.Save(InterceptorSite);

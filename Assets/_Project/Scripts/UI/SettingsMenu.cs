@@ -14,7 +14,7 @@ namespace ModernDrone.UI
     /// </summary>
     public sealed class SettingsMenu
     {
-        static readonly string[] Tabs = { "Устройство", "Клавиатура+мышь", "Геймпад", "Аппаратура / джойстик", "Кнопки", "Полёт" };
+        static readonly string[] Tabs = { "Устройство", "Клавиатура+мышь", "Геймпад", "Аппаратура / джойстик", "Кнопки", "Полёт", "Экран и звук" };
 
         readonly MenuGui _gui;
         readonly List<MenuRow> _rows = new List<MenuRow>();
@@ -99,6 +99,7 @@ namespace ModernDrone.UI
                 case 3: JoystickRows(); break;
                 case 4: BindingRows(); break;
                 case 5: FlightRows(); break;
+                case 6: DisplayAudioRows(); break;
             }
             _rows.Add(MenuRow.Header(""));
             _rows.Add(MenuRow.Button("← Назад (сохранить)", () => { ControlSettings.Save(); Closed = true; }));
@@ -259,6 +260,16 @@ namespace ModernDrone.UI
         {
             _capture?.Invoke(path);
             _capture = null;
+        }
+
+        void DisplayAudioRows()
+        {
+            _rows.Add(MenuRow.Header("Экран"));
+            _rows.Add(MenuRow.Toggle("Полный экран", () => S.fullscreen, v => { S.fullscreen = v; ControlSettings.NotifyChanged(); }));
+            _rows.Add(MenuRow.Toggle("Вертикальная синхронизация", () => S.vSync, v => { S.vSync = v; ControlSettings.NotifyChanged(); }));
+            _rows.Add(MenuRow.Header("Звук"));
+            _rows.Add(MenuRow.Slider("Общая громкость", () => S.masterVolume, v => { S.masterVolume = v; ControlSettings.NotifyChanged(); }, 0f, 1f, 0.05f));
+            _rows.Add(MenuRow.Slider("Моторы дрона", () => S.motorVolume, v => S.motorVolume = v, 0f, 1f, 0.05f));
         }
 
         void FlightRows()

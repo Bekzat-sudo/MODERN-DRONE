@@ -15,13 +15,13 @@ namespace ModernDrone.Missions
     public sealed class CloseInDefense : MonoBehaviour
     {
         [SerializeField] Transform muzzle;
-        [SerializeField] float range = 50f;
+        [SerializeField] float range = 40f;
         [Tooltip("Distance with full effectiveness, m.")]
-        [SerializeField] float optimalRange = 20f;
-        [SerializeField] float shotInterval = 0.7f;
-        [SerializeField] float baseKillChance = 0.18f;
+        [SerializeField] float optimalRange = 12f;
+        [SerializeField] float shotInterval = 1f;
+        [SerializeField] float baseKillChance = 0.07f;
         [Tooltip("Seconds between spotting the drone and the first shot.")]
-        [SerializeField] float reactionTime = 1.2f;
+        [SerializeField] float reactionTime = 2f;
 
         VehicleDamageModel _model;
         DroneController _drone;
