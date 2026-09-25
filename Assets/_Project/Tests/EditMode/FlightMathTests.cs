@@ -95,6 +95,23 @@ namespace ModernDrone.Tests
         }
 
         [Test]
+        public void Payload_RaisesHoverThrottleAndInertia_ThrustUnchanged()
+        {
+            var cfg = ScriptableObject.CreateInstance<DroneConfig>();
+            float thrust = cfg.MaxThrustPerMotor;
+            float bare = cfg.HoverThrottleFor(cfg.frameMass);
+            float loaded = cfg.HoverThrottleFor(cfg.frameMass + 0.5f);
+            Assert.Greater(loaded, bare);
+            // thrust = throttle^2 * max must equal the loaded weight
+            Assert.AreEqual((cfg.frameMass + 0.5f) * 9.81f, loaded * loaded * thrust * QuadMixer.MotorCount, 0.05f);
+            Assert.AreEqual(thrust, cfg.MaxThrustPerMotor);
+            var add = cfg.PayloadInertia(0.5f, 0.3f);
+            Assert.Greater(add.x, add.z); // a long payload along the frame axis resists pitch more than roll
+            Assert.Greater(add.y, 0f);
+            Object.DestroyImmediate(cfg);
+        }
+
+        [Test]
         public void Battery_SagsUnderLoadAndDrains()
         {
             var b = new BatteryModel(6, 3000f, 0.05f);

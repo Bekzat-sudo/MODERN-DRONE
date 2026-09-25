@@ -93,6 +93,8 @@ namespace ModernDrone.Drone
         const float FailsafeHoldTime = 0.5f;
         float _linkLostTime;
         float _extraMass;
+        float _payloadMass;
+        float _payloadLength;
         readonly System.Collections.Generic.Queue<(float time, DroneInputState state)> _inputQueue =
             new System.Collections.Generic.Queue<(float, DroneInputState)>();
         DroneInputState _applied;
@@ -125,7 +127,6 @@ namespace ModernDrone.Drone
                 config.name += " (Runtime)";
             }
             _rb = GetComponent<Rigidbody>();
-            _rb.mass = config.TotalMass + _extraMass;
             _rb.linearDamping = 0f;
             _rb.angularDamping = 0f;
             _rb.useGravity = true;
@@ -134,7 +135,7 @@ namespace ModernDrone.Drone
             _rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
             _rb.centerOfMass = Vector3.zero;
             _rb.inertiaTensorRotation = Quaternion.identity;
-            _rb.inertiaTensor = config.inertia;
+            ApplyMass();
 
             // Placeholder visual and collider follow the frame size (prefab visual is built for a 0.3 m diagonal).
             var col = GetComponent<BoxCollider>();
@@ -155,7 +156,27 @@ namespace ModernDrone.Drone
         public void SetExtraMass(float kg)
         {
             _extraMass = Mathf.Max(0f, kg);
-            if (_rb != null) _rb.mass = config.TotalMass + _extraMass;
+            ApplyMass();
+        }
+
+        /// <summary>Fitted payload: adds mass and inertia with thrust unchanged, so the drone climbs and turns slower.</summary>
+        public void SetPayload(float kg, float length)
+        {
+            _payloadMass = Mathf.Max(0f, kg);
+            _payloadLength = Mathf.Max(0f, length);
+            ApplyMass();
+        }
+
+        public float TotalMass => config.frameMass + _payloadMass + _extraMass;
+        public float HoverThrottle => config.HoverThrottleFor(TotalMass);
+        /// <summary>Thrust-to-weight ratio with the current payload at full battery.</summary>
+        public float ThrustToWeight => config.frameMass * config.thrustToWeight / TotalMass;
+
+        void ApplyMass()
+        {
+            if (_rb == null || config == null) return;
+            _rb.mass = TotalMass;
+            _rb.inertiaTensor = config.inertia + config.PayloadInertia(_payloadMass, _payloadLength);
         }
 
         /// <summary>Stick input as received by the flight controller: delayed by latency, frozen while the link is down.</summary>

@@ -79,6 +79,7 @@ namespace ModernDrone.UI
             Label(new Rect(w * 0.5f - 150, h - pad - line, 300, line), $"H {t.distanceHome:0}m", textColor, TextAnchor.MiddleCenter);
 
             DrawCrosshair(w * 0.5f, h * 0.5f, h * 0.02f);
+            DrawChargeAxis(h);
             if (t.armed && !t.crashed) DrawThreat(w, h);
             DrawHorizon(w, h, t);
 
@@ -167,6 +168,26 @@ namespace ModernDrone.UI
             Line(new Vector2(cx - size * 2f, cy), new Vector2(cx - size * 0.6f, cy), thick);
             Line(new Vector2(cx + size * 0.6f, cy), new Vector2(cx + size * 2f, cy), thick);
             Line(new Vector2(cx, cy - size * 0.6f), new Vector2(cx, cy - size * 0.2f), thick);
+        }
+
+        /// <summary>
+        /// Where the shaped-charge jet will go: the payload points along the frame axis, the camera is tilted up
+        /// from it, so the marker sits below the crosshair by the camera tilt.
+        /// </summary>
+        void DrawChargeAxis(float h)
+        {
+            if (_fpvCamera == null) return;
+            Vector3 sp = _fpvCamera.WorldToScreenPoint(drone.transform.position + drone.transform.forward * 100f);
+            if (sp.z <= 0f) return;
+            var c = new Vector2(sp.x, h - sp.y);
+            float r = h * 0.012f, thick = Mathf.Max(2f, h * 0.0025f);
+            const int Segments = 12;
+            for (int i = 0; i < Segments; i++)
+            {
+                float a0 = i * Mathf.PI * 2f / Segments, a1 = (i + 1) * Mathf.PI * 2f / Segments;
+                Line(c + new Vector2(Mathf.Cos(a0), Mathf.Sin(a0)) * r, c + new Vector2(Mathf.Cos(a1), Mathf.Sin(a1)) * r, thick);
+            }
+            Line(c + Vector2.down * thick * 0.5f, c + Vector2.up * thick * 0.5f, thick);
         }
 
         /// <summary>Artificial horizon: rolls with the frame and shifts with pitch (camera tilt ignored).</summary>

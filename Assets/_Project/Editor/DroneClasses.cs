@@ -7,7 +7,9 @@ namespace ModernDrone.Editor
     /// <summary>
     /// Drone class presets by frame size. Airframe numbers follow public hobby FPV data: 5" ~550-650 g AUW with
     /// high thrust-to-weight, 7" long-range ~0.6-1 kg at TWR ~4-6, larger frames heavier and slower to respond
-    /// (unmannedtechshop.co.uk TWR/AUW guide; oscarliang.com 7" builds and reviews). Payload mass is abstract gameplay.
+    /// (unmannedtechshop.co.uk TWR/AUW guide; oscarliang.com 7" builds and reviews). The 7" default matches the drone
+    /// model: ~0.5 kg dry airframe plus a 6S2P 18650 Li-ion pack ~0.55 kg (oscarliang.com/li-ion-battery-long-range).
+    /// Thrust-to-weight is for the bare airframe; the fitted warhead (abstract mass) lowers it.
     /// </summary>
     public static class DroneClasses
     {
@@ -42,11 +44,10 @@ namespace ModernDrone.Editor
             c.displayName = "FPV 5\" (лёгкий)";
             c.summary = "быстрый и вёрткий, малая нагрузка и запас батареи";
             c.frameMass = 0.62f;
-            c.payloadMass = 0.25f;
             c.motorDiagonal = 0.225f;
             c.inertia = new Vector3(0.0035f, 0.006f, 0.0035f);
             c.colliderSize = new Vector3(0.22f, 0.06f, 0.22f);
-            c.thrustToWeight = 7f;
+            c.thrustToWeight = 9.8f; // bare airframe; ~7:1 with a light payload
             c.motorTauUp = 0.02f;
             c.motorTauDown = 0.03f;
             c.yawTorqueCoefficient = 0.012f;
@@ -63,11 +64,10 @@ namespace ModernDrone.Editor
             c.displayName = "FPV 10\" (тяжёлый)";
             c.summary = "большая нагрузка и запас батареи, инертный";
             c.frameMass = 1.6f;
-            c.payloadMass = 1.0f;
             c.motorDiagonal = 0.42f;
             c.inertia = new Vector3(0.03f, 0.05f, 0.03f);
             c.colliderSize = new Vector3(0.42f, 0.1f, 0.42f);
-            c.thrustToWeight = 4f;
+            c.thrustToWeight = 6.5f; // bare airframe; ~4:1 with a heavy payload
             c.motorTauUp = 0.04f;
             c.motorTauDown = 0.06f;
             c.yawTorqueCoefficient = 0.02f;

@@ -36,13 +36,23 @@ namespace ModernDrone.Missions
         /// <summary>Show the built-in strike summary overlay (off when a killcam presents it).</summary>
         public bool ShowReportOverlay { get; set; } = true;
 
-        public void SetWarhead(WarheadData data) => warhead = data;
+        public void SetWarhead(WarheadData data)
+        {
+            warhead = data;
+            ApplyPayload();
+        }
+
+        void ApplyPayload()
+        {
+            if (_drone != null) _drone.SetPayload(warhead != null ? warhead.mass : 0f, warhead != null ? warhead.length : 0f);
+        }
 
         void Awake()
         {
             _drone = GetComponent<DroneController>();
             _random = new System.Random(seed);
             if (visual == null) visual = transform.Find("Visual");
+            ApplyPayload();
         }
 
         void FixedUpdate() => FuzeLive = _drone.Armed && !Detonated && _drone.Telemetry.flightTime >= fuzeDelay;

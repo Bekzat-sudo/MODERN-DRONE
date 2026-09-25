@@ -201,7 +201,7 @@ namespace ModernDrone.Drone
                     state.throttle = Mathf.Clamp01((left.y + 1f) * 0.5f);
                     break;
                 case GamepadThrottleMode.CenterIsHover:
-                    float hover = drone.Config != null ? drone.Config.HoverThrottle : 0.5f;
+                    float hover = drone.Config != null ? drone.HoverThrottle : 0.5f;
                     state.throttle = ly >= 0f ? Mathf.Lerp(hover, 1f, ly) : Mathf.Lerp(hover, 0f, -ly);
                     break;
                 case GamepadThrottleMode.Incremental:

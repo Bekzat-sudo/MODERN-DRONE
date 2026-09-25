@@ -12,6 +12,12 @@ namespace ModernDrone.Damage
         public string displayName = "Warhead";
         public WarheadKind kind = WarheadKind.ShapedCharge;
 
+        [Header("Physical (abstract gameplay values)")]
+        [Tooltip("Payload mass, kg: loads the drone (lower thrust-to-weight, more inertia).")]
+        [Min(0f)] public float mass = 0.5f;
+        [Tooltip("Payload length along the frame axis, m.")]
+        [Min(0f)] public float length = 0.3f;
+
         [Header("Jet (shaped charge)")]
         [Tooltip("Armor points the jet can defeat at the point of impact.")]
         public float penetration = 320f;

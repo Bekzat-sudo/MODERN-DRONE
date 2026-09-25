@@ -15,12 +15,12 @@ namespace ModernDrone.Drone
 
         // Defaults describe a 7" long-range class quad. Airframe figures follow public hobby data
         // (AUW, thrust-to-weight classes: unmannedtechshop.co.uk TWR guide, oscarliang.com 7" reviews);
-        // payloadMass is an abstract gameplay value.
+        // The payload comes from the fitted warhead (DroneController.SetPayload).
         [Header("Mass")]
         [Tooltip("Airframe + battery (all-up weight without payload), kg.")]
-        [Min(0.1f)] public float frameMass = 0.9f;
-        [Tooltip("Abstract gameplay payload mass, kg.")]
-        [Min(0f)] public float payloadMass = 0.5f;
+        [Min(0.1f)] public float frameMass = 1.1f;
+        [Tooltip("Payload axis below the centre of mass, m (adds pitch/roll inertia).")]
+        [Min(0f)] public float payloadDepth = 0.05f;
 
         [Header("Geometry & inertia")]
         [Tooltip("Motor-to-motor diagonal distance, m.")]
@@ -30,8 +30,8 @@ namespace ModernDrone.Drone
         public Vector3 colliderSize = new Vector3(0.3f, 0.08f, 0.3f);
 
         [Header("Propulsion")]
-        [Tooltip("Thrust-to-weight ratio at full throttle and full battery.")]
-        [Min(1.1f)] public float thrustToWeight = 5f;
+        [Tooltip("Thrust-to-weight ratio of the bare airframe (no payload) at full throttle and full battery.")]
+        [Min(1.1f)] public float thrustToWeight = 6.4f;
         [Tooltip("Motor spool-up / spool-down time constants, s.")]
         public float motorTauUp = 0.03f;
         public float motorTauDown = 0.045f;
@@ -47,7 +47,7 @@ namespace ModernDrone.Drone
 
         [Header("Battery")]
         [Range(1, 8)] public int cells = 6;
-        public float capacityMah = 3000f;
+        public float capacityMah = 5600f;
         public float internalResistance = 0.05f;
         [Tooltip("Current drawn by one motor at full output, A.")]
         public float maxCurrentPerMotor = 35f;
@@ -77,12 +77,23 @@ namespace ModernDrone.Drone
         [Tooltip("Impact speed above which the drone is destroyed, m/s.")]
         public float crashSpeed = 7f;
 
-        public float TotalMass => frameMass + payloadMass;
-        public float Weight => TotalMass * Core.SimConstants.Gravity;
-        public float MaxThrustPerMotor => Weight * thrustToWeight / QuadMixer.MotorCount;
+        /// <summary>Propulsion is fixed by motors and props: extra payload lowers the effective thrust-to-weight.</summary>
+        public float MaxThrustPerMotor => frameMass * Core.SimConstants.Gravity * thrustToWeight / QuadMixer.MotorCount;
         public float ArmOffset => motorDiagonal / (2f * Mathf.Sqrt(2f));
 
-        /// <summary>Throttle that hovers at full battery with thrust = throttle^2 * max.</summary>
-        public float HoverThrottle => Mathf.Sqrt(1f / thrustToWeight);
+        /// <summary>Throttle that hovers the bare airframe at full battery with thrust = throttle^2 * max.</summary>
+        public float HoverThrottle => HoverThrottleFor(frameMass);
+
+        public float HoverThrottleFor(float mass) => Mathf.Sqrt(Mathf.Min(1f, mass / (frameMass * thrustToWeight)));
+
+        /// <summary>
+        /// Payload modelled as a uniform rod along the frame axis hanging <see cref="payloadDepth"/> below the centre
+        /// of mass (parallel-axis theorem). Returns (pitch, yaw, roll) moments added to <see cref="inertia"/>.
+        /// </summary>
+        public Vector3 PayloadInertia(float mass, float length)
+        {
+            float rod = mass * length * length / 12f, offset = mass * payloadDepth * payloadDepth;
+            return new Vector3(rod + offset, rod, offset);
+        }
     }
 }

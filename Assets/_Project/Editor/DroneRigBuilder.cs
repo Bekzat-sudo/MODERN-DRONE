@@ -25,7 +25,7 @@ namespace ModernDrone.Editor
             root.layer = GameLayers.Drone;
 
             var rb = root.AddComponent<Rigidbody>();
-            rb.mass = config.TotalMass;
+            rb.mass = config.frameMass;
             var col = root.AddComponent<BoxCollider>();
             col.size = config.colliderSize;
 

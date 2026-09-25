@@ -453,6 +453,12 @@ namespace ModernDrone.Missions
                         var w = warheads[Mathf.Clamp(_warheadChoice, 0, warheads.Length - 1)];
                         sb.AppendLine($"{cursor}Боевая часть:  ‹ {w.displayName} ›");
                         sb.AppendLine("      " + WarheadHint(w));
+                        if (droneClasses.Length > 0)
+                        {
+                            var dc = droneClasses[Mathf.Clamp(_droneChoice, 0, droneClasses.Length - 1)];
+                            float twr = dc.frameMass * dc.thrustToWeight / (dc.frameMass + w.mass);
+                            sb.AppendLine($"      масса {w.mass:0.0} кг · дрон {dc.frameMass + w.mass:0.0} кг · тяга/вес {twr:0.0}");
+                        }
                         break;
                 }
                 sb.AppendLine();

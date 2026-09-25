@@ -19,6 +19,8 @@ namespace ModernDrone.Editor
             {
                 w.displayName = "Кумулятивная";
                 w.kind = WarheadKind.ShapedCharge;
+                w.mass = 0.5f;
+                w.length = 0.3f;
             });
             Ensure(TandemPath, w =>
             {
@@ -26,6 +28,8 @@ namespace ModernDrone.Editor
                 w.kind = WarheadKind.ShapedCharge;
                 w.tandem = true;
                 w.penetration = 300f;
+                w.mass = 0.8f;
+                w.length = 0.4f;
             });
             Ensure(FragmentationPath, w =>
             {
@@ -34,6 +38,8 @@ namespace ModernDrone.Editor
                 w.blastRadius = 6f;
                 w.blastDamage = 90f;
                 w.fragmentPenetration = 25f;
+                w.mass = 0.4f;
+                w.length = 0.2f;
             });
             AssetDatabase.SaveAssets();
         }
