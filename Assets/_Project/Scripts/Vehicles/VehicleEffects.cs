@@ -8,6 +8,8 @@ namespace ModernDrone.Vehicles
     public sealed class VehicleEffects : MonoBehaviour
     {
         static readonly int BaseColor = Shader.PropertyToID("_BaseColor");
+        // Imported glTF models (glTFast shader graphs).
+        static readonly int GltfBaseColor = Shader.PropertyToID("baseColorFactor");
 
         [SerializeField] Transform turret;
         [SerializeField] float turretTossImpulse = 9f;
@@ -96,9 +98,11 @@ namespace ModernDrone.Vehicles
             var block = new MaterialPropertyBlock();
             foreach (var r in GetComponentsInChildren<Renderer>())
             {
-                if (r is ParticleSystemRenderer || r.sharedMaterial == null || !r.sharedMaterial.HasProperty(BaseColor)) continue;
+                if (r is ParticleSystemRenderer || r.sharedMaterial == null) continue;
+                int id = r.sharedMaterial.HasProperty(BaseColor) ? BaseColor : r.sharedMaterial.HasProperty(GltfBaseColor) ? GltfBaseColor : -1;
+                if (id < 0) continue;
                 r.GetPropertyBlock(block);
-                block.SetColor(BaseColor, r.sharedMaterial.GetColor(BaseColor) * burntDarkness);
+                block.SetColor(id, r.sharedMaterial.GetColor(id) * burntDarkness);
                 r.SetPropertyBlock(block);
             }
         }

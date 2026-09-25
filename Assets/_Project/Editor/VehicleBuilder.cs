@@ -16,6 +16,7 @@ namespace ModernDrone.Editor
     public static class VehicleBuilder
     {
         public const string TankPrefabPath = "Assets/_Project/Prefabs/Vehicles/Tank_Placeholder.prefab";
+        const string TankModelPath = "Assets/_Project/Art/Models/Vehicles/T72B3/t72b3.glb";
         public const string EwStationPrefabPath = "Assets/_Project/Prefabs/Vehicles/EwStation_Placeholder.prefab";
         const string MatDir = "Assets/_Project/Art/Materials";
 
@@ -58,7 +59,8 @@ namespace ModernDrone.Editor
             foreach (float side in new[] { -1f, 1f })
             {
                 string n = side < 0 ? "L" : "R";
-                var track = Box($"Track_{n}", t, _trackMat, GameLayers.VehicleHull, new Vector3(side * 1.85f, 0.43f, 0.3f), new Vector3(0.55f, 0.85f, 6.9f));
+                // Overall width over tracks 3.4-3.59 m, hull 6.67-6.86 m, height 2.23 m (en.wikipedia.org/wiki/T-72).
+                var track = Box($"Track_{n}", t, _trackMat, GameLayers.VehicleHull, new Vector3(side * 1.45f, 0.43f, 0.3f), new Vector3(0.55f, 0.85f, 6.9f));
                 Module($"Module_Track_{n}", track.transform, ModuleType.Track, 120f, 30f, Vector3.zero, Vector3.one * 0.95f);
             }
 
@@ -67,13 +69,16 @@ namespace ModernDrone.Editor
             Module("Module_Fuel_FR", t, ModuleType.FuelTank, 80f, 20f, new Vector3(1.0f, 0.9f, 2.3f), new Vector3(0.6f, 0.75f, 1.0f));
             Module("Module_Fuel_RL", t, ModuleType.FuelTank, 80f, 20f, new Vector3(-1.1f, 0.9f, -0.6f), new Vector3(0.5f, 0.7f, 0.9f));
             Module("Module_AmmoRack", t, ModuleType.AmmoRack, 90f, 20f, new Vector3(0f, 0.65f, 0.5f), new Vector3(2.0f, 0.3f, 2.0f));
+            // Spare rounds outside the carousel (front hull rack): the usual cause of turret-toss cook-offs (en.wikipedia.org/wiki/T-72).
+            Module("Module_AmmoSpare", t, ModuleType.AmmoRack, 90f, 20f, new Vector3(-1.0f, 0.9f, 2.3f), new Vector3(0.5f, 0.7f, 0.9f));
             Module("Module_Engine", t, ModuleType.Engine, 200f, 60f, new Vector3(0f, 0.95f, -1.5f), new Vector3(2.4f, 0.8f, 1.6f));
             Module("Module_Transmission", t, ModuleType.Transmission, 150f, 50f, new Vector3(0f, 0.8f, -2.6f), new Vector3(2.6f, 0.6f, 0.7f));
 
             // Turret
             var turret = new GameObject("Turret").transform;
             turret.SetParent(t, false);
-            turret.localPosition = new Vector3(0f, 1.8f, 0.5f);
+            // Turret ring of the T-72B3 model once it is shifted onto the hull boxes (see AttachModel below).
+            turret.localPosition = new Vector3(0f, 1.85f, 0.225f);
             Plate("Turret_Front", turret, new Vector3(0f, 0f, 1.1f), new Vector3(2.2f, 0.7f, 0.3f), 550f);
             Plate("Turret_Side_L", turret, new Vector3(-1.1f, 0f, 0f), new Vector3(0.1f, 0.7f, 2.2f), 130f);
             Plate("Turret_Side_R", turret, new Vector3(1.1f, 0f, 0f), new Vector3(0.1f, 0.7f, 2.2f), 130f);
@@ -86,14 +91,16 @@ namespace ModernDrone.Editor
                 Era($"Era_Turret_{ix}_{iy}", turret, new Vector3(x, -0.17f + iy * 0.34f, 1.32f), new Vector3(0.4f, 0.3f, 0.12f), Quaternion.identity);
             }
 
-            var barrel = Box("Gun", turret, _hullMat, GameLayers.VehicleHull, new Vector3(0f, 0.05f, 3.4f), new Vector3(0.18f, 0.18f, 4.6f));
+            var barrel = Box("Gun", turret, _hullMat, GameLayers.VehicleHull, new Vector3(0f, -0.12f, 3.4f), new Vector3(0.18f, 0.18f, 4.6f));
             Module("Module_Gun", barrel.transform, ModuleType.Gun, 120f, 30f, Vector3.zero, Vector3.one * 1.05f);
             Module("Module_Breech", turret, ModuleType.Breech, 120f, 40f, new Vector3(0f, 0.05f, 0.2f), new Vector3(0.5f, 0.45f, 1.1f));
             Module("Module_TurretDrive", turret, ModuleType.TurretDrive, 70f, 20f, new Vector3(0.75f, -0.1f, 0.2f), new Vector3(0.4f, 0.4f, 0.4f));
             Module("Module_Optics", turret, ModuleType.Optics, 40f, 5f, new Vector3(-0.6f, 0.5f, 0.7f), new Vector3(0.3f, 0.25f, 0.3f), visible: true);
 
+            AttachModel(t, turret, TankModelPath, new Vector3(0f, 0f, 0.4f));
+
             var model = root.AddComponent<VehicleDamageModel>();
-            model.SetDisplayName("Танк (заглушка)");
+            model.SetDisplayName("Танк Т-72Б3");
             var fx = root.AddComponent<VehicleEffects>();
             var so = new SerializedObject(fx);
             so.FindProperty("turret").objectReferenceValue = turret;
@@ -103,6 +110,24 @@ namespace ModernDrone.Editor
             Object.DestroyImmediate(root);
             Debug.Log($"[ModernDrone] Vehicle prefab built: {TankPrefabPath}");
             return prefab;
+        }
+
+        /// <summary>
+        /// Puts an imported model over the damage boxes: the boxes keep their colliders (armor, modules, hull) but stop
+        /// rendering, the model draws the vehicle. A model node named "Turret" moves with the turret transform.
+        /// </summary>
+        static void AttachModel(Transform root, Transform turret, string path, Vector3 offset)
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            if (asset == null) return;
+            foreach (var r in root.GetComponentsInChildren<Renderer>(true)) r.enabled = false;
+
+            var visual = Object.Instantiate(asset, root);
+            visual.name = "Visual";
+            visual.transform.localPosition = offset;
+            foreach (var c in visual.GetComponentsInChildren<Collider>(true)) Object.DestroyImmediate(c);
+            var modelTurret = visual.transform.Find("Turret");
+            if (modelTurret != null && turret != null) modelTurret.SetParent(turret, true);
         }
 
         /// <summary>

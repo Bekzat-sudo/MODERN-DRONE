@@ -14,6 +14,10 @@ namespace ModernDrone.Damage
         /// <summary>Start the jet slightly in front of the contact so the struck surface is included.</summary>
         const float BackOff = 0.5f;
         const int MaxHits = 64;
+        /// <summary>How far past the contact point a screen still counts as the struck element, m.</summary>
+        const float ContactTolerance = 0.3f;
+        /// <summary>Jet damage at the end of its penetration, as a fraction of full (abstract gameplay value).</summary>
+        const float MinJetDamage = 0.35f;
 
         static readonly RaycastHit[] Hits = new RaycastHit[MaxHits];
         static readonly RaycastHit[] SubHits = new RaycastHit[MaxHits];
@@ -37,7 +41,9 @@ namespace ModernDrone.Damage
 
             if (warhead.kind == WarheadKind.ShapedCharge)
                 Jet(report, warhead, point, dir, random);
-            if (warhead.blastRadius > 0f)
+            else
+                ScreenFuze(report, point, dir, random);
+            if (warhead.blastRadius > 0f && !report.dud)
                 Blast(report, warhead, point - dir * 0.1f);
 
             LastReport = report;
@@ -59,6 +65,8 @@ namespace ModernDrone.Damage
                 var module = armor == null ? hit.collider.GetComponent<VehicleModule>() : null;
                 if (armor == null && module == null) continue;
                 if (armor != null && armor.Consumed) continue;
+                // A screen only matters where the warhead struck it; slats further along the jet line are no obstacle.
+                if (armor != null && armor.Kind == ArmorKind.Screen && (Layers.Count > 0 || hit.distance > BackOff + ContactTolerance)) continue;
 
                 Layers.Add(new PenetrationLayer
                 {
@@ -80,6 +88,14 @@ namespace ModernDrone.Damage
                 if (!r.reached) break;
                 var (hit, armor, module) = Crossed[i];
 
+                if (armor != null && armor.Kind == ArmorKind.Screen && r.triggered)
+                {
+                    report.Track(armor.Owner);
+                    report.dud = true;
+                    armor.Consume();
+                    return;
+                }
+
                 if (armor != null)
                 {
                     report.Track(armor.Owner);
@@ -90,7 +106,12 @@ namespace ModernDrone.Damage
                 }
                 else
                 {
-                    report.AddHit(module, w.jetDamage);
+                    // A weaker residual jet does less damage. Propellant is the exception: any jet reaching it sets it
+                    // off ("penetrating hits can easily set off a chain reaction", en.wikipedia.org/wiki/T-72).
+                    float residual = Mathf.Clamp01(r.penetrationIn / Mathf.Max(1f, w.penetration));
+                    float damage = w.jetDamage * Mathf.Lerp(MinJetDamage, 1f, residual);
+                    if (module.Type == ModuleType.AmmoRack) damage = Mathf.Max(damage, module.MaxHp);
+                    report.AddHit(module, damage);
                 }
 
                 if (!r.passed)
@@ -108,8 +129,28 @@ namespace ModernDrone.Damage
                 // Spall intensity scales with how much jet energy was left after the plate.
                 float residual = Mathf.Clamp01(Results[lastPlate].penetrationOut / Mathf.Max(1f, w.penetration));
                 float scale = Mathf.Lerp(0.4f, 1f, residual);
-                Spall(report, w, Crossed[lastPlate].hit.point + dir * 0.05f, dir, scale, random);
+                Spall(report, w, ExitPoint(Crossed[lastPlate].hit, dir) + dir * 0.02f, dir, scale, random);
             }
+        }
+
+        /// <summary>Back face of the struck plate along the jet: spall leaves from there, not from the entry hole.</summary>
+        static Vector3 ExitPoint(RaycastHit entry, Vector3 dir)
+        {
+            const float Probe = 5f;
+            var back = new Ray(entry.point + dir * Probe, -dir);
+            return entry.collider.Raycast(back, out var exit, Probe) ? exit.point : entry.point;
+        }
+
+        /// <summary>Fragmentation charges use the same contact fuze: a screen can crush it too.</summary>
+        static void ScreenFuze(StrikeReport report, Vector3 point, Vector3 dir, System.Random random)
+        {
+            int n = SortedRaycast(point - dir * BackOff, dir, BackOff + ContactTolerance, GameLayers.ScreenMask, Hits);
+            if (n == 0) return;
+            var armor = Hits[0].collider.GetComponent<ArmorElement>();
+            if (armor == null || armor.Consumed || random.NextDouble() >= armor.Value) return;
+            report.Track(armor.Owner);
+            report.dud = true;
+            armor.Consume();
         }
 
         static void Spall(StrikeReport report, WarheadData w, Vector3 origin, Vector3 dir, float scale, System.Random random)

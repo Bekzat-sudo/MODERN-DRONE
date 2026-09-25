@@ -387,7 +387,7 @@ namespace ModernDrone.Editor
             var k = new VehicleKit(go);
             k.Cage("Cage_Turret", v(0, 1.0f, 0.1f), v(2.9f, 0.7f, 3.0f), 0.6f, go.transform.Find("Turret"));
             k.Cage("Cage_EngineDeck", v(0, 2.15f, -1.7f), v(3.1f, 0.6f, 2.6f), 0.5f);
-            go.GetComponent<VehicleDamageModel>().SetDisplayName("Танк с «мангалом» (заглушка)");
+            go.GetComponent<VehicleDamageModel>().SetDisplayName("Т-72Б3 с «мангалом»");
             k.Save(TankCage);
         }
     }

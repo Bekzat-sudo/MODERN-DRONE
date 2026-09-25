@@ -82,9 +82,9 @@ namespace ModernDrone.Tests
             Assert.IsFalse(_results[0].triggered);
             Assert.IsTrue(_results[1].passed);
 
-            PenetrationSolver.Resolve(_w, layers, () => 0.1, _results); // disrupted -> 75 < 100
+            PenetrationSolver.Resolve(_w, layers, () => 0.1, _results); // fuze crushed -> dud, nothing reaches the plate
             Assert.IsTrue(_results[0].triggered);
-            Assert.IsFalse(_results[1].passed);
+            Assert.IsFalse(_results[1].reached);
         }
 
         [Test]
@@ -253,6 +253,38 @@ namespace ModernDrone.Tests
             Assert.IsTrue(report.armorPenetrated);
             Assert.IsTrue(report.hits.Exists(h => h.module.Type == ModuleType.Engine));
             Assert.AreEqual(ModuleState.Destroyed, model.Modules[0].State);
+        }
+
+        [Test]
+        public void WeakResidualJet_DoesLessDamage_ButStillSetsOffAmmo()
+        {
+            // 300 penetration - 250 plate: the jet reaches the modules with 1/6 of its power left.
+            Box("Plate", new Vector3(0f, 0f, 0f), new Vector3(2f, 2f, 0.1f)).AddComponent<ArmorElement>().Configure(ArmorKind.Plate, 250f);
+            var engine = Box("Engine", new Vector3(0.6f, 0f, 1f), new Vector3(0.5f, 0.5f, 0.5f)).AddComponent<VehicleModule>();
+            engine.Configure(ModuleType.Engine, 1000f, 0f);
+            var ammo = Box("Ammo", new Vector3(-0.6f, 0f, 1f), new Vector3(0.5f, 0.5f, 0.5f)).AddComponent<VehicleModule>();
+            ammo.Configure(ModuleType.AmmoRack, 1000f, 0f);
+            _w.spallRays = 0;
+            var model = _root.AddComponent<VehicleDamageModel>();
+            model.SetRandom(new System.Random(3));
+            model.Rebuild();
+            Physics.SyncTransforms();
+
+            DamageSolver.Detonate(_w, new Vector3(0.6f, 0f, -0.05f), Vector3.forward, new System.Random(1));
+            Assert.Less(engine.MaxHp - engine.Hp, _w.jetDamage * 0.6f);
+
+            DamageSolver.Detonate(_w, new Vector3(-0.6f, 0f, -0.05f), Vector3.forward, new System.Random(1));
+            Assert.AreEqual(ModuleState.Destroyed, ammo.State);
+        }
+
+        [Test]
+        public void ScreenDud_FiresNothing()
+        {
+            Box("Cage", new Vector3(0f, 0f, -0.3f), new Vector3(2f, 2f, 0.05f)).AddComponent<ArmorElement>().Configure(ArmorKind.Screen, 1f);
+            var model = Build(10f);
+            var report = DamageSolver.Detonate(_w, new Vector3(0f, 0f, -0.33f), Vector3.forward, new System.Random(1));
+            Assert.IsTrue(report.dud);
+            Assert.AreEqual(ModuleState.Operational, model.Modules[0].State);
         }
 
         [Test]

@@ -78,7 +78,7 @@ namespace ModernDrone.Missions
             Detonated = true;
             FuzeLive = false;
             LastReport = DamageSolver.Detonate(warhead, point, direction, _random);
-            SimpleVfx.Explosion(point, 1f);
+            if (!LastReport.dud) SimpleVfx.Explosion(point, 1f);
             Debug.Log($"[ModernDrone] Strike: {warhead.displayName} at {point}\n{LastReport.Summary()}");
 
             _drone.MarkDestroyed();

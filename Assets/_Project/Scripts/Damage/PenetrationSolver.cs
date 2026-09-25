@@ -25,7 +25,7 @@ namespace ModernDrone.Damage
         public bool reached;
         /// <summary>The jet continued past this layer.</summary>
         public bool passed;
-        /// <summary>Reactive block fired or screen disrupted the charge.</summary>
+        /// <summary>Reactive block fired, or a screen crushed the fuze (dud: nothing fires).</summary>
         public bool triggered;
     }
 
@@ -72,9 +72,12 @@ namespace ModernDrone.Damage
                 switch (layer.kind)
                 {
                     case ArmorKind.Screen:
+                        // Slats defeat a charge mostly by pinching the nose and shorting the fuze: the warhead does
+                        // not fire. A charge that does fire on a slat keeps nearly all of its penetration.
+                        // ~60% of RPG-7 hits on slat armor are duds (en.wikipedia.org/wiki/Slat_armor).
                         if (random() < layer.value)
                         {
-                            pen *= w.screenDisruptedFactor;
+                            pen = 0f;
                             r.triggered = true;
                         }
                         break;

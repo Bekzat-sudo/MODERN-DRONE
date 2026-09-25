@@ -32,7 +32,7 @@ namespace ModernDrone.Editor
             var controller = root.AddComponent<DroneController>();
             SetRef(controller, "config", config);
 
-            var visual = BuildVisual(root.transform, config);
+            var props = BuildVisual(root.transform, config);
 
             var camGo = new GameObject("FpvCamera") { tag = "MainCamera" };
             camGo.transform.SetParent(root.transform, false);
@@ -55,8 +55,7 @@ namespace ModernDrone.Editor
             var propVisuals = root.AddComponent<PropVisuals>();
             SetRef(propVisuals, "drone", controller);
             var so = new SerializedObject(propVisuals);
-            SetArray(so.FindProperty("props"), visual.props);
-            SetArray(so.FindProperty("discs"), visual.discs);
+            SetArray(so.FindProperty("props"), props);
             so.ApplyModifiedPropertiesWithoutUndo();
 
             var warhead = root.AddComponent<DroneWarhead>();
@@ -83,9 +82,9 @@ namespace ModernDrone.Editor
 
         /// <summary>
         /// "FPV Drone" by Jeyhun1985 (Sketchfab, CC BY), see CREDITS.md. Scaled to the 0.3 m reference diagonal that
-        /// DroneController rescales per class. Its props spin, and a blur disc per motor fades in with motor speed.
+        /// DroneController rescales per class. Its props are separate meshes (split in Blender) and spin.
         /// </summary>
-        static (Transform[] props, Renderer[] discs) BuildVisual(Transform root, DroneConfig config)
+        static Transform[] BuildVisual(Transform root, DroneConfig config)
         {
             var visual = new GameObject("Visual").transform;
             visual.SetParent(root, false);
@@ -97,47 +96,8 @@ namespace ModernDrone.Editor
             foreach (var c in model.GetComponentsInChildren<Collider>()) Object.DestroyImmediate(c);
             foreach (var t in model.GetComponentsInChildren<Transform>()) t.gameObject.layer = GameLayers.Drone;
 
-            var discMat = GetDiscMaterial();
-            var props = new Transform[PropNames.Length];
-            var discs = new Renderer[PropNames.Length];
             var all = model.GetComponentsInChildren<Transform>();
-            for (int i = 0; i < discs.Length; i++)
-            {
-                props[i] = System.Array.Find(all, t => t.name == PropNames[i]);
-                var bounds = props[i].GetComponent<Renderer>().bounds;
-                float radius = Mathf.Max(bounds.extents.x, bounds.extents.z);
-                var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                go.name = $"PropDisc_{i}";
-                go.layer = GameLayers.Drone;
-                Object.DestroyImmediate(go.GetComponent<Collider>());
-                go.transform.SetParent(visual, false);
-                go.transform.position = new Vector3(props[i].position.x, bounds.center.y, props[i].position.z);
-                go.transform.localScale = new Vector3(radius * 2f, 0.0005f, radius * 2f);
-                discs[i] = go.GetComponent<Renderer>();
-                discs[i].sharedMaterial = discMat;
-                discs[i].shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                discs[i].enabled = false;
-            }
-            return (props, discs);
-        }
-
-        static Material GetDiscMaterial()
-        {
-            string path = $"{MatDir}/PropDisc.mat";
-            var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
-            if (mat != null) return mat;
-            mat = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
-            mat.SetFloat("_Surface", 1f); // transparent, alpha blend
-            mat.SetFloat("_Blend", 0f);
-            mat.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
-            mat.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-            mat.SetFloat("_ZWrite", 0f);
-            mat.SetFloat("_Cull", 0f);
-            mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-            mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
-            mat.SetColor("_BaseColor", new Color(0.06f, 0.06f, 0.06f, 0.35f));
-            AssetDatabase.CreateAsset(mat, path);
-            return mat;
+            return System.Array.ConvertAll(PropNames, n => System.Array.Find(all, t => t.name == n));
         }
 
         static void SetArray(SerializedProperty arr, Object[] values)

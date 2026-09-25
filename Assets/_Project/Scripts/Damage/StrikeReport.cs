@@ -42,6 +42,8 @@ namespace ModernDrone.Damage
         /// <summary>Armor element that took the impact (first plate / block on the jet line).</summary>
         public ArmorElement impactElement;
         public bool armorPenetrated;
+        /// <summary>A screen crushed the fuze: the charge never fired.</summary>
+        public bool dud;
 
         public StrikeReport(WarheadData warhead, Vector3 point, Vector3 direction)
         {
@@ -79,6 +81,7 @@ namespace ModernDrone.Damage
         public string Summary()
         {
             var sb = new StringBuilder();
+            if (dud) return "Несработка: решётка смяла взрыватель";
             if (stateBefore.Count == 0)
                 return armorPenetrated ? "Пробитие, модули не задеты" : "Нет поражения";
 

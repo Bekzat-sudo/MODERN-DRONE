@@ -26,10 +26,8 @@ namespace ModernDrone.Damage
         [Tooltip("Penetration lost per metre of travel after impact.")]
         public float decayPerMeter = 60f;
         public float jetMaxLength = 4f;
-        [Tooltip("Damage to each module the jet passes through.")]
+        [Tooltip("Damage to each module the jet passes through at full penetration; scales down with the residual jet.")]
         public float jetDamage = 120f;
-        [Tooltip("Penetration multiplier when a screen disrupts the charge.")]
-        [Range(0f, 1f)] public float screenDisruptedFactor = 0.25f;
 
         [Header("Spall behind armor")]
         public int spallRays = 24;
