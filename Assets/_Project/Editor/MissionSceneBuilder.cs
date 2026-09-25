@@ -106,6 +106,8 @@ namespace ModernDrone.Editor
             TargetAt(terrain, VehicleCatalog.Spg, new Vector3(c.x - 70f, 0f, 1345f), 170f, "САУ", TargetRequirement.OutOfAction);
             TargetAt(terrain, VehicleCatalog.Howitzer, new Vector3(c.x + 110f, 0f, 1355f), 180f, "Гаубица №1", TargetRequirement.OutOfAction);
             TargetAt(terrain, VehicleCatalog.Howitzer, new Vector3(c.x + 135f, 0f, 1358f), 180f, "Гаубица №2", TargetRequirement.OutOfAction);
+            // Their tow tractor waits behind the firing position.
+            ProvingGroundBuilder.PlacePrefab(terrain, VehicleCatalog.Mtlb, new Vector3(c.x + 125f, 0f, 1385f), 90f, "МТ-ЛБМ");
             ProvingGroundBuilder.PlacePrefab(terrain, VehicleCatalog.Truck, new Vector3(c.x + 120f, 0f, 1378f), 90f, "Грузовик");
             // Bait south of the trees, in plain view of the launch site.
             ProvingGroundBuilder.PlacePrefab(terrain, VehicleCatalog.DecoyTank, new Vector3(c.x - 20f, 0f, 1286f), 160f, "Танк");

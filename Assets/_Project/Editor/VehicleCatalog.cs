@@ -30,6 +30,8 @@ namespace ModernDrone.Editor
         public const string TankCage = Dir + "Tank_Cage.prefab";
         public const string InterceptorSite = Dir + "InterceptorSite_Placeholder.prefab";
         public const string Mrap = Dir + "MRAP_Typhoon.prefab";
+        public const string IfvEra = Dir + "IFV_BMP3M_ERA.prefab";
+        public const string Mtlb = Dir + "MTLB_Tractor.prefab";
         public const string SamLauncherTravel = Dir + "SAM_Launcher_Travel.prefab";
         public const string Helicopter = Dir + "Helicopter_Mi28.prefab";
         const string ModelDir = "Assets/_Project/Art/Models/Vehicles/";
@@ -40,6 +42,8 @@ namespace ModernDrone.Editor
         public static void BuildAll()
         {
             BuildIfv();
+            BuildIfvEra();
+            BuildMtlb();
             BuildApc();
             BuildSpg();
             BuildHowitzer();
@@ -65,73 +69,99 @@ namespace ModernDrone.Editor
 
         // ------------------------------------------------------------------ tracked
 
-        static void BuildIfv()
+        /// <summary>
+        /// BMP-3M: 7.14 x 3.15 x 2.3 m, 100 mm + 30 mm turret, engine at the rear (en.wikipedia.org/wiki/BMP-3).
+        /// Models "BMP-3M" / "BMP-3M ERA" by 42manako (CC BY-NC). The ERA variant adds reactive blocks along the sides and
+        /// slat screens over the rear flanks and turret rear. Armor points are abstract.
+        /// </summary>
+        static void BuildIfv() => BuildBmp3(false);
+
+        static void BuildIfvEra() => BuildBmp3(true);
+
+        static void BuildBmp3(bool era)
         {
-            var k = new VehicleKit("IFV_Placeholder", Green);
-            k.Tracks(1.45f, 0.5f, 0.8f, 6.6f);
-            k.Plate("UpperFront", v(0, 1.25f, 3.2f), v(2.6f, 1.0f, 0.07f), 80f, rot: Pitch(-60f));
-            k.Plate("LowerFront", v(0, 0.75f, 3.35f), v(2.6f, 0.6f, 0.07f), 60f, rot: Pitch(45f));
-            k.Plate("Side_L", v(-1.3f, 1.0f, 0), v(0.06f, 1.1f, 6.4f), 35f);
-            k.Plate("Side_R", v(1.3f, 1.0f, 0), v(0.06f, 1.1f, 6.4f), 35f);
-            k.Plate("Rear", v(0, 1.0f, -3.2f), v(2.6f, 1.1f, 0.06f), 25f);
-            k.Plate("Roof", v(0, 1.55f, -0.2f), v(2.6f, 0.05f, 6.0f), 20f);
-            k.Plate("Floor", v(0, 0.45f, 0), v(2.6f, 0.05f, 6.4f), 15f);
+            var k = new VehicleKit(era ? "IFV_BMP3M_ERA" : "IFV_Placeholder", Green);
+            k.Tracks(1.27f, 0.37f, 1.2f, 6.4f, z: 0.41f);
+            k.Plate("UpperFront", v(0, 1.75f, 3.35f), v(2.9f, 1.0f, 0.07f), 45f, rot: Pitch(-70f));
+            k.Plate("LowerFront", v(0, 1.0f, 3.75f), v(2.9f, 0.8f, 0.07f), 40f, rot: Pitch(40f));
+            k.Plate("Side_L", v(-1.45f, 1.35f, 0.2f), v(0.06f, 1.2f, 6.8f), 25f);
+            k.Plate("Side_R", v(1.45f, 1.35f, 0.2f), v(0.06f, 1.2f, 6.8f), 25f);
+            k.Plate("Rear", v(0, 1.3f, -3.4f), v(2.9f, 1.1f, 0.06f), 20f);
+            k.Plate("Roof", v(0, 1.85f, 0.2f), v(2.9f, 0.05f, 6.6f), 18f);
+            k.Plate("Floor", v(0, 0.5f, 0.2f), v(2.9f, 0.05f, 6.8f), 15f);
 
-            var turret = k.Group("Turret", v(0, 1.85f, 0.5f));
-            k.Plate("Turret_Front", v(0, 0, 0.8f), v(1.5f, 0.55f, 0.1f), 60f, turret);
-            k.Plate("Turret_Side_L", v(-0.75f, 0, 0), v(0.06f, 0.55f, 1.6f), 30f, turret);
-            k.Plate("Turret_Side_R", v(0.75f, 0, 0), v(0.06f, 0.55f, 1.6f), 30f, turret);
-            k.Plate("Turret_Rear", v(0, 0, -0.8f), v(1.5f, 0.55f, 0.06f), 25f, turret);
-            k.Plate("Turret_Roof", v(0, 0.28f, 0), v(1.5f, 0.05f, 1.6f), 15f, turret);
-            var gun = k.Visual("Gun", v(0, 0.05f, 2.2f), v(0.09f, 0.09f, 2.8f), k.Dark, turret);
+            var turret = k.Group("Turret", v(0.001f, 1.636f, 0.391f));
+            k.Plate("Turret_Front", v(0, 0.55f, 1.05f), v(2.0f, 0.8f, 0.1f), 45f, turret, Pitch(-30f));
+            k.Plate("Turret_Side_L", v(-1.0f, 0.55f, 0), v(0.06f, 0.8f, 2.0f), 25f, turret);
+            k.Plate("Turret_Side_R", v(1.0f, 0.55f, 0), v(0.06f, 0.8f, 2.0f), 25f, turret);
+            k.Plate("Turret_Rear", v(0, 0.55f, -1.0f), v(2.0f, 0.8f, 0.06f), 18f, turret);
+            k.Plate("Turret_Roof", v(0, 0.97f, 0), v(2.0f, 0.05f, 2.0f), 15f, turret);
+            var gun = k.Visual("Gun", v(0, 0.45f, 2.4f), v(0.14f, 0.14f, 2.6f), k.Dark, turret);
             k.Module("Module_Gun", ModuleType.Gun, 80f, 20f, Vector3.zero, Vector3.one * 1.1f, gun.transform);
-            k.Module("Module_Breech", ModuleType.Breech, 90f, 30f, v(0, 0, 0.3f), v(0.4f, 0.35f, 0.8f), turret);
-            k.Module("Module_TurretDrive", ModuleType.TurretDrive, 60f, 15f, v(0.5f, -0.1f, 0), v(0.3f, 0.3f, 0.3f), turret);
-            k.Module("Module_Optics", ModuleType.Optics, 30f, 5f, v(-0.45f, 0.4f, 0.4f), v(0.25f, 0.2f, 0.25f), turret, visible: true);
+            k.Module("Module_Breech", ModuleType.Breech, 90f, 30f, v(0, 0.45f, 0.4f), v(0.5f, 0.4f, 0.9f), turret);
+            k.Module("Module_TurretDrive", ModuleType.TurretDrive, 60f, 15f, v(0.6f, 0.2f, 0), v(0.3f, 0.3f, 0.3f), turret);
+            k.Module("Module_Optics", ModuleType.Optics, 30f, 5f, v(-0.35f, 0.95f, 0.35f), v(0.3f, 0.3f, 0.3f), turret);
+            k.Module("Module_AmmoRack", ModuleType.AmmoRack, 70f, 15f, v(0, 0.1f, 0), v(1.6f, 0.4f, 1.6f), turret);
 
-            k.Module("Module_Engine", ModuleType.Engine, 150f, 40f, v(0.7f, 1.0f, 2.2f), v(1.1f, 0.8f, 1.3f));
-            k.Module("Module_Transmission", ModuleType.Transmission, 120f, 40f, v(0, 0.8f, 2.95f), v(2.3f, 0.5f, 0.4f));
-            k.Module("Module_ControlStation", ModuleType.ControlStation, 90f, 25f, v(-0.75f, 1.1f, 2.1f), v(0.8f, 0.7f, 1.0f));
-            k.Module("Module_AmmoRack", ModuleType.AmmoRack, 70f, 15f, v(0, 1.1f, 0.5f), v(1.3f, 0.5f, 1.2f));
-            k.Module("Module_Fuel_L", ModuleType.FuelTank, 70f, 15f, v(-0.8f, 1.0f, -2.8f), v(0.5f, 0.8f, 0.5f));
-            k.Module("Module_Fuel_R", ModuleType.FuelTank, 70f, 15f, v(0.8f, 1.0f, -2.8f), v(0.5f, 0.8f, 0.5f));
-            k.Finish("БМП (заглушка)");
+            k.Module("Module_Engine", ModuleType.Engine, 150f, 40f, v(0, 1.2f, -2.4f), v(2.2f, 0.8f, 1.6f));
+            k.Module("Module_Transmission", ModuleType.Transmission, 120f, 40f, v(0, 0.85f, -3.1f), v(2.4f, 0.5f, 0.5f));
+            k.Module("Module_ControlStation", ModuleType.ControlStation, 90f, 25f, v(0, 1.35f, 2.7f), v(1.4f, 0.8f, 1.0f));
+            k.Module("Module_Fuel", ModuleType.FuelTank, 70f, 15f, v(0, 1.0f, 1.8f), v(2.0f, 0.6f, 0.6f));
+            if (era)
+            {
+                // Reactive blocks along the side frames, slat screens over the rear flanks and the turret rear.
+                foreach (float x in new[] { -1.6f, 1.6f })
+                    for (int i = 0; i < 6; i++)
+                        k.Era($"Era_Side_{(x < 0 ? "L" : "R")}{i}", v(x, 1.35f, 3.4f - i * 0.85f), v(0.12f, 0.8f, 0.8f));
+                k.Cage("Slat_L", v(-1.62f, 1.33f, -2.19f), v(0.3f, 0.8f, 1.3f), 0.5f);
+                k.Cage("Slat_R", v(1.62f, 1.33f, -2.19f), v(0.3f, 0.8f, 1.3f), 0.5f);
+                k.Cage("Slat_Turret", v(0, 0.45f, -0.55f), v(2.7f, 0.4f, 1.2f), 0.5f, turret);
+            }
+            k.AttachModel(ModelDir + (era ? "BMP3M/bmp3m_era.glb" : "BMP3M/bmp3m.glb"), Vector3.zero, turret, "Turret");
+            k.SliceHull();
+            k.Finish(era ? "БМП-3М с ДЗ" : "БМП-3М");
             k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
-            k.Save(Ifv);
+            k.Save(era ? IfvEra : Ifv);
         }
 
+        /// <summary>
+        /// 2S19M1 "Msta-S": 152 mm, 11.9 m with the gun forward, 3.38 x 2.99 m, big turret with the ammunition, light armor
+        /// (en.wikipedia.org/wiki/2S19_Msta). Model "2S19M1 MSTA-S SPH" by Jeyhun1985 (CC BY). Armor points are abstract.
+        /// </summary>
         static void BuildSpg()
         {
             var k = new VehicleKit("SPG_Placeholder", Green);
-            k.Tracks(1.75f, 0.6f, 0.9f, 7.0f);
-            k.Plate("UpperFront", v(0, 1.25f, 3.55f), v(3.0f, 1.2f, 0.08f), 120f, rot: Pitch(-62f));
-            k.Plate("LowerFront", v(0, 0.75f, 3.85f), v(3.0f, 0.7f, 0.08f), 90f, rot: Pitch(45f));
-            k.Plate("Side_L", v(-1.5f, 1.0f, 0), v(0.07f, 1.1f, 7.0f), 45f);
-            k.Plate("Side_R", v(1.5f, 1.0f, 0), v(0.07f, 1.1f, 7.0f), 45f);
-            k.Plate("Rear", v(0, 1.0f, -3.4f), v(3.0f, 1.1f, 0.07f), 30f);
-            k.Plate("RoofFront", v(0, 1.55f, 2.4f), v(3.0f, 0.05f, 1.9f), 25f);
-            k.Plate("EngineDeck", v(0, 1.55f, -2.8f), v(3.0f, 0.05f, 1.2f), 15f);
-            k.Plate("Floor", v(0, 0.45f, 0), v(3.0f, 0.06f, 7.0f), 20f);
+            k.Tracks(1.4f, 0.58f, 1.0f, 6.6f, z: 0.1f);
+            k.Plate("UpperFront", v(0, 1.4f, 3.6f), v(3.2f, 1.2f, 0.08f), 45f, rot: Pitch(-65f));
+            k.Plate("LowerFront", v(0, 0.75f, 3.8f), v(3.2f, 0.7f, 0.08f), 40f, rot: Pitch(45f));
+            k.Plate("Side_L", v(-1.62f, 1.2f, 0), v(0.07f, 1.4f, 7.4f), 25f);
+            k.Plate("Side_R", v(1.62f, 1.2f, 0), v(0.07f, 1.4f, 7.4f), 25f);
+            k.Plate("Rear", v(0, 1.2f, -3.75f), v(3.2f, 1.4f, 0.07f), 18f);
+            k.Plate("Roof", v(0, 1.9f, 1.6f), v(3.2f, 0.05f, 4.0f), 18f);
+            k.Plate("EngineDeck", v(0, 1.9f, -3.0f), v(3.2f, 0.05f, 1.5f), 12f);
+            k.Plate("Floor", v(0, 0.45f, 0), v(3.2f, 0.06f, 7.4f), 15f);
 
-            // Large, thin-skinned turret with the ammunition in the bustle: the classic weak spot.
-            var turret = k.Group("Turret", v(0, 2.25f, -0.3f));
-            k.Plate("Turret_Front", v(0, 0, 1.9f), v(3.0f, 1.3f, 0.15f), 60f, turret);
-            k.Plate("Turret_Side_L", v(-1.5f, 0, 0), v(0.08f, 1.3f, 3.8f), 30f, turret);
-            k.Plate("Turret_Side_R", v(1.5f, 0, 0), v(0.08f, 1.3f, 3.8f), 30f, turret);
-            k.Plate("Turret_Rear", v(0, 0, -1.9f), v(3.0f, 1.3f, 0.06f), 20f, turret);
-            k.Plate("Turret_Roof", v(0, 0.65f, 0), v(3.0f, 0.06f, 3.8f), 20f, turret);
-            var gun = k.Visual("Gun", v(0, 0.1f, 5.4f), v(0.22f, 0.22f, 7.0f), k.Dark, turret);
+            // Large, thin-skinned turret with the ammunition in the rear: the classic weak spot.
+            var turret = k.Group("Turret", v(0, 0.519f, -0.738f));
+            k.Plate("Turret_Front", v(0, 2.3f, 1.9f), v(3.2f, 1.4f, 0.12f), 30f, turret);
+            k.Plate("Turret_Side_L", v(-1.62f, 2.3f, 0), v(0.07f, 1.4f, 3.9f), 18f, turret);
+            k.Plate("Turret_Side_R", v(1.62f, 2.3f, 0), v(0.07f, 1.4f, 3.9f), 18f, turret);
+            k.Plate("Turret_Rear", v(0, 2.3f, -1.95f), v(3.2f, 1.4f, 0.06f), 15f, turret);
+            k.Plate("Turret_Roof", v(0, 3.02f, 0), v(3.2f, 0.06f, 3.9f), 15f, turret);
+            var gun = k.Visual("Gun", v(0, 1.95f, 5.2f), v(0.25f, 0.25f, 6.6f), k.Dark, turret);
             k.Module("Module_Gun", ModuleType.Gun, 120f, 30f, Vector3.zero, Vector3.one * 1.05f, gun.transform);
-            k.Module("Module_Breech", ModuleType.Breech, 120f, 40f, v(0, 0, 0.9f), v(0.6f, 0.6f, 1.4f), turret);
-            k.Module("Module_AmmoRack", ModuleType.AmmoRack, 90f, 20f, v(0, 0, -1.3f), v(2.4f, 0.9f, 1.0f), turret);
-            k.Module("Module_TurretDrive", ModuleType.TurretDrive, 70f, 20f, v(1.0f, -0.4f, 0.2f), v(0.4f, 0.4f, 0.4f), turret);
-            k.Module("Module_Optics", ModuleType.Optics, 40f, 5f, v(-0.9f, 0.8f, 1.2f), v(0.3f, 0.25f, 0.3f), turret, visible: true);
+            k.Module("Module_Breech", ModuleType.Breech, 120f, 40f, v(0, 2.0f, 0.9f), v(0.7f, 0.7f, 1.5f), turret);
+            k.Module("Module_AmmoRack", ModuleType.AmmoRack, 90f, 20f, v(0, 2.1f, -1.2f), v(2.6f, 1.0f, 1.1f), turret);
+            k.Module("Module_TurretDrive", ModuleType.TurretDrive, 70f, 20f, v(1.0f, 1.6f, 0.2f), v(0.4f, 0.4f, 0.4f), turret);
+            k.Module("Module_Optics", ModuleType.Optics, 40f, 5f, v(-1.0f, 3.1f, 1.2f), v(0.35f, 0.3f, 0.35f), turret);
 
-            k.Module("Module_Engine", ModuleType.Engine, 180f, 50f, v(0, 1.0f, -2.6f), v(2.6f, 0.8f, 1.3f));
-            k.Module("Module_Transmission", ModuleType.Transmission, 120f, 40f, v(0, 0.8f, -3.15f), v(2.7f, 0.6f, 0.4f));
-            k.Module("Module_ControlStation", ModuleType.ControlStation, 90f, 25f, v(-0.9f, 1.1f, 2.6f), v(0.9f, 0.7f, 1.0f));
-            k.Module("Module_Fuel", ModuleType.FuelTank, 70f, 15f, v(0.9f, 1.0f, 2.6f), v(0.7f, 0.8f, 1.0f));
-            k.Finish("САУ (заглушка)");
+            k.Module("Module_Engine", ModuleType.Engine, 180f, 50f, v(0, 1.1f, -2.8f), v(2.6f, 0.9f, 1.4f));
+            k.Module("Module_Transmission", ModuleType.Transmission, 120f, 40f, v(0, 0.8f, -3.45f), v(2.7f, 0.6f, 0.4f));
+            k.Module("Module_ControlStation", ModuleType.ControlStation, 90f, 25f, v(0, 1.2f, 3.0f), v(1.2f, 0.7f, 1.0f));
+            k.Module("Module_Fuel", ModuleType.FuelTank, 70f, 15f, v(1.0f, 1.1f, 2.4f), v(0.7f, 0.8f, 1.0f));
+            k.AttachModel(ModelDir + "Msta/msta_s.glb", Vector3.zero, turret, "Turret");
+            k.SliceHull();
+            k.Finish("САУ 2С19М1 «Мста-С»");
             k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
             k.Save(Spg);
         }
@@ -196,43 +226,39 @@ namespace ModernDrone.Editor
             return f;
         }
 
+        /// <summary>
+        /// 96K6 Pantsir-S1 on the KamAZ-6560 8x8: combat module with two twin 30 mm guns, twelve missiles, a search radar on
+        /// top and a tracking radar in front (en.wikipedia.org/wiki/Pantsir_missile_system). Model "96K6 Pantsir-S1" by ALI1388
+        /// (CC BY), decimated. Armor points are abstract.
+        /// </summary>
         static void BuildSpaag()
         {
             var k = new VehicleKit("SPAAG_Placeholder", Green);
-            TruckBase(k, 9f, 15f);
+            k.Wheels(new[] { 3.6f, 2.1f, -1.9f, -3.4f }, 1.15f, 0.62f, 0.5f);
+            k.Plate("Cab_Front", v(0, 2.2f, 4.7f), v(2.5f, 1.6f, 0.06f), 12f);
+            k.Plate("Cab_Side_L", v(-1.25f, 2.2f, 3.6f), v(0.06f, 1.6f, 2.2f), 12f);
+            k.Plate("Cab_Side_R", v(1.25f, 2.2f, 3.6f), v(0.06f, 1.6f, 2.2f), 12f);
+            k.Plate("Cab_Roof", v(0, 3.0f, 3.6f), v(2.5f, 0.06f, 2.2f), 12f);
+            k.Module("Module_ControlStation", ModuleType.ControlStation, 60f, 10f, v(0, 2.2f, 3.8f), v(2.2f, 1.2f, 1.4f));
+            k.Module("Module_Engine", ModuleType.Engine, 120f, 30f, v(0, 1.5f, 2.3f), v(1.4f, 0.9f, 1.3f));
+            k.Module("Module_Fuel", ModuleType.FuelTank, 60f, 10f, v(1.1f, 1.1f, 0.8f), v(0.5f, 0.6f, 1.3f));
+            k.Module("Module_Generator", ModuleType.Generator, 70f, 20f, v(0, 2.0f, -3.9f), v(2.0f, 1.0f, 1.2f));
 
-            // Armored equipment box carrying the combat module.
-            k.Plate("Base_Side_L", v(-1.2f, 1.9f, -1.8f), v(0.06f, 1.2f, 3.0f), 15f);
-            k.Plate("Base_Side_R", v(1.2f, 1.9f, -1.8f), v(0.06f, 1.2f, 3.0f), 15f);
-            k.Plate("Base_Front", v(0, 1.9f, -0.3f), v(2.4f, 1.2f, 0.06f), 15f);
-            k.Plate("Base_Rear", v(0, 1.9f, -3.3f), v(2.4f, 1.2f, 0.06f), 15f);
-            k.Plate("Base_Roof", v(0, 2.5f, -1.8f), v(2.4f, 0.06f, 3.0f), 15f);
-            k.Module("Module_Generator", ModuleType.Generator, 70f, 20f, v(0, 1.8f, -2.8f), v(1.2f, 0.8f, 1.0f));
-
-            var turret = k.Group("Turret", v(0, 2.95f, -1.8f));
-            k.Plate("Turret_Front", v(0, 0, 0.9f), v(1.8f, 0.9f, 0.06f), 20f, turret);
-            k.Plate("Turret_Side_L", v(-0.9f, 0, 0), v(0.06f, 0.9f, 1.8f), 20f, turret);
-            k.Plate("Turret_Side_R", v(0.9f, 0, 0), v(0.06f, 0.9f, 1.8f), 20f, turret);
-            k.Plate("Turret_Rear", v(0, 0, -0.9f), v(1.8f, 0.9f, 0.06f), 20f, turret);
-            k.Plate("Turret_Roof", v(0, 0.45f, 0), v(1.8f, 0.06f, 1.8f), 20f, turret);
-            k.Module("Module_AmmoRack", ModuleType.AmmoRack, 60f, 15f, v(0, -0.1f, -0.2f), v(1.0f, 0.5f, 1.0f), turret);
-
-            // Rotating search radar on a short mast and a tracking radar on the turret face.
-            k.Visual("RadarMast", v(0, 0.95f, -0.4f), v(0.12f, 1.1f, 0.12f), k.Metal, turret, collider: false);
-            var search = k.Group("SearchRadar", v(0, 1.6f, -0.4f), turret);
-            search.gameObject.AddComponent<Rotator>();
-            k.Module("Module_SearchRadar", ModuleType.Radar, 60f, 5f, Vector3.zero, v(1.8f, 0.9f, 0.12f), search, visible: true, mat: k.Metal);
-            k.Module("Module_TrackingRadar", ModuleType.Radar, 50f, 5f, v(0, 0.1f, 1.0f), v(0.9f, 0.9f, 0.15f), turret, visible: true, mat: k.Metal);
-
-            k.Module("Module_Launcher_L", ModuleType.Launcher, 70f, 10f, v(-1.3f, 0.1f, 0.2f), v(0.7f, 0.6f, 2.4f), turret, visible: true);
-            k.Module("Module_Launcher_R", ModuleType.Launcher, 70f, 10f, v(1.3f, 0.1f, 0.2f), v(0.7f, 0.6f, 2.4f), turret, visible: true);
-            foreach (float x in new[] { -0.6f, 0.6f })
-            {
-                var barrel = k.Visual(x < 0 ? "Gun_L" : "Gun_R", v(x, -0.2f, 1.9f), v(0.08f, 0.08f, 2.2f), k.Dark, turret);
-                k.Module(x < 0 ? "Module_Gun_L" : "Module_Gun_R", ModuleType.Gun, 60f, 10f, Vector3.zero, Vector3.one * 1.2f, barrel.transform);
-            }
-
-            k.Finish("ЗРПК (заглушка)");
+            // Combat module on the rear
+            k.Plate("Module_Side_L", v(-1.3f, 3.0f, -1.6f), v(0.06f, 1.6f, 4.2f), 15f);
+            k.Plate("Module_Side_R", v(1.3f, 3.0f, -1.6f), v(0.06f, 1.6f, 4.2f), 15f);
+            k.Plate("Module_Front", v(0, 3.0f, 0.5f), v(2.6f, 1.6f, 0.06f), 15f);
+            k.Plate("Module_Roof", v(0, 3.8f, -1.6f), v(2.6f, 0.06f, 4.2f), 15f);
+            k.Module("Module_AmmoRack", ModuleType.AmmoRack, 60f, 15f, v(0, 3.0f, -1.6f), v(1.6f, 0.8f, 1.8f));
+            k.Module("Module_SearchRadar", ModuleType.Radar, 60f, 5f, v(0, 5.0f, -1.7f), v(2.0f, 1.2f, 0.4f));
+            k.Module("Module_TrackingRadar", ModuleType.Radar, 50f, 5f, v(0, 3.6f, 0.9f), v(1.2f, 1.2f, 0.3f));
+            k.Module("Module_Launcher_L", ModuleType.Launcher, 70f, 10f, v(-1.2f, 3.6f, -1.6f), v(0.8f, 1.0f, 3.2f));
+            k.Module("Module_Launcher_R", ModuleType.Launcher, 70f, 10f, v(1.2f, 3.6f, -1.6f), v(0.8f, 1.0f, 3.2f));
+            k.Module("Module_Gun_L", ModuleType.Gun, 60f, 10f, v(-0.9f, 3.3f, -0.4f), v(0.35f, 0.35f, 2.4f));
+            k.Module("Module_Gun_R", ModuleType.Gun, 60f, 10f, v(0.9f, 3.3f, -0.4f), v(0.35f, 0.35f, 2.4f));
+            k.AttachModel(ModelDir + "Pantsir/pantsir_s1.glb");
+            k.SliceHull();
+            k.Finish("ЗРПК «Панцирь-С1»");
             k.Save(Spaag);
         }
 
@@ -280,21 +306,29 @@ namespace ModernDrone.Editor
             k.Save(path);
         }
 
+        /// <summary>
+        /// S-400 radar on an 8x8 chassis, antenna post raised (en.wikipedia.org/wiki/S-400_missile_system).
+        /// Model "S400 Trioumf Radar" by HWHNL (CC BY-NC). Armor points are abstract.
+        /// </summary>
         static void BuildSamRadar()
         {
             var k = new VehicleKit("SAM_Radar_Placeholder", Green);
-            TruckBase(k, 10f, 12f);
-            k.Plate("Cabin_Side_L", v(-1.2f, 2.1f, -1.0f), v(0.06f, 2.0f, 3.5f), 10f);
-            k.Plate("Cabin_Side_R", v(1.2f, 2.1f, -1.0f), v(0.06f, 2.0f, 3.5f), 10f);
-            k.Plate("Cabin_Front", v(0, 2.1f, 0.75f), v(2.4f, 2.0f, 0.06f), 10f);
-            k.Plate("Cabin_Rear", v(0, 2.1f, -2.75f), v(2.4f, 2.0f, 0.06f), 10f);
-            k.Plate("Cabin_Roof", v(0, 3.1f, -1.0f), v(2.4f, 0.06f, 3.5f), 10f);
-            k.Module("Module_Equipment", ModuleType.ControlStation, 70f, 15f, v(0, 2.0f, -1.0f), v(2.0f, 1.4f, 2.5f));
-            k.Module("Module_Generator", ModuleType.Generator, 80f, 25f, v(0, 1.6f, -3.6f), v(1.2f, 1.0f, 1.0f), visible: true);
-            k.Visual("Mast", v(0, 3.7f, -1.8f), v(0.25f, 1.2f, 0.25f), k.Metal, collider: false);
-            var panel = k.Group("RadarPanel", v(0, 5.0f, -1.8f), rot: Pitch(-20f));
-            k.Module("Module_Radar", ModuleType.Radar, 90f, 10f, Vector3.zero, v(4.0f, 3.0f, 0.25f), panel, visible: true, mat: k.Metal);
-            k.Finish("РЛС ЗРК (заглушка)");
+            k.Wheels(new[] { 5.6f, 4.0f, -2.6f, -4.2f }, 1.15f, 0.7f, 0.5f);
+            k.Plate("Cab_Front", v(0, 2.3f, 7.4f), v(2.9f, 1.8f, 0.06f), 10f);
+            k.Plate("Cab_Side_L", v(-1.45f, 2.3f, 6.2f), v(0.06f, 1.8f, 2.4f), 10f);
+            k.Plate("Cab_Side_R", v(1.45f, 2.3f, 6.2f), v(0.06f, 1.8f, 2.4f), 10f);
+            k.Plate("Cab_Roof", v(0, 3.25f, 6.2f), v(2.9f, 0.06f, 2.4f), 10f);
+            k.Plate("Cabin_Side_L", v(-1.5f, 2.6f, -2.5f), v(0.06f, 2.6f, 5.0f), 10f);
+            k.Plate("Cabin_Side_R", v(1.5f, 2.6f, -2.5f), v(0.06f, 2.6f, 5.0f), 10f);
+            k.Plate("Cabin_Roof", v(0, 3.95f, -2.5f), v(3.0f, 0.06f, 5.0f), 10f);
+            k.Module("Module_Cab", ModuleType.ControlStation, 60f, 10f, v(0, 2.3f, 6.2f), v(2.4f, 1.4f, 1.8f));
+            k.Module("Module_Engine", ModuleType.Engine, 120f, 30f, v(0, 1.6f, 4.6f), v(1.8f, 1.1f, 1.4f));
+            k.Module("Module_Equipment", ModuleType.ControlStation, 70f, 15f, v(0, 2.5f, -2.5f), v(2.6f, 2.0f, 4.4f));
+            k.Module("Module_Generator", ModuleType.Generator, 80f, 25f, v(0, 1.8f, -6.4f), v(1.4f, 1.2f, 1.2f));
+            k.Module("Module_Radar", ModuleType.Radar, 90f, 10f, v(0, 7.5f, 2.6f), v(3.2f, 5.5f, 1.0f));
+            k.AttachModel(ModelDir + "S400/s400_radar.glb");
+            k.SliceHull();
+            k.Finish("РЛС ЗРК С-400");
             k.Save(SamRadar);
         }
 
@@ -447,24 +481,53 @@ namespace ModernDrone.Editor
 
         // ------------------------------------------------------------------ towed artillery
 
+        /// <summary>
+        /// D-30 122 mm towed howitzer in firing position on its three spread trails (en.wikipedia.org/wiki/122_mm_howitzer_2A18_(D-30)).
+        /// Model "D-30 howitzer" by 42manako (CC BY), converted from feet.
+        /// </summary>
         static void BuildHowitzer()
         {
             var k = new VehicleKit("Howitzer_Placeholder", Green);
-            k.Visual("Carriage", v(0, 0.9f, 0), v(1.0f, 0.5f, 1.0f), k.Hull);
-            for (int i = 0; i < 3; i++)
-            {
-                var rot = Quaternion.Euler(0f, 60f + i * 120f, 0f);
-                k.Visual("Trail", rot * v(0, 0, -1.5f) + v(0, 0.3f, 0), v(0.15f, 0.15f, 3.0f), k.Hull, rot: rot);
-            }
-            k.Plate("Shield", v(0, 1.3f, 0.6f), v(1.8f, 1.1f, 0.05f), 8f);
-            var barrel = k.Visual("Gun", v(0, 1.35f, 2.7f), v(0.15f, 0.15f, 4.8f), k.Dark);
+            k.Plate("Shield", v(0, 1.3f, 0.7f), v(1.8f, 1.1f, 0.05f), 8f);
+            var barrel = k.Visual("Gun", v(0, 1.45f, 2.6f), v(0.2f, 0.2f, 4.6f), k.Dark);
             k.Module("Module_Gun", ModuleType.Gun, 80f, 10f, Vector3.zero, Vector3.one * 1.1f, barrel.transform);
-            k.Module("Module_Breech", ModuleType.Breech, 80f, 20f, v(0, 1.35f, 0), v(0.45f, 0.45f, 0.9f), visible: true, mat: k.Dark);
-            k.Module("Module_Sight", ModuleType.Optics, 15f, 2f, v(-0.4f, 1.6f, 0.4f), v(0.15f, 0.2f, 0.2f), visible: true);
-            k.Module("Module_AmmoCrates", ModuleType.AmmoRack, 40f, 5f, v(2.2f, 0.25f, -2.0f), v(1.5f, 0.5f, 1.0f), visible: true,
+            k.Module("Module_Breech", ModuleType.Breech, 80f, 20f, v(0, 1.45f, 0.1f), v(0.5f, 0.5f, 0.9f));
+            k.Module("Module_Sight", ModuleType.Optics, 15f, 2f, v(-0.45f, 1.7f, 0.5f), v(0.2f, 0.25f, 0.25f));
+            k.Module("Module_AmmoCrates", ModuleType.AmmoRack, 40f, 5f, v(2.2f, 0.25f, -1.2f), v(1.5f, 0.5f, 1.0f), visible: true,
                 mat: VehicleKit.Material("CrateWood", new Color(0.42f, 0.35f, 0.22f)));
-            k.Finish("Гаубица (заглушка)");
+            k.AttachModel(ModelDir + "D30/d30.glb");
+            k.SliceHull(0.5f);
+            k.Finish("Гаубица Д-30");
             k.Save(Howitzer);
+        }
+
+        /// <summary>
+        /// MT-LBM multipurpose tracked carrier (tows the D-30): 6.45 x 2.86 x 1.87 m, 7-14 mm armor, 7.62 mm MG turret
+        /// (en.wikipedia.org/wiki/MT-LB). Model "MT-LBM" by 42manako (CC BY-NC). Armor points are abstract.
+        /// </summary>
+        static void BuildMtlb()
+        {
+            var k = new VehicleKit("MTLB_Tractor", Green);
+            k.Tracks(1.33f, 0.42f, 1.05f, 5.9f, z: -0.07f);
+            k.Plate("UpperFront", v(0, 1.5f, 3.0f), v(2.9f, 0.8f, 0.06f), 20f, rot: Pitch(-55f));
+            k.Plate("LowerFront", v(0, 0.95f, 3.3f), v(2.9f, 0.6f, 0.06f), 18f, rot: Pitch(40f));
+            k.Plate("Side_L", v(-1.5f, 1.25f, 0), v(0.06f, 1.0f, 6.3f), 15f);
+            k.Plate("Side_R", v(1.5f, 1.25f, 0), v(0.06f, 1.0f, 6.3f), 15f);
+            k.Plate("Rear", v(0, 1.25f, -3.2f), v(2.9f, 1.0f, 0.06f), 12f);
+            k.Plate("Roof", v(0, 1.75f, -0.4f), v(2.9f, 0.05f, 5.4f), 12f);
+            var turret = k.Group("Turret", v(0.643f, 1.673f, 1.394f));
+            k.Plate("Turret_Shell", v(0, 0.15f, 0), v(0.84f, 0.3f, 0.84f), 12f, turret);
+            k.Module("Module_Gun", ModuleType.Gun, 40f, 5f, v(0, 0.15f, 0.5f), v(0.2f, 0.2f, 0.6f), turret);
+            k.Module("Module_Engine", ModuleType.Engine, 120f, 35f, v(0, 1.1f, 1.0f), v(1.2f, 0.8f, 1.2f));
+            k.Module("Module_Transmission", ModuleType.Transmission, 90f, 30f, v(0, 0.8f, 2.6f), v(2.2f, 0.5f, 0.6f));
+            k.Module("Module_ControlStation", ModuleType.ControlStation, 70f, 20f, v(-0.6f, 1.35f, 2.2f), v(0.9f, 0.7f, 1.0f));
+            k.Module("Module_Fuel", ModuleType.FuelTank, 60f, 15f, v(1.0f, 1.1f, -2.4f), v(0.5f, 0.7f, 1.0f));
+            k.Module("Module_AmmoRack", ModuleType.AmmoRack, 50f, 10f, v(0, 1.2f, -1.2f), v(1.4f, 0.5f, 1.2f));
+            k.AttachModel(ModelDir + "MTLBM/mtlbm.glb", Vector3.zero, turret, "Turret");
+            k.SliceHull();
+            k.Finish("МТ-ЛБМ");
+            k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
+            k.Save(Mtlb);
         }
 
         // ------------------------------------------------------------------ decoy & variants

@@ -23,3 +23,22 @@
   `Assets/_Project/Art/Models/Vehicles/Typhoon/typhoon.glb`; rescaled to metres, re-oriented.
 - **Ural 4320** by [Brout](https://sketchfab.com/3d-models/ural-4320-f953c51a5dbc4a15949f4dcc0905c4e8) on Sketchfab, licensed under
   [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). `Assets/_Project/Art/Models/Vehicles/Ural4320/ural4320.glb`; recentred.
+- **BMP-3M** and **BMP-3M ERA** by [42manako](https://sketchfab.com/42manako) on Sketchfab
+  ([1](https://sketchfab.com/3d-models/bmp-3m-97ffd025f0534432854a66b18039729f), [2](https://sketchfab.com/3d-models/bmp-3m-era-f1188395505e47bda8c0f8423e80ff0b)),
+  licensed under [CC BY-NC 4.0](http://creativecommons.org/licenses/by-nc/4.0/) — non-commercial use only.
+  `Assets/_Project/Art/Models/Vehicles/BMP3M/`; re-oriented, turret split out.
+- **MT-LBM** by [42manako](https://sketchfab.com/3d-models/mt-lbm-c903da8b5f9a445fa64ea3511140448f) on Sketchfab, licensed under
+  [CC BY-NC 4.0](http://creativecommons.org/licenses/by-nc/4.0/) — non-commercial use only.
+  `Assets/_Project/Art/Models/Vehicles/MTLBM/mtlbm.glb`; re-oriented, turret split out.
+- **S400 Trioumf Radar** by [HWHNL](https://sketchfab.com/3d-models/s400-trioumf-radar-9446194719de47ee849117b29dadbba4) on Sketchfab,
+  licensed under [CC BY-NC 4.0](http://creativecommons.org/licenses/by-nc/4.0/) — non-commercial use only.
+  `Assets/_Project/Art/Models/Vehicles/S400/s400_radar.glb`; stood upright, re-oriented, helper sphere removed.
+- **D-30 howitzer** by [42manako](https://sketchfab.com/3d-models/d-30-howitzer-0f37641766054d9c9ff0666158b26426) on Sketchfab,
+  licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). `Assets/_Project/Art/Models/Vehicles/D30/d30.glb`;
+  converted from feet, re-oriented.
+- **96K6 Pantsir-S1** by [ALI1388](https://sketchfab.com/3d-models/96k6-pantsir-s1-8be7dcff46794b809560e2377561546e) on Sketchfab,
+  licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). `Assets/_Project/Art/Models/Vehicles/Pantsir/pantsir_s1.glb`;
+  converted from millimetres, decimated to ~100k triangles.
+- **2S19M1 MSTA-S SPH** by [Jeyhun1985](https://sketchfab.com/3d-models/2s19m1-msta-s-sph-a783cc3364164eda907d2fd98a8d5152) on Sketchfab,
+  licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). `Assets/_Project/Art/Models/Vehicles/Msta/msta_s.glb`;
+  turret split out, decimated to ~110k triangles.

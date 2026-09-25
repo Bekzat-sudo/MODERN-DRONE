@@ -180,7 +180,7 @@ namespace ModernDrone.Editor
         {
             string[] park =
             {
-                VehicleCatalog.Ifv, VehicleCatalog.Apc, VehicleCatalog.Spg, VehicleCatalog.TankCage, VehicleCatalog.DecoyTank,
+                VehicleCatalog.Ifv, VehicleCatalog.IfvEra, VehicleCatalog.Mtlb, VehicleCatalog.Mrap, VehicleCatalog.Apc, VehicleCatalog.Spg, VehicleCatalog.TankCage, VehicleCatalog.DecoyTank,
                 VehicleCatalog.Howitzer, VehicleCatalog.Mlrs, VehicleCatalog.Truck, VehicleCatalog.SamLauncher,
                 VehicleCatalog.SamRadar, VehicleCatalog.Spaag, VehicleCatalog.InterceptorSite
             };
