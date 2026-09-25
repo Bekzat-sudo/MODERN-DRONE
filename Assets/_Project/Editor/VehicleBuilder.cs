@@ -78,7 +78,7 @@ namespace ModernDrone.Editor
             var turret = new GameObject("Turret").transform;
             turret.SetParent(t, false);
             // Turret ring of the T-72B3 model once it is shifted onto the hull boxes (see AttachModel below).
-            turret.localPosition = new Vector3(0f, 1.85f, 0.225f);
+            turret.localPosition = new Vector3(0f, 1.85f, 0.305f);
             Plate("Turret_Front", turret, new Vector3(0f, 0f, 1.1f), new Vector3(2.2f, 0.7f, 0.3f), 550f);
             Plate("Turret_Side_L", turret, new Vector3(-1.1f, 0f, 0f), new Vector3(0.1f, 0.7f, 2.2f), 130f);
             Plate("Turret_Side_R", turret, new Vector3(1.1f, 0f, 0f), new Vector3(0.1f, 0.7f, 2.2f), 130f);
