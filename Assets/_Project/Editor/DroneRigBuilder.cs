@@ -8,8 +8,8 @@ using UnityEngine;
 namespace ModernDrone.Editor
 {
     /// <summary>
-    /// Builds the default FPV drone prefab. The "Visual" child is placeholder geometry made of primitives:
-    /// replace its contents with an imported model; physics lives on the root and does not depend on it.
+    /// Builds the default FPV drone prefab. The "Visual" child holds the imported model;
+    /// physics lives on the root and does not depend on it.
     /// </summary>
     public static class DroneRigBuilder
     {
@@ -55,7 +55,7 @@ namespace ModernDrone.Editor
             var propVisuals = root.AddComponent<PropVisuals>();
             SetRef(propVisuals, "drone", controller);
             var so = new SerializedObject(propVisuals);
-            var arr = so.FindProperty("props");
+            var arr = so.FindProperty("discs");
             arr.arraySize = props.Length;
             for (int i = 0; i < props.Length; i++)
                 arr.GetArrayElementAtIndex(i).objectReferenceValue = props[i];
@@ -77,46 +77,69 @@ namespace ModernDrone.Editor
             return prefab;
         }
 
-        static Transform[] BuildVisual(Transform root, DroneConfig config)
+        const string ModelPath = "Assets/_Project/Art/Models/FPV_Drone/fpv_drone.glb";
+        // Motor-to-motor diagonal of the imported model (measured from the frame mesh), metres.
+        const float ModelMotorDiagonal = 0.42f;
+        // Prop discs in Visual space, measured from the scaled model: hub centres, prop radius, prop plane height.
+        static readonly Vector3[] PropHubs =
+        {
+            new Vector3(0.101f, 0.012f, 0.106f), new Vector3(-0.101f, 0.012f, 0.106f),
+            new Vector3(0.101f, 0.012f, -0.119f), new Vector3(-0.101f, 0.012f, -0.119f),
+        };
+        const float PropRadius = 0.078f;
+
+        /// <summary>
+        /// "FPV Drone" by Jeyhun1985 (Sketchfab, CC BY), see CREDITS.md. Scaled to the 0.3 m reference diagonal that
+        /// DroneController rescales per class. Its props are baked into the frame mesh, so blur discs are added per motor.
+        /// </summary>
+        static Renderer[] BuildVisual(Transform root, DroneConfig config)
         {
             var visual = new GameObject("Visual").transform;
             visual.SetParent(root, false);
 
-            var frameMat = GetMaterial("DroneFrame", new Color(0.12f, 0.12f, 0.13f));
-            var motorMat = GetMaterial("DroneMotor", new Color(0.55f, 0.55f, 0.58f));
-            var propMat = GetMaterial("DroneProp", new Color(0.05f, 0.05f, 0.05f));
-            var podMat = GetMaterial("DronePayload", new Color(0.30f, 0.34f, 0.24f));
+            var model = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(ModelPath));
+            model.name = "FPV_Drone_Model";
+            model.transform.SetParent(visual, false);
+            model.transform.localScale = Vector3.one * (0.3f / ModelMotorDiagonal);
+            foreach (var c in model.GetComponentsInChildren<Collider>()) Object.DestroyImmediate(c);
+            foreach (var t in model.GetComponentsInChildren<Transform>()) t.gameObject.layer = GameLayers.Drone;
 
-            Prim(PrimitiveType.Cube, "Body", visual, frameMat, new Vector3(0f, 0.01f, 0f), new Vector3(0.07f, 0.035f, 0.16f));
-            Prim(PrimitiveType.Cylinder, "PayloadPod", visual, podMat, new Vector3(0f, -0.035f, 0.03f), new Vector3(0.07f, 0.12f, 0.07f), Quaternion.Euler(90f, 0f, 0f));
-
-            float a = config.ArmOffset;
-            float armLen = a * Mathf.Sqrt(2f);
-            var props = new Transform[QuadMixer.MotorCount];
-            for (int i = 0; i < QuadMixer.MotorCount; i++)
+            var discMat = GetDiscMaterial();
+            var discs = new Renderer[PropHubs.Length];
+            for (int i = 0; i < discs.Length; i++)
             {
-                Vector3 p = QuadMixer.MotorPosition(i, a);
-                float yaw = Mathf.Atan2(p.x, p.z) * Mathf.Rad2Deg;
-                Prim(PrimitiveType.Cube, $"Arm_{i}", visual, frameMat, p * 0.5f, new Vector3(0.022f, 0.008f, armLen), Quaternion.Euler(0f, yaw, 0f));
-                Prim(PrimitiveType.Cylinder, $"Motor_{i}", visual, motorMat, p + Vector3.up * 0.015f, new Vector3(0.035f, 0.013f, 0.035f));
-                var prop = Prim(PrimitiveType.Cube, $"Prop_{i}", visual, propMat, p + Vector3.up * 0.032f, new Vector3(0.17f, 0.002f, 0.014f));
-                props[i] = prop;
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                go.name = $"PropDisc_{i}";
+                go.layer = GameLayers.Drone;
+                Object.DestroyImmediate(go.GetComponent<Collider>());
+                go.transform.SetParent(visual, false);
+                go.transform.localPosition = PropHubs[i];
+                go.transform.localScale = new Vector3(PropRadius * 2f, 0.0005f, PropRadius * 2f);
+                discs[i] = go.GetComponent<Renderer>();
+                discs[i].sharedMaterial = discMat;
+                discs[i].shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                discs[i].enabled = false;
             }
-            return props;
+            return discs;
         }
 
-        static Transform Prim(PrimitiveType type, string name, Transform parent, Material mat, Vector3 pos, Vector3 scale, Quaternion? rot = null)
+        static Material GetDiscMaterial()
         {
-            var go = GameObject.CreatePrimitive(type);
-            go.name = name;
-            go.layer = GameLayers.Drone;
-            Object.DestroyImmediate(go.GetComponent<Collider>());
-            go.transform.SetParent(parent, false);
-            go.transform.localPosition = pos;
-            go.transform.localRotation = rot ?? Quaternion.identity;
-            go.transform.localScale = scale;
-            go.GetComponent<Renderer>().sharedMaterial = mat;
-            return go.transform;
+            string path = $"{MatDir}/PropDisc.mat";
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (mat != null) return mat;
+            mat = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+            mat.SetFloat("_Surface", 1f); // transparent, alpha blend
+            mat.SetFloat("_Blend", 0f);
+            mat.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            mat.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            mat.SetFloat("_ZWrite", 0f);
+            mat.SetFloat("_Cull", 0f);
+            mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            mat.SetColor("_BaseColor", new Color(0.06f, 0.06f, 0.06f, 0.35f));
+            AssetDatabase.CreateAsset(mat, path);
+            return mat;
         }
 
         static void SetRef(Object target, string field, Object value)
