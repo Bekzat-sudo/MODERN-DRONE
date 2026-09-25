@@ -3,7 +3,8 @@ using UnityEngine;
 namespace ModernDrone.Drone
 {
     /// <summary>
-    /// Fades translucent prop discs in with simulated motor speed: spinning blades read as a blur disc on camera.
+    /// Spins the prop meshes and fades translucent discs in with simulated motor speed:
+    /// fast blades read as a blur disc on camera.
     /// Order matches <see cref="QuadMixer"/>.
     /// </summary>
     public sealed class PropVisuals : MonoBehaviour
@@ -12,6 +13,9 @@ namespace ModernDrone.Drone
 
         [SerializeField] DroneController drone;
         [Tooltip("Front-right, front-left, rear-right, rear-left.")]
+        [SerializeField] Transform[] props = new Transform[QuadMixer.MotorCount];
+        [Tooltip("Visual spin at full motor output, deg/s (kept low to avoid strobing).")]
+        [SerializeField] float maxVisualSpin = 2400f;
         [SerializeField] Renderer[] discs = new Renderer[QuadMixer.MotorCount];
         [SerializeField] Color discColor = new Color(0.06f, 0.06f, 0.06f, 1f);
         [Tooltip("Disc opacity at full motor output.")]
@@ -26,6 +30,9 @@ namespace ModernDrone.Drone
             if (drone == null) return;
             _block ??= new MaterialPropertyBlock();
             var spin = drone.MotorSpin;
+            for (int i = 0; i < props.Length && i < spin.Length; i++)
+                if (props[i] != null)
+                    props[i].Rotate(0f, QuadMixer.Spin[i] * spin[i] * maxVisualSpin * Time.deltaTime, 0f, Space.Self);
             for (int i = 0; i < discs.Length && i < spin.Length; i++)
             {
                 if (discs[i] == null) continue;

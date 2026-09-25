@@ -32,7 +32,7 @@ namespace ModernDrone.Editor
             var controller = root.AddComponent<DroneController>();
             SetRef(controller, "config", config);
 
-            var props = BuildVisual(root.transform, config);
+            var visual = BuildVisual(root.transform, config);
 
             var camGo = new GameObject("FpvCamera") { tag = "MainCamera" };
             camGo.transform.SetParent(root.transform, false);
@@ -55,10 +55,8 @@ namespace ModernDrone.Editor
             var propVisuals = root.AddComponent<PropVisuals>();
             SetRef(propVisuals, "drone", controller);
             var so = new SerializedObject(propVisuals);
-            var arr = so.FindProperty("discs");
-            arr.arraySize = props.Length;
-            for (int i = 0; i < props.Length; i++)
-                arr.GetArrayElementAtIndex(i).objectReferenceValue = props[i];
+            SetArray(so.FindProperty("props"), visual.props);
+            SetArray(so.FindProperty("discs"), visual.discs);
             so.ApplyModifiedPropertiesWithoutUndo();
 
             var warhead = root.AddComponent<DroneWarhead>();
@@ -80,19 +78,14 @@ namespace ModernDrone.Editor
         const string ModelPath = "Assets/_Project/Art/Models/FPV_Drone/fpv_drone.glb";
         // Motor-to-motor diagonal of the imported model (measured from the frame mesh), metres.
         const float ModelMotorDiagonal = 0.42f;
-        // Prop discs in Visual space, measured from the scaled model: hub centres, prop radius, prop plane height.
-        static readonly Vector3[] PropHubs =
-        {
-            new Vector3(0.101f, 0.012f, 0.106f), new Vector3(-0.101f, 0.012f, 0.106f),
-            new Vector3(0.101f, 0.012f, -0.119f), new Vector3(-0.101f, 0.012f, -0.119f),
-        };
-        const float PropRadius = 0.078f;
+        // Prop meshes split out of the model in Blender, pivots on the motor axes. Order matches QuadMixer.
+        static readonly string[] PropNames = { "Prop_FR", "Prop_FL", "Prop_RR", "Prop_RL" };
 
         /// <summary>
         /// "FPV Drone" by Jeyhun1985 (Sketchfab, CC BY), see CREDITS.md. Scaled to the 0.3 m reference diagonal that
-        /// DroneController rescales per class. Its props are baked into the frame mesh, so blur discs are added per motor.
+        /// DroneController rescales per class. Its props spin, and a blur disc per motor fades in with motor speed.
         /// </summary>
-        static Renderer[] BuildVisual(Transform root, DroneConfig config)
+        static (Transform[] props, Renderer[] discs) BuildVisual(Transform root, DroneConfig config)
         {
             var visual = new GameObject("Visual").transform;
             visual.SetParent(root, false);
@@ -105,22 +98,27 @@ namespace ModernDrone.Editor
             foreach (var t in model.GetComponentsInChildren<Transform>()) t.gameObject.layer = GameLayers.Drone;
 
             var discMat = GetDiscMaterial();
-            var discs = new Renderer[PropHubs.Length];
+            var props = new Transform[PropNames.Length];
+            var discs = new Renderer[PropNames.Length];
+            var all = model.GetComponentsInChildren<Transform>();
             for (int i = 0; i < discs.Length; i++)
             {
+                props[i] = System.Array.Find(all, t => t.name == PropNames[i]);
+                var bounds = props[i].GetComponent<Renderer>().bounds;
+                float radius = Mathf.Max(bounds.extents.x, bounds.extents.z);
                 var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                 go.name = $"PropDisc_{i}";
                 go.layer = GameLayers.Drone;
                 Object.DestroyImmediate(go.GetComponent<Collider>());
                 go.transform.SetParent(visual, false);
-                go.transform.localPosition = PropHubs[i];
-                go.transform.localScale = new Vector3(PropRadius * 2f, 0.0005f, PropRadius * 2f);
+                go.transform.position = new Vector3(props[i].position.x, bounds.center.y, props[i].position.z);
+                go.transform.localScale = new Vector3(radius * 2f, 0.0005f, radius * 2f);
                 discs[i] = go.GetComponent<Renderer>();
                 discs[i].sharedMaterial = discMat;
                 discs[i].shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 discs[i].enabled = false;
             }
-            return discs;
+            return (props, discs);
         }
 
         static Material GetDiscMaterial()
@@ -140,6 +138,13 @@ namespace ModernDrone.Editor
             mat.SetColor("_BaseColor", new Color(0.06f, 0.06f, 0.06f, 0.35f));
             AssetDatabase.CreateAsset(mat, path);
             return mat;
+        }
+
+        static void SetArray(SerializedProperty arr, Object[] values)
+        {
+            arr.arraySize = values.Length;
+            for (int i = 0; i < values.Length; i++)
+                arr.GetArrayElementAtIndex(i).objectReferenceValue = values[i];
         }
 
         static void SetRef(Object target, string field, Object value)
