@@ -75,6 +75,10 @@ namespace ModernDrone.Vehicles
                 if (_fire == null)
                     _fire = SimpleVfx.Fire(transform, transform.position + Vector3.up * 1.5f, 1.4f);
             }
+            else if (cause == DestructionCause.Crashed && _fire == null)
+            {
+                _fire = SimpleVfx.Fire(transform, transform.position + Vector3.up * 1.5f, 1.4f);
+            }
             else if (cause == DestructionCause.BurnedOut && _fire != null)
             {
                 // Flames die down, smoke remains.

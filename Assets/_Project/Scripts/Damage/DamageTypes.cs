@@ -20,7 +20,11 @@ namespace ModernDrone.Damage
         /// <summary>EW / comms antenna; counts as a sensor.</summary>
         Antenna,
         /// <summary>Wheel group of a wheeled vehicle (mobility).</summary>
-        Wheels
+        Wheels,
+        /// <summary>Helicopter main rotor and hub: losing it brings the aircraft down.</summary>
+        Rotor,
+        /// <summary>Helicopter tail rotor: losing it sends the aircraft into an uncontrolled spin.</summary>
+        TailRotor
     }
 
     public enum ModuleState
@@ -44,7 +48,9 @@ namespace ModernDrone.Damage
     {
         None,
         AmmoDetonation,
-        BurnedOut
+        BurnedOut,
+        /// <summary>Aircraft hit the ground after losing lift or control.</summary>
+        Crashed
     }
 
     public enum WarheadKind
@@ -86,6 +92,8 @@ namespace ModernDrone.Damage
             ModuleType.Generator => "Генератор",
             ModuleType.Antenna => "Антенна",
             ModuleType.Wheels => "Колёса",
+            ModuleType.Rotor => "Несущий винт",
+            ModuleType.TailRotor => "Хвостовой винт",
             _ => t.ToString()
         };
 

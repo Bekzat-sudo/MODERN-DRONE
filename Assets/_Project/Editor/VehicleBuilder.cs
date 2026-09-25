@@ -97,7 +97,7 @@ namespace ModernDrone.Editor
             Module("Module_TurretDrive", turret, ModuleType.TurretDrive, 70f, 20f, new Vector3(0.75f, -0.1f, 0.2f), new Vector3(0.4f, 0.4f, 0.4f));
             Module("Module_Optics", turret, ModuleType.Optics, 40f, 5f, new Vector3(-0.6f, 0.5f, 0.7f), new Vector3(0.3f, 0.25f, 0.3f), visible: true);
 
-            AttachModel(t, turret, TankModelPath, new Vector3(0f, 0f, 0.4f));
+            VehicleKit.AttachModel(t, TankModelPath, new Vector3(0f, 0f, 0.4f), turret, "Turret");
 
             var model = root.AddComponent<VehicleDamageModel>();
             model.SetDisplayName("Танк Т-72Б3");
@@ -110,24 +110,6 @@ namespace ModernDrone.Editor
             Object.DestroyImmediate(root);
             Debug.Log($"[ModernDrone] Vehicle prefab built: {TankPrefabPath}");
             return prefab;
-        }
-
-        /// <summary>
-        /// Puts an imported model over the damage boxes: the boxes keep their colliders (armor, modules, hull) but stop
-        /// rendering, the model draws the vehicle. A model node named "Turret" moves with the turret transform.
-        /// </summary>
-        static void AttachModel(Transform root, Transform turret, string path, Vector3 offset)
-        {
-            var asset = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-            if (asset == null) return;
-            foreach (var r in root.GetComponentsInChildren<Renderer>(true)) r.enabled = false;
-
-            var visual = Object.Instantiate(asset, root);
-            visual.name = "Visual";
-            visual.transform.localPosition = offset;
-            foreach (var c in visual.GetComponentsInChildren<Collider>(true)) Object.DestroyImmediate(c);
-            var modelTurret = visual.transform.Find("Turret");
-            if (modelTurret != null && turret != null) modelTurret.SetParent(turret, true);
         }
 
         /// <summary>

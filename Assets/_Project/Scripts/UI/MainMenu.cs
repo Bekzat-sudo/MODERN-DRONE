@@ -34,6 +34,7 @@ namespace ModernDrone.UI
             AddMission("Задача 5: Позиция ЗРК", GameScenes.Mission05);
             AddMission("Задача 6: Ложные цели", GameScenes.Mission06);
             AddMission("Задача 7: Ночная охота", GameScenes.Mission07);
+            AddMission("Задача 8: Охота на вертолёт", GameScenes.Mission08);
             _rows.Add(MenuRow.Button("Полигон — свободный полёт", () => GameScenes.Load(GameScenes.ProvingGround)));
             _rows.Add(MenuRow.Button("Настройки управления", () => { _settings.Open(); _inSettings = true; }));
             _rows.Add(MenuRow.Header(""));

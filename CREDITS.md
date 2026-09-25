@@ -9,3 +9,17 @@
   [Creative Commons Attribution 4.0 (CC BY 4.0)](http://creativecommons.org/licenses/by/4.0/).
   Used as the tank model (`Assets/_Project/Art/Models/Vehicles/T72B3/t72b3.glb`); recentred,
   turret split out with a pivot on the turret ring.
+- **BTR-82** by [42manako](https://sketchfab.com/3d-models/btr-82-f8da79f2c2af49ceb845f26d9454db21) on Sketchfab, licensed under
+  [CC BY-NC 4.0](http://creativecommons.org/licenses/by-nc/4.0/) — non-commercial use only.
+  `Assets/_Project/Art/Models/Vehicles/BTR82/btr82.glb`; re-oriented, turret split out.
+- **S-400 Triumf SAM system** by [42manako](https://sketchfab.com/3d-models/s-400-triumf-sam-system-1a109bdd906149249dce0a18cdfbe708)
+  on Sketchfab, licensed under [CC BY-NC 4.0](http://creativecommons.org/licenses/by-nc/4.0/) — non-commercial use only.
+  `Assets/_Project/Art/Models/Vehicles/S400/s400_launcher.glb`; converted from centimetres, re-oriented.
+- **Mil Mi-28NM Havoc** by [VTX](https://sketchfab.com/3d-models/mil-mi-28nm-havoc-45781f565fa646d9bfddc8e6b5d3627e) on Sketchfab,
+  licensed under [CC BY-NC-SA 4.0](http://creativecommons.org/licenses/by-nc-sa/4.0/) — non-commercial use only; the adapted
+  model `Assets/_Project/Art/Models/Vehicles/Mi28NM/mi28nm.glb` (main rotor split out) is shared under the same licence.
+- **Kamaz Typhoon** by [dugito03](https://sketchfab.com/3d-models/kamaz-typhoon-0ed95f01f14b4121a5802aac36c33b86) on Sketchfab,
+  licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/).
+  `Assets/_Project/Art/Models/Vehicles/Typhoon/typhoon.glb`; rescaled to metres, re-oriented.
+- **Ural 4320** by [Brout](https://sketchfab.com/3d-models/ural-4320-f953c51a5dbc4a15949f4dcc0905c4e8) on Sketchfab, licensed under
+  [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). `Assets/_Project/Art/Models/Vehicles/Ural4320/ural4320.glb`; recentred.

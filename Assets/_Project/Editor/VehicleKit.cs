@@ -167,6 +167,30 @@ namespace ModernDrone.Editor
             }
         }
 
+        /// <summary>
+        /// Puts an imported model over the damage boxes: the boxes keep their colliders (armor, modules, hull) but stop
+        /// rendering, the model draws the vehicle. A model node named <paramref name="movingName"/> is re-parented to
+        /// <paramref name="moving"/> (turret, rotor) so it moves and is tossed with it.
+        /// </summary>
+        public static void AttachModel(Transform root, string path, Vector3 offset, Transform moving = null, string movingName = null)
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            if (asset == null) return;
+            foreach (var r in root.GetComponentsInChildren<Renderer>(true)) r.enabled = false;
+
+            var visual = Object.Instantiate(asset, root);
+            visual.name = "Visual";
+            visual.transform.localPosition = offset;
+            visual.transform.localRotation = Quaternion.identity;
+            foreach (var c in visual.GetComponentsInChildren<Collider>(true)) Object.DestroyImmediate(c);
+            if (moving == null || movingName == null) return;
+            var part = System.Array.Find(visual.GetComponentsInChildren<Transform>(true), t => t.name == movingName);
+            if (part != null) part.SetParent(moving, true);
+        }
+
+        public void AttachModel(string path, Vector3 offset = default, Transform moving = null, string movingName = null) =>
+            AttachModel(T, path, offset, moving, movingName);
+
         public VehicleDamageModel Finish(string displayName, bool decoy = false)
         {
             var model = Root.AddComponent<VehicleDamageModel>();

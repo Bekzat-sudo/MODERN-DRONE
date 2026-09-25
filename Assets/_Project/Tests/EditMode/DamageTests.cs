@@ -123,6 +123,25 @@ namespace ModernDrone.Tests
         }
 
         [Test]
+        public void Helicopter_FliesOnOneEngine_ButNotWithoutTailRotor()
+        {
+            var left = Add(ModuleType.Engine);
+            var right = Add(ModuleType.Engine);
+            var tail = Add(ModuleType.TailRotor);
+            _model.SetRandom(new System.Random(1));
+            _model.Rebuild();
+
+            left.ApplyDamage(1000f);
+            Assert.AreEqual(KillState.None, _model.State & KillState.Mobility);
+            tail.ApplyDamage(1000f);
+            Assert.AreEqual(KillState.Mobility, _model.State & KillState.Mobility);
+
+            _model.Crash();
+            Assert.AreEqual(DestructionCause.Crashed, _model.Cause);
+            Assert.AreNotEqual(KillState.None, _model.State & KillState.Destroyed);
+        }
+
+        [Test]
         public void EngineDestroyed_GivesMobilityKill()
         {
             var engine = Add(ModuleType.Engine);

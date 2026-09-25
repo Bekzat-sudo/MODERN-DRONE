@@ -135,6 +135,12 @@ namespace ModernDrone.Damage
 
         void Update() => Tick(Time.deltaTime);
 
+        /// <summary>An aircraft that lost lift or control struck the ground.</summary>
+        public void Crash()
+        {
+            if ((State & KillState.Destroyed) == 0) Destroy(DestructionCause.Crashed);
+        }
+
         void Destroy(DestructionCause cause)
         {
             Cause = cause;
@@ -163,7 +169,9 @@ namespace ModernDrone.Damage
             var k = KillState.None;
             bool control = AnyDestroyed(ModuleType.ControlStation);
 
-            if (control || AnyDestroyed(ModuleType.Engine) || AnyDestroyed(ModuleType.Transmission) || AnyDestroyed(ModuleType.Track) || AnyDestroyed(ModuleType.Wheels))
+            // Twin-engine vehicles (helicopters) keep moving on one engine.
+            if (control || AllDestroyed(ModuleType.Engine) || AnyDestroyed(ModuleType.Transmission) || AnyDestroyed(ModuleType.Track)
+                || AnyDestroyed(ModuleType.Wheels) || AnyDestroyed(ModuleType.Rotor) || AnyDestroyed(ModuleType.TailRotor))
                 k |= KillState.Mobility;
 
             if (control || AnyDestroyed(ModuleType.Gun) || AnyDestroyed(ModuleType.Breech) || AnyDestroyed(ModuleType.TurretDrive)

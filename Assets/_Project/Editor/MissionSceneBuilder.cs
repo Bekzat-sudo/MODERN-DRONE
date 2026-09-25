@@ -128,10 +128,10 @@ namespace ModernDrone.Editor
         const string Terrain04Path = "Assets/_Project/Scenes/Mission_04_Terrain.asset";
 
         const string Briefing04 =
-            "По грунтовке за лесополосой, в ~500 м к северу, с запада на восток идёт колонна: БТР, грузовик, РСЗО и танк.\n\n" +
-            "Задача: вывести из строя 3 машины из 4, пока колонна не ушла. Подбитая машина встаёт и задерживает остальных; " +
+            "По грунтовке за лесополосой, в ~500 м к северу, с запада на восток идёт колонна: бронеавтомобиль «Тайфун», БТР, грузовик, РСЗО и танк.\n\n" +
+            "Задача: вывести из строя 3 машины из 5, пока колонна не ушла. Подбитая машина встаёт и задерживает остальных; " +
             "после первого попадания колонна ускоряется и ставит дым.\n\n" +
-            "Два участка дороги закрыты противодроновыми сетками — дрон подорвётся на сетке, но в ней есть разрывы. " +
+            "Два участка дороги закрыты противодроновыми сетками — в сетке дрон застревает и чаще всего не взрывается, но в ней есть разрывы. " +
             "Техника отстреливается вблизи (до ~50 м), дорогу прикрывает расчёт дронов-перехватчиков. Колонна тронется с вашим первым взлётом.";
 
         [MenuItem("Modern Drone/Setup/Build Mission 04 Scene")]
@@ -156,7 +156,7 @@ namespace ModernDrone.Editor
             var column = new System.Collections.Generic.List<ModernDrone.Damage.VehicleDamageModel>();
             (string prefab, string label)[] order =
             {
-                (VehicleCatalog.Apc, "БТР"), (VehicleCatalog.Truck, "Грузовик"),
+                (VehicleCatalog.Mrap, "Тайфун"), (VehicleCatalog.Apc, "БТР"), (VehicleCatalog.Truck, "Грузовик"),
                 (VehicleCatalog.Mlrs, "РСЗО"), (VehicleBuilder.TankPrefabPath, "Танк")
             };
             foreach (var (prefab, label) in order)
@@ -270,6 +270,34 @@ namespace ModernDrone.Editor
             mission.gameObject.AddComponent<ThermalNight>();
             EditorSceneManager.SaveScene(scene, "Assets/_Project/Scenes/Mission_07.unity");
             ProvingGroundBuilder.AddToBuildSettings("Assets/_Project/Scenes/Mission_07.unity", 7);
+        }
+
+        const string Briefing08 =
+            "Ударный вертолёт Ми-28НМ работает по нашим позициям: низко переходит между огневыми точками " +
+            "в 0,8–1 км к северу и на каждой зависает на ~20 секунд, чтобы отстреляться.\n\n" +
+            "Догнать его на переходе не выйдет — ловите на зависании. Уязвимые места: хвостовой винт и хвостовая балка, " +
+            "двигатели над крыльями, несущий винт. Кабина бронирована.\n\n" +
+            "Задача: сбить Ми-28НМ.";
+
+        [MenuItem("Modern Drone/Setup/Build Mission 08 Scene")]
+        public static void BuildMission08()
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var terrain = ProvingGroundBuilder.CreateTerrain("Assets/_Project/Scenes/Mission_08_Terrain.asset");
+            ProvingGroundBuilder.CreateLighting();
+            ProvingGroundBuilder.CreateTreeLines(terrain);
+            ProvingGroundBuilder.CreateSpawn(terrain);
+
+            var points = new[] { new Vector3(820f, 0f, 1750f), new Vector3(1150f, 0f, 1850f), new Vector3(1350f, 0f, 1650f) };
+            var heli = TargetAt(terrain, VehicleCatalog.Helicopter, points[0], 200f, "Ми-28НМ", TargetRequirement.OutOfAction);
+            heli.transform.position += Vector3.up * 35f;
+            var flight = heli.GetComponent<ModernDrone.Vehicles.HelicopterFlight>();
+            flight.Configure(points, heli.transform.Find("Rotor"));
+            EditorUtility.SetDirty(flight);
+
+            ProvingGroundBuilder.CreateMissionRig("Задача 8: Охота на вертолёт", Briefing08, 4);
+            EditorSceneManager.SaveScene(scene, "Assets/_Project/Scenes/Mission_08.unity");
+            ProvingGroundBuilder.AddToBuildSettings("Assets/_Project/Scenes/Mission_08.unity", 8);
         }
 
         /// <summary>Moonlit night: dim bluish key light, almost no ambient, no sky.</summary>
