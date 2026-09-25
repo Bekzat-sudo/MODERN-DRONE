@@ -124,7 +124,7 @@ namespace ModernDrone.Drone
 
         /// <summary>Bumped when defaults change in a way saved files must be migrated.</summary>
         public int version = CurrentVersion;
-        public const int CurrentVersion = 3;
+        public const int CurrentVersion = 4;
 
         public ControlDevice device = ControlDevice.Auto;
         [Tooltip("Display name of the preferred joystick; empty = first found.")]
@@ -173,6 +173,9 @@ namespace ModernDrone.Drone
         public AxisRates yawRates = new AxisRates(100f, 500f, 0.5f);
         [Tooltip("Stick smoothing (setpoint low-pass), Hz. Lower = smoother, laggier.")]
         public float stickSmoothingHz = 12f;
+        [Tooltip("Pilot offset added to each drone model's stock camera uptilt, deg.")]
+        public float cameraTiltOffset;
+        /// <summary>Absolute uptilt saved before v4; migrated into <see cref="cameraTiltOffset"/>.</summary>
         public float cameraTilt = 25f;
         public float cameraFov = 118f;
 
@@ -263,6 +266,12 @@ namespace ModernDrone.Drone
                 var reset = s.Binding(PilotAction.Reset);
                 if (pause.gamepad == "<Gamepad>/selectButton") pause.gamepad = "<Gamepad>/startButton";
                 if (reset.gamepad == "<Gamepad>/startButton") reset.gamepad = "<Gamepad>/selectButton";
+            }
+            if (s.version < 4)
+            {
+                // v4: the camera uptilt is per drone model; keep the pilot's old preference as an offset from the
+                // previous 25 deg default.
+                s.cameraTiltOffset = Mathf.Clamp(s.cameraTilt - 25f, -30f, 40f);
             }
             s.version = CurrentVersion;
             return s;

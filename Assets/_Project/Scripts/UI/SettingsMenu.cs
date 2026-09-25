@@ -282,7 +282,7 @@ namespace ModernDrone.UI
             _rows.Add(MenuRow.Header("Режим Angle"));
             _rows.Add(MenuRow.Slider("Макс. угол наклона, °", () => S.angleMaxTilt, v => { S.angleMaxTilt = v; ControlSettings.NotifyChanged(); }, 15f, 80f, 5f, "0"));
             _rows.Add(MenuRow.Header("Камера"));
-            _rows.Add(MenuRow.Slider("Наклон камеры, °", () => S.cameraTilt, v => S.cameraTilt = v, 0f, 60f, 1f, "0"));
+            _rows.Add(MenuRow.Slider("Наклон камеры к штатному, °", () => S.cameraTiltOffset, v => S.cameraTiltOffset = v, -30f, 40f, 1f, "+0;-0;0"));
             _rows.Add(MenuRow.Slider("Угол обзора (гориз.), °", () => S.cameraFov, v => S.cameraFov = v, 80f, 150f, 1f, "0"));
         }
 

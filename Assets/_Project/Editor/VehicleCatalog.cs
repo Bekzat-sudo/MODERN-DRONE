@@ -119,7 +119,7 @@ namespace ModernDrone.Editor
             }
             k.AttachModel(ModelDir + (era ? "BMP3M/bmp3m_era.glb" : "BMP3M/bmp3m.glb"), Vector3.zero, turret, "Turret");
             k.SliceHull();
-            k.Finish(era ? "БМП-3М с ДЗ" : "БМП-3М");
+            k.Finish(era ? "БМП-3М с ДЗ" : "БМП-3М").SetAmmoConfinement(0.6f);
             k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
             k.Save(era ? IfvEra : Ifv);
         }
@@ -161,7 +161,7 @@ namespace ModernDrone.Editor
             k.Module("Module_Fuel", ModuleType.FuelTank, 70f, 15f, v(1.0f, 1.1f, 2.4f), v(0.7f, 0.8f, 1.0f));
             k.AttachModel(ModelDir + "Msta/msta_s.glb", Vector3.zero, turret, "Turret");
             k.SliceHull();
-            k.Finish("САУ 2С19М1 «Мста-С»");
+            k.Finish("САУ 2С19М1 «Мста-С»").SetAmmoConfinement(0.6f);
             k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
             k.Save(Spg);
         }
@@ -201,7 +201,7 @@ namespace ModernDrone.Editor
             k.Module("Module_AmmoRack", ModuleType.AmmoRack, 50f, 10f, v(0, 1.75f, 0.85f), v(0.7f, 0.5f, 0.7f));
             k.AttachModel(ModelDir + "BTR82/btr82.glb", Vector3.zero, turret, "Turret");
             k.SliceHull();
-            k.Finish("БТР-82А");
+            k.Finish("БТР-82А").SetAmmoConfinement(0.4f);
             k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
             k.Save(Apc);
         }
@@ -242,7 +242,8 @@ namespace ModernDrone.Editor
             k.Module("Module_ControlStation", ModuleType.ControlStation, 60f, 10f, v(0, 2.2f, 3.8f), v(2.2f, 1.2f, 1.4f));
             k.Module("Module_Engine", ModuleType.Engine, 120f, 30f, v(0, 1.5f, 2.3f), v(1.4f, 0.9f, 1.3f));
             k.Module("Module_Fuel", ModuleType.FuelTank, 60f, 10f, v(1.1f, 1.1f, 0.8f), v(0.5f, 0.6f, 1.3f));
-            k.Module("Module_Generator", ModuleType.Generator, 70f, 20f, v(0, 2.0f, -3.9f), v(2.0f, 1.0f, 1.2f));
+            k.Module("Module_Generator", ModuleType.Generator, 70f, 20f, v(0, 2.0f, -3.9f), v(2.0f, 1.0f, 1.2f))
+                .GetComponent<VehicleModule>().SetContents(Combustible.Diesel, fill: 0.3f);
 
             // Combat module on the rear
             k.Plate("Module_Side_L", v(-1.3f, 3.0f, -1.6f), v(0.06f, 1.6f, 4.2f), 15f);
@@ -258,7 +259,7 @@ namespace ModernDrone.Editor
             k.Module("Module_Gun_R", ModuleType.Gun, 60f, 10f, v(0.9f, 3.3f, -0.4f), v(0.35f, 0.35f, 2.4f));
             k.AttachModel(ModelDir + "Pantsir/pantsir_s1.glb");
             k.SliceHull();
-            k.Finish("ЗРПК «Панцирь-С1»");
+            k.Finish("ЗРПК «Панцирь-С1»").SetAmmoConfinement(0.3f);
             k.Save(Spaag);
         }
 
@@ -286,7 +287,8 @@ namespace ModernDrone.Editor
             k.Module("Module_Fuel", ModuleType.FuelTank, 60f, 10f, v(1.0f, 1.2f, 4.8f), v(0.5f, 0.6f, 1.2f));
             k.Plate("Trailer_Shelter_L", v(-1.3f, 2.7f, 3.0f), v(0.06f, 1.4f, 2.0f), 6f);
             k.Plate("Trailer_Shelter_R", v(1.3f, 2.7f, 3.0f), v(0.06f, 1.4f, 2.0f), 6f);
-            k.Module("Module_Generator", ModuleType.Generator, 70f, 15f, v(0, 2.7f, 3.0f), v(2.2f, 1.2f, 1.8f));
+            k.Module("Module_Generator", ModuleType.Generator, 70f, 15f, v(0, 2.7f, 3.0f), v(2.2f, 1.2f, 1.8f))
+                .GetComponent<VehicleModule>().SetContents(Combustible.Diesel, fill: 0.3f);
 
             // Canister pack on the erector hinge, laid out in its travel pose (lying forward along the trailer).
             var pack = k.Group("Canisters", v(0.007f, 2.134f, -6.913f));
@@ -324,7 +326,8 @@ namespace ModernDrone.Editor
             k.Module("Module_Cab", ModuleType.ControlStation, 60f, 10f, v(0, 2.3f, 6.2f), v(2.4f, 1.4f, 1.8f));
             k.Module("Module_Engine", ModuleType.Engine, 120f, 30f, v(0, 1.6f, 4.6f), v(1.8f, 1.1f, 1.4f));
             k.Module("Module_Equipment", ModuleType.ControlStation, 70f, 15f, v(0, 2.5f, -2.5f), v(2.6f, 2.0f, 4.4f));
-            k.Module("Module_Generator", ModuleType.Generator, 80f, 25f, v(0, 1.8f, -6.4f), v(1.4f, 1.2f, 1.2f));
+            k.Module("Module_Generator", ModuleType.Generator, 80f, 25f, v(0, 1.8f, -6.4f), v(1.4f, 1.2f, 1.2f))
+                .GetComponent<VehicleModule>().SetContents(Combustible.Diesel, fill: 0.3f);
             k.Module("Module_Radar", ModuleType.Radar, 90f, 10f, v(0, 7.5f, 2.6f), v(3.2f, 5.5f, 1.0f));
             k.AttachModel(ModelDir + "S400/s400_radar.glb");
             k.SliceHull();
@@ -337,7 +340,8 @@ namespace ModernDrone.Editor
             var k = new VehicleKit("MLRS_Placeholder", Green);
             TruckBase(k, 8f, 10f);
             var pod = k.Group("RocketPod", v(0, 2.3f, -2.0f), rot: Pitch(-12f));
-            k.Module("Module_Rockets", ModuleType.AmmoRack, 60f, 10f, Vector3.zero, v(1.9f, 1.1f, 3.0f), pod, visible: true, mat: k.Hull);
+            k.Module("Module_Rockets", ModuleType.AmmoRack, 60f, 10f, Vector3.zero, v(1.9f, 1.1f, 3.0f), pod, visible: true, mat: k.Hull)
+                .GetComponent<VehicleModule>().SetContents(Combustible.RocketPropellant, explosive: true);
             k.Module("Module_Launcher", ModuleType.Launcher, 70f, 20f, v(0, -0.75f, 0), v(0.8f, 0.4f, 0.8f), pod);
             k.Finish("РСЗО (заглушка)");
             k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
@@ -369,7 +373,8 @@ namespace ModernDrone.Editor
             k.Module("Module_Cargo", ModuleType.AmmoRack, 50f, 5f, v(0, 2.0f, -1.8f), v(2.1f, 1.6f, 3.8f));
             k.AttachModel(ModelDir + "Ural4320/ural4320.glb");
             k.SliceHull();
-            k.Finish("Урал-4320 (снабжение)");
+            // Ammunition crates in an open, tented bed: burning propellant vents instead of building pressure.
+            k.Finish("Урал-4320 (снабжение)").SetAmmoConfinement(0.1f);
             k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
             k.Save(Truck);
         }
@@ -429,7 +434,9 @@ namespace ModernDrone.Editor
             k.Module("Module_Engine_L", ModuleType.Engine, 120f, 30f, v(-1.0f, 3.05f, -0.6f), v(0.65f, 0.65f, 2.2f));
             k.Module("Module_Engine_R", ModuleType.Engine, 120f, 30f, v(1.0f, 3.05f, -0.6f), v(0.65f, 0.65f, 2.2f));
             k.Module("Module_Gearbox", ModuleType.Transmission, 150f, 40f, v(0, 3.3f, 0), v(1.0f, 0.7f, 1.2f));
-            k.Module("Module_Fuel", ModuleType.FuelTank, 70f, 15f, v(0, 1.6f, -0.6f), v(1.4f, 0.8f, 2.2f));
+            // Kerosene in fire- and explosion-resistant tanks (en.wikipedia.org/wiki/Mil_Mi-28: "fire and explosion resistant" fuel system).
+            k.Module("Module_Fuel", ModuleType.FuelTank, 70f, 15f, v(0, 1.6f, -0.6f), v(1.4f, 0.8f, 2.2f))
+                .GetComponent<VehicleModule>().SetContents(Combustible.JetFuel, fill: 1f, selfSealing: true);
             k.Module("Module_Gun", ModuleType.Gun, 60f, 15f, v(0, 0.8f, 5.0f), v(0.35f, 0.35f, 1.3f));
             k.Module("Module_AmmoRack", ModuleType.AmmoRack, 50f, 10f, v(0, 1.3f, 3.0f), v(0.8f, 0.6f, 1.0f));
             k.Module("Module_Launcher_L", ModuleType.Launcher, 50f, 10f, v(-2.2f, 1.9f, 0.3f), v(1.1f, 0.6f, 2.2f));
@@ -443,7 +450,7 @@ namespace ModernDrone.Editor
 
             k.AttachModel(ModelDir + "Mi28NM/mi28nm.glb", Vector3.zero, rotor, "Rotor");
             k.SliceHull();
-            k.Finish("Ми-28НМ");
+            k.Finish("Ми-28НМ").SetAmmoConfinement(0.3f);
             k.Root.AddComponent<HelicopterFlight>().Configure(new Vector3[0], rotor);
             k.Save(Helicopter);
         }
@@ -497,7 +504,7 @@ namespace ModernDrone.Editor
                 mat: VehicleKit.Material("CrateWood", new Color(0.42f, 0.35f, 0.22f)));
             k.AttachModel(ModelDir + "D30/d30.glb");
             k.SliceHull(0.5f);
-            k.Finish("Гаубица Д-30");
+            k.Finish("Гаубица Д-30").SetAmmoConfinement(0.05f);
             k.Save(Howitzer);
         }
 
@@ -525,7 +532,7 @@ namespace ModernDrone.Editor
             k.Module("Module_AmmoRack", ModuleType.AmmoRack, 50f, 10f, v(0, 1.2f, -1.2f), v(1.4f, 0.5f, 1.2f));
             k.AttachModel(ModelDir + "MTLBM/mtlbm.glb", Vector3.zero, turret, "Turret");
             k.SliceHull();
-            k.Finish("МТ-ЛБМ");
+            k.Finish("МТ-ЛБМ").SetAmmoConfinement(0.3f);
             k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
             k.Save(Mtlb);
         }

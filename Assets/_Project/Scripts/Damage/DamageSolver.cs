@@ -111,7 +111,7 @@ namespace ModernDrone.Damage
                     float residual = Mathf.Clamp01(r.penetrationIn / Mathf.Max(1f, w.penetration));
                     float damage = w.jetDamage * Mathf.Lerp(MinJetDamage, 1f, residual);
                     if (module.Type == ModuleType.AmmoRack) damage = Mathf.Max(damage, module.MaxHp);
-                    report.AddHit(module, damage);
+                    report.AddHit(module, damage, HitKind.Jet);
                 }
 
                 if (!r.passed)
@@ -175,7 +175,7 @@ namespace ModernDrone.Damage
                     if (module == null) continue;
 
                     float falloff = 1f - 0.5f * (hit.distance / w.spallRange);
-                    report.AddHit(module, w.spallDamage * scale * falloff);
+                    report.AddHit(module, w.spallDamage * scale * falloff, HitKind.Spall);
                     end = hit.point;
                     break;
                 }
@@ -197,7 +197,7 @@ namespace ModernDrone.Damage
                 if (dist > w.blastRadius || IsShielded(point, target, w.fragmentPenetration)) continue;
 
                 float falloff = 1f - dist / w.blastRadius;
-                report.AddHit(module, w.blastDamage * falloff);
+                report.AddHit(module, w.blastDamage * falloff, HitKind.Fragment);
                 report.traces.Add(new Trace { from = point, to = target, kind = TraceKind.Fragment });
             }
         }

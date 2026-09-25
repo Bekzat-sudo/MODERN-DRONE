@@ -81,7 +81,7 @@ namespace ModernDrone.Drone
             }
             if (droneCamera != null)
             {
-                droneCamera.TiltDeg = s.cameraTilt;
+                droneCamera.TiltDeg = StockTilt + s.cameraTiltOffset;
                 droneCamera.HorizontalFov = ModernDrone.Core.NightMode.Thermal ? ModernDrone.Core.NightMode.ThermalHorizontalFov : s.cameraFov;
             }
         }
@@ -145,10 +145,12 @@ namespace ModernDrone.Drone
             drone.SetInput(state);
         }
 
+        float StockTilt => drone != null && drone.Config != null ? drone.Config.cameraTilt : 25f;
+
         void SetTilt(float tilt)
         {
             droneCamera.TiltDeg = tilt;
-            ControlSettings.Current.cameraTilt = droneCamera.TiltDeg;
+            ControlSettings.Current.cameraTiltOffset = droneCamera.TiltDeg - StockTilt;
         }
 
         static InputSource ResolveSource(ControlDevice preferred, Joystick joystick, Gamepad gamepad)

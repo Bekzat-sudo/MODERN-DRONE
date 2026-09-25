@@ -4,9 +4,25 @@ using UnityEngine;
 
 namespace ModernDrone.Damage
 {
+    /// <summary>One burning source: a module's contents, or a pool of leaked fuel under the vehicle.</summary>
+    public sealed class VehicleFire
+    {
+        public VehicleModule Source { get; internal set; }
+        public Combustible Kind { get; internal set; }
+        /// <summary>Fuel spilled on the ground rather than burning inside the vehicle.</summary>
+        public bool IsPool { get; internal set; }
+        public Vector3 Position { get; internal set; }
+        public float Radius { get; internal set; }
+        public float Intensity { get; internal set; }
+        public float Remaining { get; internal set; }
+        public float Age { get; internal set; }
+        public bool Out => Remaining <= 0f;
+    }
+
     /// <summary>
-    /// Aggregates a vehicle's modules into kill states and runs secondary effects:
-    /// ammunition detonation and fire (which spreads damage and eventually burns the vehicle out).
+    /// Aggregates a vehicle's modules into kill states and runs secondary effects: what burns, what leaks, what explodes.
+    /// Fires are local: each heats the modules within its reach, which take damage by how fire-sensitive they are and
+    /// may catch fire or cook off in turn. See <see cref="Combustion"/> for the rules and sources.
     /// </summary>
     public sealed class VehicleDamageModel : MonoBehaviour
     {
@@ -14,35 +30,53 @@ namespace ModernDrone.Damage
         [Tooltip("Inflatable / wooden decoy: no internals, collapses when struck.")]
         [SerializeField] bool isDecoy;
 
-        [Header("Secondary effects (chances 0..1)")]
+        [Header("Ammunition")]
+        [Tooltip("Chance that burning propellant inside a closed hull sets off the rest and blows the vehicle apart " +
+                 "(T-72 carousel and loose charges: high; open cargo beds vent the fire: low). Abstract value.")]
         [SerializeField] float ammoDetonationChance = 0.7f;
-        [SerializeField] float fuelFireChanceDamaged = 0.35f;
-        [SerializeField] float fuelFireChanceDestroyed = 0.7f;
-        [SerializeField] float engineFireChance = 0.2f;
-        [SerializeField] float launcherFireChance = 0.4f;
 
         [Header("Fire")]
-        [SerializeField] float fireDamagePerSecond = 6f;
-        [Tooltip("Seconds of burning before the vehicle is burned out.")]
+        [Tooltip("Automatic fire suppression discharges (crew and engine compartments). T-72B3 3ETs13: 2 + 2 Halon 1301 bottles.")]
+        [SerializeField] int crewSuppressionShots;
+        [SerializeField] int engineSuppressionShots;
+        [Tooltip("Chance one discharge puts out a fuel or oil fire; propellant fires cannot be suppressed.")]
+        [SerializeField] float suppressionChance = 0.85f;
+        [Tooltip("Seconds of fire inside the hull before the vehicle is burned out.")]
         [SerializeField] float fireDuration = 25f;
+
+        const float MistFireballRadius = 2.5f, MistFireballDamage = 25f;
+        const float PoolRadiusPerLoad = 2.5f, PoolBurnSecondsPerLoad = 30f;
+        const float CookOffDelayMin = 0.4f, CookOffDelayMax = 2.5f;
 
         readonly List<VehicleModule> _modules = new List<VehicleModule>();
         readonly List<ArmorElement> _armor = new List<ArmorElement>();
+        readonly List<VehicleFire> _fires = new List<VehicleFire>();
+        readonly List<string> _log = new List<string>();
         System.Random _random = new System.Random();
-        float _fireTime;
+        float _hullFireTime;
+        float _pendingBlast = -1f;
+        float _pooledFuel;
+        VehicleFire _pool;
 
         public string DisplayName => displayName;
         public bool IsDecoy => isDecoy;
         public bool Struck { get; private set; }
         public IReadOnlyList<VehicleModule> Modules => _modules;
+        public IReadOnlyList<VehicleFire> Fires => _fires;
+        /// <summary>What happened to the vehicle's contents (fires, leaks, explosions), in order.</summary>
+        public IReadOnlyList<string> Log => _log;
         public KillState State { get; private set; }
         public DestructionCause Cause { get; private set; }
-        public bool Burning { get; private set; }
-        public VehicleModule FireOrigin { get; private set; }
+        public bool Burning => _fires.Exists(f => !f.Out);
+        public VehicleModule FireOrigin => _fires.Count > 0 ? _fires[0].Source : null;
 
         public event Action<VehicleDamageModel, VehicleModule, ModuleState> ModuleChanged;
         public event Action<VehicleDamageModel, KillState> StateChanged;
-        public event Action<VehicleDamageModel, VehicleModule> FireStarted;
+        public event Action<VehicleDamageModel, VehicleFire> FireStarted;
+        public event Action<VehicleDamageModel, VehicleFire> FireEnded;
+        public event Action<VehicleDamageModel, VehicleModule> LeakStarted;
+        /// <summary>A short flash: jet mist fireball (small) or an explosion of the contents (large).</summary>
+        public event Action<VehicleDamageModel, Vector3, float> Flash;
         public event Action<VehicleDamageModel, DestructionCause> Destroyed;
         /// <summary>First time any strike touches this vehicle (used by decoys to collapse).</summary>
         public event Action<VehicleDamageModel> FirstStruck;
@@ -52,6 +86,14 @@ namespace ModernDrone.Damage
         public void SetDisplayName(string name) => displayName = name;
 
         public void SetDecoy(bool decoy) => isDecoy = decoy;
+
+        public void SetAmmoConfinement(float chance) => ammoDetonationChance = Mathf.Clamp01(chance);
+
+        public void SetFireSuppression(int crewShots, int engineShots)
+        {
+            crewSuppressionShots = crewShots;
+            engineSuppressionShots = engineShots;
+        }
 
         /// <summary>Called by the damage solver whenever a strike reaches this vehicle.</summary>
         public void RegisterHit()
@@ -73,78 +115,263 @@ namespace ModernDrone.Damage
             State = Evaluate();
         }
 
+        bool Wrecked => (State & KillState.Destroyed) != 0;
+
+        void Note(string text) => _log.Add(text);
+
+        /// <summary>A hit on a module: its contents may light, leak or detonate depending on how it was struck.</summary>
+        internal void NotifyHit(VehicleModule m, HitKind kind)
+        {
+            if (Wrecked) return;
+            string name = DamageNames.Ru(m.Type);
+
+            if (m.HighExplosive && Roll(Combustion.DetonationChance(kind)))
+            {
+                Note($"{name}: детонация ВВ");
+                Explode(m.transform.position, DestructionCause.AmmoDetonation);
+                return;
+            }
+
+            var p = Combustion.Of(m.Combustible);
+            if (m.Combustible == Combustible.None || m.Load <= 0f || m.OnFire) return;
+
+            if (p.mistFireball && kind == HitKind.Jet)
+            {
+                Note($"{name}: вспышка топливного тумана");
+                MistFireball(m);
+                if (Wrecked) return;
+            }
+
+            float chance = p.IgniteChance(kind);
+            // Charges torn open by the hit that wrecked their rack light far more readily.
+            if (m.State == ModuleState.Destroyed && (m.Combustible == Combustible.Propellant || m.Combustible == Combustible.RocketPropellant))
+                chance = Mathf.Max(chance, 0.8f);
+            if (m.ProtectedTank) chance *= Combustion.ProtectedTankIgnition;
+            if (Roll(chance))
+            {
+                Ignite(m);
+                return;
+            }
+
+            if (p.liquid && !m.Leaking && Roll(Combustion.LeakChance(kind) * (m.ProtectedTank ? Combustion.ProtectedTankLeak : 1f)))
+            {
+                m.Leaking = true;
+                Note($"{name}: течь");
+                LeakStarted?.Invoke(this, m);
+            }
+        }
+
         internal void NotifyModuleChanged(VehicleModule module, ModuleState previous)
         {
             ModuleChanged?.Invoke(this, module, previous);
-            if ((State & KillState.Destroyed) != 0) return;
-
-            switch (module.Type)
-            {
-                case ModuleType.AmmoRack when module.State == ModuleState.Destroyed:
-                    if (_random.NextDouble() < ammoDetonationChance)
-                    {
-                        Destroy(DestructionCause.AmmoDetonation);
-                        return;
-                    }
-                    StartFire(module);
-                    break;
-
-                case ModuleType.FuelTank:
-                    double fuelChance = module.State == ModuleState.Destroyed ? fuelFireChanceDestroyed : fuelFireChanceDamaged;
-                    if (_random.NextDouble() < fuelChance) StartFire(module);
-                    break;
-
-                case ModuleType.Engine when module.State == ModuleState.Destroyed:
-                    if (_random.NextDouble() < engineFireChance) StartFire(module);
-                    break;
-
-                case ModuleType.Launcher when module.State == ModuleState.Destroyed:
-                    // Missile propellant.
-                    if (_random.NextDouble() < launcherFireChance) StartFire(module);
-                    break;
-            }
-            UpdateState();
+            if (!Wrecked) UpdateState();
         }
 
-        public void StartFire(VehicleModule origin)
+        /// <summary>Sets a module's contents on fire.</summary>
+        public void Ignite(VehicleModule m)
         {
-            if (Burning || (State & KillState.Destroyed) != 0) return;
-            Burning = true;
-            FireOrigin = origin;
-            _fireTime = 0f;
-            FireStarted?.Invoke(this, origin);
+            if (m == null || m.OnFire || Wrecked || m.Combustible == Combustible.None) return;
+            var p = Combustion.Of(m.Combustible);
+            m.OnFire = true;
+            var fire = new VehicleFire
+            {
+                Source = m, Kind = m.Combustible, Position = m.transform.position,
+                Radius = p.radius, Intensity = p.intensity, Remaining = p.burnSeconds * Mathf.Max(0.2f, m.Load)
+            };
+            _fires.Add(fire);
+            Note($"{DamageNames.Ru(m.Type)}: {(p.violent ? "воспламенение зарядов" : "пожар")}");
+            FireStarted?.Invoke(this, fire);
+
+            if (p.violent && Roll(ammoDetonationChance))
+            {
+                // One charge sets off the next: the pressure builds for a moment, then the hull gives way.
+                _pendingBlast = Mathf.Lerp(CookOffDelayMin, CookOffDelayMax, (float)_random.NextDouble());
+            }
+            else if (p.suppressible)
+            {
+                TrySuppress(fire);
+            }
         }
 
-        /// <summary>Advances fire. Called from Update; public so tests can step time.</summary>
+        /// <summary>Halon discharge into the compartment the fire is in.</summary>
+        void TrySuppress(VehicleFire fire)
+        {
+            if (fire.IsPool) return;
+            bool engineBay = fire.Source != null && (fire.Source.Type == ModuleType.Engine || fire.Source.Type == ModuleType.Transmission);
+            ref int shots = ref engineBay ? ref engineSuppressionShots : ref crewSuppressionShots;
+            while (shots > 0 && !fire.Out)
+            {
+                shots--;
+                if (Roll(suppressionChance))
+                {
+                    Extinguish(fire);
+                    Note("сработала система пожаротушения");
+                }
+            }
+        }
+
+        void Extinguish(VehicleFire fire)
+        {
+            fire.Remaining = 0f;
+            if (fire.Source != null) fire.Source.OnFire = false;
+            FireEnded?.Invoke(this, fire);
+        }
+
+        /// <summary>Jet through a fuel tank: atomised fuel flashes, scorching everything close by.</summary>
+        void MistFireball(VehicleModule tank)
+        {
+            Vector3 c = tank.transform.position;
+            Flash?.Invoke(this, c, 1f);
+            foreach (var m in _modules.ToArray())
+            {
+                if (m == tank || Wrecked) continue;
+                float d = Distance(m, c);
+                if (d > MistFireballRadius) continue;
+                m.Heat += 1.5f * (1f - d / MistFireballRadius);
+                m.ApplyDamage(MistFireballDamage * (1f - d / MistFireballRadius) * Combustion.FireSensitivity(m.Type), HitKind.Heat);
+            }
+        }
+
+        void Explode(Vector3 at, DestructionCause cause) => Destroy(cause);
+
+        /// <summary>Advances fires, leaks and cook-offs. Called from Update; public so tests can step time.</summary>
         public void Tick(float dt)
         {
-            if (!Burning || (State & KillState.Destroyed) != 0) return;
-            _fireTime += dt;
+            if (Wrecked) return;
 
-            // Iterate over a copy: damaging modules can trigger detonation and change state.
-            var snapshot = _modules.ToArray();
-            foreach (var m in snapshot)
+            if (_pendingBlast >= 0f)
             {
-                if ((State & KillState.Destroyed) != 0) return;
-                m.ApplyDamage(fireDamagePerSecond * dt);
+                _pendingBlast -= dt;
+                if (_pendingBlast < 0f)
+                {
+                    Note("подрыв боекомплекта");
+                    Explode(transform.position + Vector3.up * 1.5f, DestructionCause.AmmoDetonation);
+                    return;
+                }
             }
 
-            if (_fireTime >= fireDuration)
+            TickLeaks(dt);
+
+            bool hullFire = false;
+            var modules = _modules.ToArray();
+            for (int i = 0; i < _fires.Count; i++)
+            {
+                var fire = _fires[i];
+                if (fire.Out) continue;
+                fire.Age += dt;
+                fire.Remaining -= dt;
+                if (fire.Source != null) fire.Source.Load -= dt / Mathf.Max(1f, Combustion.Of(fire.Kind).burnSeconds);
+                if (!fire.IsPool) hullFire = true;
+
+                foreach (var m in modules)
+                {
+                    if (Wrecked) return;
+                    float d = Distance(m, fire.Position);
+                    if (d > fire.Radius) continue;
+                    float exposure = fire.Intensity * (1f - d / fire.Radius) * dt;
+                    m.Heat += exposure;
+                    m.ApplyDamage(Combustion.FireDamagePerSecond * Combustion.FireSensitivity(m.Type) * exposure, HitKind.Heat);
+                    HeatUp(m);
+                }
+                if (Wrecked) return;
+                if (fire.Out)
+                {
+                    if (fire.Source != null) fire.Source.OnFire = false;
+                    FireEnded?.Invoke(this, fire);
+                }
+            }
+
+            if (hullFire) _hullFireTime += dt;
+            if (_hullFireTime >= fireDuration)
+            {
+                Note("выгорел");
                 Destroy(DestructionCause.BurnedOut);
+            }
         }
+
+        /// <summary>A module heated long enough lights (fuel, charges) or cooks off (explosive).</summary>
+        void HeatUp(VehicleModule m)
+        {
+            if (m.HighExplosive && m.Heat >= Combustion.HeatToDetonate)
+            {
+                Note($"{DamageNames.Ru(m.Type)}: подрыв от нагрева");
+                Explode(m.transform.position, DestructionCause.AmmoDetonation);
+                return;
+            }
+            if (!m.OnFire && m.Load > 0f && m.Heat >= Combustion.Of(m.Combustible).heatToIgnite)
+                Ignite(m);
+        }
+
+        /// <summary>Holed tanks drain into one pool under the vehicle; any fire that reaches it lights the pool.</summary>
+        void TickLeaks(float dt)
+        {
+            foreach (var m in _modules)
+            {
+                if (!m.Leaking || m.Load <= 0f) continue;
+                float spilled = Mathf.Min(m.Load, Combustion.LeakRate * dt);
+                m.Load -= spilled;
+                _pooledFuel += spilled;
+                TotalSpilled += spilled;
+                if (m.Load <= 0f) UpdateState(); // a drained tank can leave the vehicle without fuel
+            }
+            if (_pooledFuel <= 0f) return;
+
+            Vector3 poolAt = new Vector3(transform.position.x, transform.position.y + 0.1f, transform.position.z);
+            if (_pool == null || _pool.Out)
+            {
+                foreach (var f in _fires)
+                {
+                    if (f.Out || f.IsPool) continue;
+                    if (Vector3.Distance(f.Position, poolAt) > f.Radius + PoolRadiusPerLoad * Mathf.Sqrt(_pooledFuel)) continue;
+                    _pool = new VehicleFire
+                    {
+                        Kind = Combustible.Diesel, IsPool = true, Position = poolAt, Intensity = 0.8f,
+                        Radius = PoolRadiusPerLoad * Mathf.Sqrt(_pooledFuel), Remaining = _pooledFuel * PoolBurnSecondsPerLoad
+                    };
+                    _pooledFuel = 0f;
+                    _fires.Add(_pool);
+                    Note("загорелась разлитая лужа топлива");
+                    FireStarted?.Invoke(this, _pool);
+                    return;
+                }
+                return;
+            }
+            // A burning pool is fed by whatever keeps leaking into it.
+            _pool.Remaining += _pooledFuel * PoolBurnSecondsPerLoad;
+            _pooledFuel = 0f;
+        }
+
+        /// <summary>All fuel that has leaked out so far, in tank loads (for the spill visual).</summary>
+        public float TotalSpilled { get; private set; }
+
+        static float Distance(VehicleModule m, Vector3 p)
+        {
+            var col = m.GetComponent<Collider>();
+            return col != null && col.enabled ? Vector3.Distance(col.ClosestPoint(p), p) : Vector3.Distance(m.transform.position, p);
+        }
+
+        bool Roll(float chance) => chance > 0f && _random.NextDouble() < chance;
 
         void Update() => Tick(Time.deltaTime);
 
         /// <summary>An aircraft that lost lift or control struck the ground.</summary>
         public void Crash()
         {
-            if ((State & KillState.Destroyed) == 0) Destroy(DestructionCause.Crashed);
+            if (Wrecked) return;
+            Destroy(DestructionCause.Crashed);
+            var fuel = _modules.Find(m => m.Type == ModuleType.FuelTank && m.Load > 0f);
+            if (fuel != null)
+            {
+                // The wreck's fuel keeps burning on the ground.
+                var fire = new VehicleFire { Source = fuel, Kind = fuel.Combustible, IsPool = true, Position = transform.position, Radius = 4f, Intensity = 1f, Remaining = 60f };
+                _fires.Add(fire);
+                FireStarted?.Invoke(this, fire);
+            }
         }
 
         void Destroy(DestructionCause cause)
         {
             Cause = cause;
-            Burning = cause == DestructionCause.BurnedOut ? false : Burning;
             var prev = State;
             State = Evaluate() | KillState.Destroyed | KillState.Mobility | KillState.Firepower;
             if (State != prev) StateChanged?.Invoke(this, State);
@@ -165,12 +392,14 @@ namespace ModernDrone.Damage
             bool Has(ModuleType t) => _modules.Exists(m => m.Type == t);
             bool AnyDestroyed(ModuleType t) => _modules.Exists(m => m.Type == t && m.State == ModuleState.Destroyed);
             bool AllDestroyed(ModuleType t) => Has(t) && _modules.TrueForAll(m => m.Type != t || m.State == ModuleState.Destroyed);
+            // Every tank drained (leaked or burned away): the engine starves.
+            bool noFuel = Has(ModuleType.FuelTank) && _modules.TrueForAll(m => m.Type != ModuleType.FuelTank || m.Load <= 0f);
 
             var k = KillState.None;
             bool control = AnyDestroyed(ModuleType.ControlStation);
 
             // Twin-engine vehicles (helicopters) keep moving on one engine.
-            if (control || AllDestroyed(ModuleType.Engine) || AnyDestroyed(ModuleType.Transmission) || AnyDestroyed(ModuleType.Track)
+            if (control || noFuel || AllDestroyed(ModuleType.Engine) || AnyDestroyed(ModuleType.Transmission) || AnyDestroyed(ModuleType.Track)
                 || AnyDestroyed(ModuleType.Wheels) || AnyDestroyed(ModuleType.Rotor) || AnyDestroyed(ModuleType.TailRotor))
                 k |= KillState.Mobility;
 

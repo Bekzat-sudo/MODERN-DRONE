@@ -38,6 +38,8 @@ namespace ModernDrone.Damage
         public readonly List<Trace> traces = new List<Trace>();
         public readonly List<ModuleHit> hits = new List<ModuleHit>();
         public readonly Dictionary<VehicleDamageModel, KillState> stateBefore = new Dictionary<VehicleDamageModel, KillState>();
+        /// <summary>Where each vehicle's incident log stood when this strike reached it.</summary>
+        readonly Dictionary<VehicleDamageModel, int> logStart = new Dictionary<VehicleDamageModel, int>();
 
         /// <summary>Armor element that took the impact (first plate / block on the jet line).</summary>
         public ArmorElement impactElement;
@@ -58,14 +60,17 @@ namespace ModernDrone.Damage
             if (vehicle == null) return;
             vehicle.RegisterHit();
             if (!stateBefore.ContainsKey(vehicle))
+            {
                 stateBefore[vehicle] = vehicle.State;
+                logStart[vehicle] = vehicle.Log.Count;
+            }
         }
 
-        internal void AddHit(VehicleModule module, float damage)
+        internal void AddHit(VehicleModule module, float damage, HitKind kind)
         {
             Track(module.Owner);
             var before = module.State;
-            module.ApplyDamage(damage);
+            module.ApplyDamage(damage, kind);
             hits.Add(new ModuleHit { module = module, damage = damage, before = before, after = module.State });
         }
 
@@ -108,6 +113,15 @@ namespace ModernDrone.Damage
             foreach (var kv in seen)
                 if (kv.Value != ModuleState.Operational)
                     sb.Append("  ").Append(DamageNames.Ru(kv.Key.Type)).Append(" — ").Append(DamageNames.Ru(kv.Value)).AppendLine();
+
+            // Fires, leaks and explosions set off by this strike (the list grows while the vehicle burns).
+            foreach (var kv in logStart)
+            {
+                if (kv.Key == null) continue;
+                var log = kv.Key.Log;
+                for (int i = kv.Value; i < log.Count && i < kv.Value + 8; i++)
+                    sb.Append("  • ").Append(log[i]).AppendLine();
+            }
 
             return sb.ToString().TrimEnd();
         }

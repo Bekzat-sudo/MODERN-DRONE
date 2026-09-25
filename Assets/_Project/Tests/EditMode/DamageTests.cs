@@ -112,10 +112,13 @@ namespace ModernDrone.Tests
         [TearDown]
         public void TearDown() => Object.DestroyImmediate(_root);
 
-        VehicleModule Add(ModuleType type, float hp = 100f)
+        VehicleModule Add(ModuleType type, float hp = 100f) => Add(type, hp, Vector3.zero);
+
+        VehicleModule Add(ModuleType type, float hp, Vector3 pos)
         {
             var go = new GameObject(type.ToString());
             go.transform.SetParent(_root.transform);
+            go.transform.localPosition = pos;
             go.AddComponent<BoxCollider>();
             var m = go.AddComponent<VehicleModule>();
             m.Configure(type, hp, 10f);
@@ -191,6 +194,80 @@ namespace ModernDrone.Tests
             ammo.ApplyDamage(1000f);
             Assert.AreEqual(DestructionCause.AmmoDetonation, cause);
             Assert.AreNotEqual(KillState.None, _model.State & KillState.Destroyed);
+        }
+
+        [Test]
+        public void DieselTank_JetFlashesAndLeaks_UntilTheVehicleRunsDry()
+        {
+            var fuel = Add(ModuleType.FuelTank, 1000f);
+            _model.SetRandom(new FixedRandom(0.99)); // no sustained fire, but a jet always holes the tank
+            _model.Rebuild();
+            fuel.ApplyDamage(10f, HitKind.Jet);
+            Assert.IsFalse(_model.Burning);
+            Assert.IsTrue(fuel.Leaking);
+            Assert.IsTrue(System.Linq.Enumerable.Any(_model.Log, l => l.Contains("туман")));
+            for (int i = 0; i < 400; i++) _model.Tick(0.1f);
+            Assert.AreEqual(0f, fuel.Load);
+            Assert.AreEqual(KillState.Mobility, _model.State & KillState.Mobility);
+        }
+
+        [Test]
+        public void Fire_OnlyHurtsModulesItReaches()
+        {
+            var fuel = Add(ModuleType.FuelTank, 1000f, Vector3.zero);
+            var near = Add(ModuleType.Optics, 100f, new Vector3(1f, 0f, 0f));
+            var far = Add(ModuleType.Optics, 100f, new Vector3(10f, 0f, 0f));
+            _model.SetRandom(new FixedRandom(0.99));
+            _model.Rebuild();
+            Physics.SyncTransforms();
+            _model.Ignite(fuel);
+            for (int i = 0; i < 50; i++) _model.Tick(0.1f);
+            Assert.Less(near.Hp, near.MaxHp);
+            Assert.AreEqual(far.MaxHp, far.Hp);
+        }
+
+        [Test]
+        public void Suppression_PutsOutFuelFire_ButNotPropellant()
+        {
+            var fuel = Add(ModuleType.FuelTank, 1000f, Vector3.zero);
+            var ammo = Add(ModuleType.AmmoRack, 1000f, new Vector3(20f, 0f, 0f));
+            _model.SetFireSuppression(2, 0);
+            _model.SetAmmoConfinement(0f);
+            _model.SetRandom(new FixedRandom(0.5)); // below the 0.85 suppression chance
+            _model.Rebuild();
+            _model.Ignite(fuel);
+            Assert.IsFalse(fuel.OnFire);
+            _model.Ignite(ammo);
+            Assert.IsTrue(ammo.OnFire);
+        }
+
+        [Test]
+        public void PropellantFire_CooksOffTheShells()
+        {
+            var ammo = Add(ModuleType.AmmoRack, 1e6f);
+            _model.SetAmmoConfinement(0f); // no immediate blast: burns, then the high explosive cooks off
+            _model.SetRandom(new FixedRandom(0.99));
+            _model.Rebuild();
+            DestructionCause cause = DestructionCause.None;
+            _model.Destroyed += (_, c) => cause = c;
+            _model.Ignite(ammo);
+            for (int i = 0; i < 200 && cause == DestructionCause.None; i++) _model.Tick(0.1f);
+            Assert.AreEqual(DestructionCause.AmmoDetonation, cause);
+        }
+
+        [Test]
+        public void LeakedFuel_CatchesFromANearbyFire()
+        {
+            var tank = Add(ModuleType.FuelTank, 1e6f, Vector3.zero);
+            var oil = Add(ModuleType.Engine, 1e6f, new Vector3(0.5f, 0f, 0f));
+            _model.SetRandom(new FixedRandom(0.99));
+            _model.Rebuild();
+            Physics.SyncTransforms();
+            tank.ApplyDamage(1f, HitKind.Jet); // leaks, no fire
+            for (int i = 0; i < 20; i++) _model.Tick(0.1f);
+            _model.Ignite(oil);
+            _model.Tick(0.1f);
+            Assert.IsTrue(System.Linq.Enumerable.Any(_model.Fires, f => f.IsPool && !f.Out));
         }
 
         [Test]

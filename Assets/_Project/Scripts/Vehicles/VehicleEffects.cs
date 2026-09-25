@@ -17,6 +17,9 @@ namespace ModernDrone.Vehicles
 
         VehicleDamageModel _model;
         GameObject _fire;
+        readonly System.Collections.Generic.Dictionary<VehicleFire, GameObject> _fires = new System.Collections.Generic.Dictionary<VehicleFire, GameObject>();
+        Transform _spill;
+        static Material _spillMat;
 
         void Awake()
         {
@@ -27,6 +30,9 @@ namespace ModernDrone.Vehicles
         void OnEnable()
         {
             _model.FireStarted += OnFireStarted;
+            _model.FireEnded += OnFireEnded;
+            _model.LeakStarted += OnLeak;
+            _model.Flash += OnFlash;
             _model.Destroyed += OnDestroyed;
             _model.FirstStruck += OnFirstStruck;
         }
@@ -34,6 +40,9 @@ namespace ModernDrone.Vehicles
         void OnDisable()
         {
             _model.FireStarted -= OnFireStarted;
+            _model.FireEnded -= OnFireEnded;
+            _model.LeakStarted -= OnLeak;
+            _model.Flash -= OnFlash;
             _model.Destroyed -= OnDestroyed;
             _model.FirstStruck -= OnFirstStruck;
         }
@@ -58,10 +67,50 @@ namespace ModernDrone.Vehicles
             }
         }
 
-        void OnFireStarted(VehicleDamageModel model, VehicleModule origin)
+        void OnFireStarted(VehicleDamageModel model, VehicleFire fire)
         {
-            Vector3 pos = origin != null ? origin.transform.position : transform.position + Vector3.up;
-            _fire = SimpleVfx.Fire(transform, pos + Vector3.up * 0.8f, 1f);
+            // Propellant burns as a jet of flame out of the hatches; a fuel pool as a wide, low fire.
+            float size = fire.IsPool ? Mathf.Clamp(fire.Radius * 0.5f, 0.8f, 2f) : Mathf.Clamp(fire.Intensity, 0.7f, 2.2f);
+            Vector3 pos = fire.IsPool ? fire.Position : fire.Position + Vector3.up * 0.8f;
+            var go = SimpleVfx.Fire(transform, pos, size);
+            _fires[fire] = go;
+            if (_fire == null) _fire = go;
+        }
+
+        void OnFireEnded(VehicleDamageModel model, VehicleFire fire)
+        {
+            // Flames die down, the smoke keeps rising.
+            if (!_fires.TryGetValue(fire, out var go) || go == null) return;
+            var flames = go.transform.Find("Flames");
+            if (flames != null) flames.GetComponent<ParticleSystem>().Stop();
+        }
+
+        void OnFlash(VehicleDamageModel model, Vector3 at, float size) => SimpleVfx.Explosion(at, size * 0.6f);
+
+        /// <summary>Dark stain of leaked fuel spreading under the vehicle.</summary>
+        void OnLeak(VehicleDamageModel model, VehicleModule tank)
+        {
+            if (_spill != null) return;
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            go.name = "FuelSpill";
+            Object.Destroy(go.GetComponent<Collider>());
+            if (_spillMat == null)
+            {
+                _spillMat = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+                _spillMat.SetColor(BaseColor, new Color(0.05f, 0.045f, 0.04f));
+            }
+            go.GetComponent<Renderer>().sharedMaterial = _spillMat;
+            go.transform.SetParent(transform, false);
+            go.transform.localPosition = new Vector3(0f, 0.03f, 0f);
+            go.transform.localScale = Vector3.zero;
+            _spill = go.transform;
+        }
+
+        void Update()
+        {
+            if (_spill == null) return;
+            float d = 5f * Mathf.Sqrt(_model.TotalSpilled);
+            _spill.localScale = new Vector3(d, 0.005f, d);
         }
 
         void OnDestroyed(VehicleDamageModel model, DestructionCause cause)
@@ -75,15 +124,14 @@ namespace ModernDrone.Vehicles
                 if (_fire == null)
                     _fire = SimpleVfx.Fire(transform, transform.position + Vector3.up * 1.5f, 1.4f);
             }
-            else if (cause == DestructionCause.Crashed && _fire == null)
-            {
-                _fire = SimpleVfx.Fire(transform, transform.position + Vector3.up * 1.5f, 1.4f);
-            }
-            else if (cause == DestructionCause.BurnedOut && _fire != null)
+            else if (cause == DestructionCause.BurnedOut)
             {
                 // Flames die down, smoke remains.
-                var flames = _fire.transform.Find("Flames");
-                if (flames != null) flames.GetComponent<ParticleSystem>().Stop();
+                foreach (var go in _fires.Values)
+                {
+                    var flames = go != null ? go.transform.Find("Flames") : null;
+                    if (flames != null) flames.GetComponent<ParticleSystem>().Stop();
+                }
             }
         }
 

@@ -38,6 +38,7 @@ namespace ModernDrone.Editor
             c.summary = "лёгкий и манёвренный, малая нагрузка";
             c.visualPrefab = DroneRigBuilder.VisualPrefab(DroneRigBuilder.Model.Fpv7);
             c.cameraPosition = new Vector3(0f, -0.003f, 0.095f);
+            c.cameraTilt = 8f; // lens face normal measured on the model: 7.6 deg up
             c.motorDiagonal = 0.3f;
             c.colliderSize = new Vector3(0.3f, 0.08f, 0.3f);
         }
@@ -67,7 +68,7 @@ namespace ModernDrone.Editor
             c.capacityMah = 6000f;
             c.internalResistance = 0.04f;
             c.maxCurrentPerMotor = 60f;
-            c.cameraTilt = 20f;
+            c.cameraTilt = 0f; // the model's lens looks straight ahead, so the warhead nose and fuze wires show at the bottom
         }
     }
 }

@@ -74,7 +74,8 @@ namespace ModernDrone.Drone
         public float angleMaxRate = 400f;
 
         [Header("Camera")]
-        [Range(0f, 60f)] public float cameraTilt = 25f;
+        [Tooltip("Stock camera uptilt of this model (its lens as mounted), deg. The pilot setting adds an offset to it.")]
+        [Range(0f, 60f)] public float cameraTilt = 8f;
         [Range(60f, 160f)] public float cameraHorizontalFov = 118f;
 
         [Header("Damage")]

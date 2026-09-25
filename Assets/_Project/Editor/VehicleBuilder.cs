@@ -102,6 +102,8 @@ namespace ModernDrone.Editor
 
             var model = root.AddComponent<VehicleDamageModel>();
             model.SetDisplayName("Танк Т-72Б3");
+            // 3ETs13 "Iney": 2 fast Halon 1301 bottles for the crew compartment, 2 for the engine bay (Tankograd, T-72 Firefighting Systems).
+            model.SetFireSuppression(2, 2);
             var fx = root.AddComponent<VehicleEffects>();
             var so = new SerializedObject(fx);
             so.FindProperty("turret").objectReferenceValue = turret;
@@ -151,7 +153,8 @@ namespace ModernDrone.Editor
             Module("Module_Engine", t, ModuleType.Engine, 120f, 30f, new Vector3(0f, 1.3f, 3.0f), new Vector3(1.4f, 0.6f, 1.0f));
             Module("Module_ControlStation", t, ModuleType.ControlStation, 60f, 10f, new Vector3(0f, 1.9f, 2.6f), new Vector3(1.8f, 0.9f, 1.0f));
             Module("Module_Fuel", t, ModuleType.FuelTank, 60f, 10f, new Vector3(1.0f, 0.85f, 0.8f), new Vector3(0.5f, 0.5f, 1.2f));
-            Module("Module_Generator", t, ModuleType.Generator, 80f, 25f, new Vector3(0f, 1.8f, -2.5f), new Vector3(1.4f, 1.1f, 1.2f), visible: true);
+            Module("Module_Generator", t, ModuleType.Generator, 80f, 25f, new Vector3(0f, 1.8f, -2.5f), new Vector3(1.4f, 1.1f, 1.2f), visible: true)
+                .GetComponent<VehicleModule>().SetContents(Combustible.Diesel, fill: 0.3f);
             Module("Module_Electronics", t, ModuleType.ControlStation, 60f, 10f, new Vector3(0f, 2.2f, -0.4f), new Vector3(2.0f, 1.4f, 1.6f));
 
             // Mast with two antenna panels: exposed, lightly built.
@@ -187,7 +190,7 @@ namespace ModernDrone.Editor
             go.AddComponent<ArmorElement>().Configure(ArmorKind.Reactive, 0.5f);
         }
 
-        static void Module(string name, Transform parent, ModuleType type, float hp, float absorb, Vector3 pos, Vector3 size, bool visible = false)
+        static GameObject Module(string name, Transform parent, ModuleType type, float hp, float absorb, Vector3 pos, Vector3 size, bool visible = false)
         {
             // When parented to a scaled box (track, barrel) the size is relative to that box.
             GameObject go;
@@ -205,6 +208,7 @@ namespace ModernDrone.Editor
             }
             go.layer = GameLayers.Module;
             go.AddComponent<VehicleModule>().Configure(type, hp, absorb);
+            return go;
         }
 
         static GameObject Box(string name, Transform parent, Material mat, int layer, Vector3 pos, Vector3 size, Quaternion? rot = null)
