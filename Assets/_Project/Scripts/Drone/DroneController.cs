@@ -154,18 +154,21 @@ namespace ModernDrone.Drone
         {
             var visual = transform.Find("Visual");
             if (visual == null || config.visualPrefab == null) return;
-            if (visual.childCount != 1 || visual.GetChild(0).name != config.visualPrefab.name)
+            Transform model = visual.childCount == 1 && visual.GetChild(0).name == config.visualPrefab.name ? visual.GetChild(0) : null;
+            if (model == null)
             {
+                // Detach before destroying: Destroy is deferred to the end of the frame, and the old model's props
+                // (same names) must not be found below.
                 for (int i = visual.childCount - 1; i >= 0; i--)
                 {
-                    var child = visual.GetChild(i).gameObject;
-                    child.SetActive(false);
-                    if (Application.isPlaying) Destroy(child); else DestroyImmediate(child);
+                    var child = visual.GetChild(i);
+                    child.SetParent(null, false);
+                    if (Application.isPlaying) Destroy(child.gameObject); else DestroyImmediate(child.gameObject);
                 }
-                var model = Instantiate(config.visualPrefab, visual, false);
+                model = Instantiate(config.visualPrefab, visual, false).transform;
                 model.name = config.visualPrefab.name;
             }
-            var parts = visual.GetComponentsInChildren<Transform>(true);
+            var parts = model.GetComponentsInChildren<Transform>(true);
             var props = GetComponent<PropVisuals>();
             if (props != null) props.SetProps(System.Array.ConvertAll(PropNames, n => System.Array.Find(parts, t => t.name == n)));
             var cam = GetComponentInChildren<DroneCamera>(true);
