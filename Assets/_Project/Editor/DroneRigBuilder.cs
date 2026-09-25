@@ -40,6 +40,7 @@ namespace ModernDrone.Editor
             camGo.transform.SetParent(root.transform, false);
             camGo.transform.localPosition = config.cameraPosition; // at the model's FPV camera lens
             var cam = camGo.AddComponent<Camera>();
+            UnityEngine.Rendering.Universal.CameraExtensions.GetUniversalAdditionalCameraData(cam).renderPostProcessing = true;
             cam.nearClipPlane = 0.03f;
             cam.farClipPlane = 3000f;
             camGo.AddComponent<AudioListener>();

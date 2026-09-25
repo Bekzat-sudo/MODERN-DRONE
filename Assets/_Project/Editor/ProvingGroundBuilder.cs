@@ -71,12 +71,11 @@ namespace ModernDrone.Editor
             }
             data.SetHeights(0, 0, heights);
 
-            // Procedural grass / dry grass / dirt layers mixed by noise patches and slope.
-            data.alphamapResolution = 512;
+            // Photoscanned grass / dry grass / mud / forest floor / rock, ~1 m per splat texel.
+            data.alphamapResolution = 2048;
             AssetDatabase.CreateAsset(data, terrainDataPath);
-            data.terrainLayers = TerrainTextures.LoadOrCreateLayers();
-            TerrainTextures.Paint(data, 7);
-            AssetDatabase.SaveAssets();
+            data.terrainLayers = WorldBuilder.Layers();
+            WorldBuilder.Paint(data, 7);
 
             var go = Terrain.CreateTerrainGameObject(data);
             go.name = "Terrain";
@@ -85,27 +84,15 @@ namespace ModernDrone.Editor
             var terrain = go.GetComponent<Terrain>();
             if (GraphicsSettings.currentRenderPipeline != null)
                 terrain.materialTemplate = GraphicsSettings.currentRenderPipeline.defaultTerrainMaterial;
+            WorldBuilder.Vegetate(terrain, 11);
+            AssetDatabase.SaveAssets();
             return terrain;
         }
 
         internal static void CreateLighting()
         {
-            var sun = new GameObject("Sun").AddComponent<Light>();
-            sun.type = LightType.Directional;
-            sun.intensity = 1.3f;
-            sun.shadows = LightShadows.Soft;
-            sun.color = new Color(1f, 0.96f, 0.88f);
-            sun.transform.rotation = Quaternion.Euler(38f, -35f, 0f);
-            RenderSettings.sun = sun;
-
-            RenderSettings.fog = true;
-            RenderSettings.fogMode = FogMode.ExponentialSquared;
-            RenderSettings.fogColor = new Color(0.66f, 0.70f, 0.74f);
-            RenderSettings.fogDensity = 0.0009f; // haze: ~50% visibility loss at 1 km
-            RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.62f, 0.68f, 0.78f);
-            RenderSettings.ambientEquatorColor = new Color(0.50f, 0.52f, 0.48f);
-            RenderSettings.ambientGroundColor = new Color(0.25f, 0.24f, 0.20f);
+            WorldBuilder.ConfigurePipeline();
+            WorldBuilder.CreateLighting();
         }
 
         /// <summary>Windbreak tree lines along field edges: the main cover in steppe terrain.</summary>
@@ -114,8 +101,7 @@ namespace ModernDrone.Editor
             var root = new GameObject("TreeLines");
             var mat = GetMaterial("TreeLine", new Color(0.18f, 0.26f, 0.12f));
             var rng = new System.Random(42);
-            float[] rows = { 350f, 700f, 1300f, 1650f };
-            foreach (float z in rows)
+            foreach (float z in WorldBuilder.TreeRows)
             {
                 for (float x = 100f; x < Size - 100f; x += 6f)
                 {
@@ -128,6 +114,7 @@ namespace ModernDrone.Editor
                     tree.transform.SetPositionAndRotation(p, Quaternion.Euler(0f, (float)rng.NextDouble() * 360f, 0f));
                     tree.transform.localScale = new Vector3(w, h, w);
                     tree.isStatic = true;
+                    // ponytail: box canopy until tree models arrive (Quaternius CC0 pack); bushes grow underneath.
                 }
             }
         }
@@ -172,6 +159,10 @@ namespace ModernDrone.Editor
             if (name != null) go.name = name;
             pos.y = terrain.SampleHeight(pos);
             go.transform.SetPositionAndRotation(pos, Quaternion.Euler(0f, yaw, 0f));
+            // No bushes or grass growing through the vehicle.
+            var bounds = new Bounds(pos, Vector3.zero);
+            foreach (var r in go.GetComponentsInChildren<Renderer>()) bounds.Encapsulate(r.bounds);
+            WorldBuilder.ClearAround(terrain, pos, Mathf.Max(bounds.extents.x, bounds.extents.z) + 2f);
             return go;
         }
 
@@ -192,34 +183,8 @@ namespace ModernDrone.Editor
         }
 
         /// <summary>Dirt road strip following the terrain along the given points (visual only, no collider).</summary>
-        internal static void CreateRoad(Terrain terrain, Vector3[] points)
-        {
-            var root = new GameObject("Road");
-            var mat = GetMaterial("Dirt", new Color(0.36f, 0.31f, 0.22f));
-            const float step = 8f;
-            for (int i = 1; i < points.Length; i++)
-            {
-                Vector3 a = points[i - 1], b = points[i];
-                Vector3 flat = new Vector3(b.x - a.x, 0f, b.z - a.z);
-                int n = Mathf.CeilToInt(flat.magnitude / step);
-                for (int k = 0; k < n; k++)
-                {
-                    Vector3 p0 = Vector3.Lerp(a, b, k / (float)n), p1 = Vector3.Lerp(a, b, (k + 1) / (float)n);
-                    Vector3 mid = (p0 + p1) * 0.5f;
-                    mid.y = terrain.SampleHeight(mid) + 0.03f;
-                    float h0 = terrain.SampleHeight(p0), h1 = terrain.SampleHeight(p1);
-                    Vector3 dir = new Vector3(p1.x - p0.x, h1 - h0, p1.z - p0.z);
-                    var seg = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    Object.DestroyImmediate(seg.GetComponent<Collider>());
-                    seg.name = "RoadSegment";
-                    seg.transform.SetParent(root.transform);
-                    seg.transform.SetPositionAndRotation(mid, Quaternion.LookRotation(dir));
-                    seg.transform.localScale = new Vector3(5f, 0.05f, dir.magnitude + 0.5f);
-                    seg.GetComponent<Renderer>().sharedMaterial = mat;
-                    seg.isStatic = true;
-                }
-            }
-        }
+        /// <summary>Dirt road painted into the terrain along the given points.</summary>
+        internal static void CreateRoad(Terrain terrain, Vector3[] points) => WorldBuilder.PaintRoad(terrain, points, 5f);
 
         internal static GameObject PlaceTank(Terrain terrain, Vector3 pos, float yaw, string name)
         {
