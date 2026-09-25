@@ -66,6 +66,8 @@ namespace ModernDrone.Editor
             MissionSceneBuilder.BuildMission02();
             MissionSceneBuilder.BuildMission03();
             MissionSceneBuilder.BuildMission04();
+            MissionSceneBuilder.BuildMission05();
+            MissionSceneBuilder.BuildMission06();
             Build();
             EditorSceneManager.OpenScene(ScenePath);
         }

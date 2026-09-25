@@ -25,6 +25,8 @@ namespace ModernDrone.Editor
         public const string Mlrs = Dir + "MLRS_Placeholder.prefab";
         public const string Truck = Dir + "Truck_Placeholder.prefab";
         public const string DecoyTank = Dir + "Decoy_Tank.prefab";
+        public const string DecoyMlrs = Dir + "Decoy_MLRS.prefab";
+        public const string DecoySpaag = Dir + "Decoy_SPAAG.prefab";
         public const string TankCage = Dir + "Tank_Cage.prefab";
         public const string InterceptorSite = Dir + "InterceptorSite_Placeholder.prefab";
 
@@ -43,6 +45,8 @@ namespace ModernDrone.Editor
             BuildMlrs();
             BuildTruck();
             BuildDecoyTank();
+            BuildDecoyMlrs();
+            BuildDecoySpaag();
             BuildTankWithCage();
             BuildInterceptorSite();
             Debug.Log("[ModernDrone] Vehicle catalog built.");
@@ -346,6 +350,31 @@ namespace ModernDrone.Editor
             k.Plate("Gun", v(0, 1.95f, 3.4f), v(0.26f, 0.26f, 4.0f), 1f, body);
             k.Finish("Танк", decoy: true);
             k.Save(DecoyTank);
+        }
+
+        /// <summary>Inflatable MLRS decoy: truck-and-pod silhouette, slightly glossy, rounded proportions, no internals.</summary>
+        static void BuildDecoyMlrs()
+        {
+            var k = new VehicleKit("Decoy_MLRS", new Color(0.31f, 0.36f, 0.23f), "DecoyFabric", 0.55f);
+            var body = k.Group("Body", Vector3.zero, rot: Quaternion.Euler(0f, 0f, -1f));
+            k.Plate("Chassis", v(0, 0.9f, 0), v(2.4f, 0.6f, 8.0f), 1f, body, mat: k.Dark);
+            k.Plate("Cab", v(0, 1.9f, 3.1f), v(2.5f, 1.8f, 1.8f), 1f, body);
+            k.Plate("Pod", v(0, 2.3f, -2.0f), v(2.1f, 1.2f, 3.2f), 1f, body, Quaternion.Euler(-12f, 0f, 0f));
+            k.Finish("РСЗО", decoy: true);
+            k.Save(DecoyMlrs);
+        }
+
+        /// <summary>Inflatable SPAAG decoy: combat module and radar panel on a truck, no internals.</summary>
+        static void BuildDecoySpaag()
+        {
+            var k = new VehicleKit("Decoy_SPAAG", new Color(0.31f, 0.36f, 0.23f), "DecoyFabric", 0.55f);
+            var body = k.Group("Body", Vector3.zero, rot: Quaternion.Euler(0f, 0f, 1f));
+            k.Plate("Chassis", v(0, 0.9f, 0), v(2.4f, 0.6f, 9.0f), 1f, body, mat: k.Dark);
+            k.Plate("Cab", v(0, 1.9f, 3.6f), v(2.5f, 1.8f, 1.8f), 1f, body);
+            k.Plate("Module", v(0, 2.5f, -1.8f), v(2.6f, 2.0f, 3.2f), 1f, body);
+            k.Plate("Radar", v(0, 4.4f, -2.2f), v(2.0f, 1.0f, 0.2f), 1f, body, mat: k.Metal);
+            k.Finish("ЗРПК", decoy: true);
+            k.Save(DecoySpaag);
         }
 
         /// <summary>Main battle tank with anti-drone cages over the turret roof and engine deck.</summary>

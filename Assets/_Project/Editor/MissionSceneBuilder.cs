@@ -175,6 +175,64 @@ namespace ModernDrone.Editor
             Debug.Log($"[ModernDrone] Mission scene built: {Scene04Path}");
         }
 
+
+        const string Briefing05 =
+            "За второй лесополосой, в ~800 м к северу, развернута позиция ЗРК: РЛС, две пусковые и прикрывающий их ЗРПК.\n\n" +
+            "Подход глушит станция РЭБ, над позицией дежурит расчёт дронов-перехватчиков. " +
+            "Оптоволокно не глушится, но катушки хватит только на прямой маршрут.\n\n" +
+            "Задача: вывести из строя 3 цели из 5 (РЛС и РЭБ — подавить, пусковые и ЗРПК — вывести из строя).";
+
+        [MenuItem("Modern Drone/Setup/Build Mission 05 Scene")]
+        public static void BuildMission05()
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var terrain = ProvingGroundBuilder.CreateTerrain("Assets/_Project/Scenes/Mission_05_Terrain.asset");
+            ProvingGroundBuilder.CreateLighting();
+            ProvingGroundBuilder.CreateTreeLines(terrain);
+            ProvingGroundBuilder.CreateSpawn(terrain);
+
+            TargetAt(terrain, VehicleCatalog.SamRadar, new Vector3(1000f, 0f, 1760f), 180f, "РЛС ЗРК", TargetRequirement.Silenced);
+            TargetAt(terrain, VehicleCatalog.SamLauncher, new Vector3(960f, 0f, 1790f), 170f, "Пусковая №1", TargetRequirement.OutOfAction);
+            TargetAt(terrain, VehicleCatalog.SamLauncher, new Vector3(1045f, 0f, 1795f), 190f, "Пусковая №2", TargetRequirement.OutOfAction);
+            TargetAt(terrain, VehicleCatalog.Spaag, new Vector3(1010f, 0f, 1720f), 180f, "ЗРПК", TargetRequirement.OutOfAction);
+            TargetAt(terrain, VehicleBuilder.EwStationPrefabPath, new Vector3(930f, 0f, 1700f), 90f, "Станция РЭБ", TargetRequirement.Silenced);
+            ProvingGroundBuilder.PlacePrefab(terrain, VehicleCatalog.InterceptorSite, new Vector3(1090f, 0f, 1740f), 200f, "Расчёт перехватчиков");
+
+            var mission = ProvingGroundBuilder.CreateMissionRig("Задача 5: Позиция ЗРК", Briefing05, 3, 3);
+            mission.SetRequiredTargets(3);
+            EditorSceneManager.SaveScene(scene, "Assets/_Project/Scenes/Mission_05.unity");
+            ProvingGroundBuilder.AddToBuildSettings("Assets/_Project/Scenes/Mission_05.unity", 5);
+        }
+
+        const string Briefing06 =
+            "Вдоль лесополосы в ~330 м к северу стоит техника: разведка насчитала восемь машин, но большинство — надувные макеты.\n\n" +
+            "Настоящих три: САУ, РСЗО и грузовик. Макеты блестят, у них упрощённые формы и лёгкий крен; настоящая техника отстреливается вблизи.\n\n" +
+            "Задача: вывести из строя все три настоящие машины. Каждый удар по макету — потерянный дрон.";
+
+        [MenuItem("Modern Drone/Setup/Build Mission 06 Scene")]
+        public static void BuildMission06()
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var terrain = ProvingGroundBuilder.CreateTerrain("Assets/_Project/Scenes/Mission_06_Terrain.asset");
+            ProvingGroundBuilder.CreateLighting();
+            ProvingGroundBuilder.CreateTreeLines(terrain);
+            ProvingGroundBuilder.CreateSpawn(terrain);
+
+            TargetAt(terrain, VehicleCatalog.Spg, new Vector3(870f, 0f, 1287f), 250f, "САУ", TargetRequirement.OutOfAction);
+            TargetAt(terrain, VehicleCatalog.Mlrs, new Vector3(1130f, 0f, 1288f), 100f, "РСЗО", TargetRequirement.OutOfAction);
+            TargetAt(terrain, VehicleCatalog.Truck, new Vector3(1210f, 0f, 1290f), 90f, "Грузовик", TargetRequirement.OutOfAction);
+            (string prefab, float x, float yaw)[] decoys =
+            {
+                (VehicleCatalog.DecoyTank, 820f, 90f), (VehicleCatalog.DecoyMlrs, 960f, 260f), (VehicleCatalog.DecoySpaag, 1040f, 80f),
+                (VehicleCatalog.DecoyTank, 1280f, 280f), (VehicleCatalog.DecoyMlrs, 760f, 100f)
+            };
+            foreach (var (prefab, x, yaw) in decoys)
+                ProvingGroundBuilder.PlacePrefab(terrain, prefab, new Vector3(x, 0f, 1288f), yaw);
+
+            ProvingGroundBuilder.CreateMissionRig("Задача 6: Ложные цели", Briefing06, 5);
+            EditorSceneManager.SaveScene(scene, "Assets/_Project/Scenes/Mission_06.unity");
+            ProvingGroundBuilder.AddToBuildSettings("Assets/_Project/Scenes/Mission_06.unity", 6);
+        }
         static void Target(Terrain terrain, Vector3 pos, float yaw, string label)
         {
             var tank = ProvingGroundBuilder.PlaceTank(terrain, pos, yaw, label);
