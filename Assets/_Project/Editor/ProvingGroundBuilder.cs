@@ -296,6 +296,7 @@ namespace ModernDrone.Editor
                 WarheadAssets.Load(WarheadAssets.TandemPath),
                 WarheadAssets.Load(WarheadAssets.FragmentationPath)
             });
+            mission.SetDroneClasses(DroneClasses.LoadAll());
             mission.gameObject.AddComponent<ModernDrone.UI.PauseMenu>();
             return mission;
         }

@@ -10,14 +10,16 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6b8669d5ef89d794faf1dc41d25281d1, type: 3}
-  m_Name: FPV_Default
+  m_Name: FPV_7in
   m_EditorClassIdentifier: ModernDrone.Drone::ModernDrone.Drone.DroneConfig
-  frameMass: 0.8
-  payloadMass: 0.6
+  displayName: "FPV 7\" (\u043E\u0441\u043D\u043E\u0432\u043D\u043E\u0439)"
+  summary: "\u0431\u0430\u043B\u0430\u043D\u0441 \u0441\u043A\u043E\u0440\u043E\u0441\u0442\u0438, \u0434\u0430\u043B\u044C\u043D\u043E\u0441\u0442\u0438 \u0438 \u043D\u0430\u0433\u0440\u0443\u0437\u043A\u0438"
+  frameMass: 0.9
+  payloadMass: 0.5
   motorDiagonal: 0.3
-  inertia: {x: 0.025, y: 0.045, z: 0.025}
+  inertia: {x: 0.009, y: 0.016, z: 0.009}
   colliderSize: {x: 0.3, y: 0.08, z: 0.3}
-  thrustToWeight: 4
+  thrustToWeight: 5
   motorTauUp: 0.03
   motorTauDown: 0.045
   yawTorqueCoefficient: 0.016
@@ -29,17 +31,18 @@ MonoBehaviour:
   internalResistance: 0.05
   maxCurrentPerMotor: 35
   rollRates:
-    rcRate: 1
-    superRate: 0.7
-    expo: 0
+    centerRate: 100
+    maxRate: 650
+    expo: 0.6
   pitchRates:
-    rcRate: 1
-    superRate: 0.7
-    expo: 0
+    centerRate: 100
+    maxRate: 650
+    expo: 0.6
   yawRates:
-    rcRate: 1
-    superRate: 0.5
-    expo: 0
+    centerRate: 100
+    maxRate: 500
+    expo: 0.5
+  setpointCutoffHz: 12
   pitchPid:
     kp: 18
     ki: 6

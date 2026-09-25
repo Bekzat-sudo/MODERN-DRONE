@@ -133,6 +133,12 @@ namespace ModernDrone.Drone
             _rb.inertiaTensorRotation = Quaternion.identity;
             _rb.inertiaTensor = config.inertia;
 
+            // Placeholder visual and collider follow the frame size (prefab visual is built for a 0.3 m diagonal).
+            var col = GetComponent<BoxCollider>();
+            if (col != null) col.size = config.colliderSize;
+            var visual = transform.Find("Visual");
+            if (visual != null) visual.localScale = Vector3.one * (config.motorDiagonal / 0.3f);
+
             _fc = new FlightController(config);
             _battery = new BatteryModel(config.cells, config.capacityMah, config.internalResistance);
             _homePosition = transform.position;

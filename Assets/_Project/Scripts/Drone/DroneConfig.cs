@@ -9,20 +9,29 @@ namespace ModernDrone.Drone
     [CreateAssetMenu(menuName = "Modern Drone/Drone Config", fileName = "DroneConfig")]
     public sealed class DroneConfig : ScriptableObject
     {
+        [Header("Class")]
+        public string displayName = "FPV 7\"";
+        [TextArea] public string summary = "";
+
+        // Defaults describe a 7" long-range class quad. Airframe figures follow public hobby data
+        // (AUW, thrust-to-weight classes: unmannedtechshop.co.uk TWR guide, oscarliang.com 7" reviews);
+        // payloadMass is an abstract gameplay value.
         [Header("Mass")]
-        [Min(0.1f)] public float frameMass = 0.8f;
-        [Min(0f)] public float payloadMass = 0.6f;
+        [Tooltip("Airframe + battery (all-up weight without payload), kg.")]
+        [Min(0.1f)] public float frameMass = 0.9f;
+        [Tooltip("Abstract gameplay payload mass, kg.")]
+        [Min(0f)] public float payloadMass = 0.5f;
 
         [Header("Geometry & inertia")]
         [Tooltip("Motor-to-motor diagonal distance, m.")]
         [Min(0.05f)] public float motorDiagonal = 0.3f;
         [Tooltip("Principal moments of inertia (pitch, yaw, roll), kg*m^2.")]
-        public Vector3 inertia = new Vector3(0.025f, 0.045f, 0.025f);
+        public Vector3 inertia = new Vector3(0.009f, 0.016f, 0.009f);
         public Vector3 colliderSize = new Vector3(0.3f, 0.08f, 0.3f);
 
         [Header("Propulsion")]
         [Tooltip("Thrust-to-weight ratio at full throttle and full battery.")]
-        [Min(1.1f)] public float thrustToWeight = 4f;
+        [Min(1.1f)] public float thrustToWeight = 5f;
         [Tooltip("Motor spool-up / spool-down time constants, s.")]
         public float motorTauUp = 0.03f;
         public float motorTauDown = 0.045f;

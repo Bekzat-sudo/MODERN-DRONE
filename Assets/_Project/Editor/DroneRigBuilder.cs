@@ -14,18 +14,12 @@ namespace ModernDrone.Editor
     public static class DroneRigBuilder
     {
         public const string PrefabPath = "Assets/_Project/Prefabs/Drones/FPV_Default.prefab";
-        const string ConfigPath = "Assets/_Project/Data/Drones/FPV_Default.asset";
         const string MatDir = "Assets/_Project/Art/Materials";
 
         [MenuItem("Modern Drone/Setup/Build Drone Prefab")]
         public static GameObject BuildPrefab()
         {
-            var config = AssetDatabase.LoadAssetAtPath<DroneConfig>(ConfigPath);
-            if (config == null)
-            {
-                config = ScriptableObject.CreateInstance<DroneConfig>();
-                AssetDatabase.CreateAsset(config, ConfigPath);
-            }
+            var config = DroneClasses.Load(DroneClasses.Standard);
 
             var root = new GameObject("FPV_Default");
             root.layer = GameLayers.Drone;

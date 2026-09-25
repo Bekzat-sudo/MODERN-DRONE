@@ -35,6 +35,8 @@ namespace ModernDrone.Missions
         [SerializeField] int fiberSorties;
         [Tooltip("Warheads the pilot can choose from before each sortie (first = default).")]
         [SerializeField] WarheadData[] warheads = new WarheadData[0];
+        [Tooltip("Drone classes the pilot can choose from (index 1 = default when present).")]
+        [SerializeField] DroneConfig[] droneClasses = new DroneConfig[0];
         [Tooltip("Targets that must be neutralized; 0 = all.")]
         [SerializeField] int requiredTargets;
         [SerializeField] DroneController drone;
@@ -70,6 +72,8 @@ namespace ModernDrone.Missions
         public void SetWarheads(WarheadData[] options) => warheads = options ?? new WarheadData[0];
 
         public void SetRequiredTargets(int count) => requiredTargets = count;
+
+        public void SetDroneClasses(DroneConfig[] classes) => droneClasses = classes ?? new DroneConfig[0];
 
         int Required => requiredTargets > 0 ? Mathf.Min(requiredTargets, _targets.Count) : _targets.Count;
 
@@ -171,21 +175,30 @@ namespace ModernDrone.Missions
             StartCoroutine(DelayThen(droneLostDelay, EndSortie));
         }
 
-        /// <summary>Picks the next drone: asks the pilot when both types are left.</summary>
-        bool ChooseLink => !FreeFlight && _radioLeft > 0 && _fiberLeft > 0;
-        bool ChooseWarhead => warheads.Length > 1;
+        enum LoadoutRow { Drone, Link, Warhead }
 
+        readonly List<LoadoutRow> _loadoutRows = new List<LoadoutRow>();
+        int _droneChoice = -1;
+
+        bool ChooseLink => !FreeFlight && _radioLeft > 0 && _fiberLeft > 0;
+
+        /// <summary>Picks the next drone: asks the pilot when there is anything to choose.</summary>
         void PrepareSortie()
         {
             _choice = FreeFlight || _radioLeft > 0 ? LinkType.Radio : LinkType.Fiber;
-            if (ChooseLink || ChooseWarhead)
+            if (_droneChoice < 0) _droneChoice = Mathf.Clamp(1, 0, Mathf.Max(0, droneClasses.Length - 1));
+            _loadoutRows.Clear();
+            if (droneClasses.Length > 1) _loadoutRows.Add(LoadoutRow.Drone);
+            if (ChooseLink) _loadoutRows.Add(LoadoutRow.Link);
+            if (warheads.Length > 1) _loadoutRows.Add(LoadoutRow.Warhead);
+            if (_loadoutRows.Count == 0)
             {
-                Phase = MissionPhase.Loadout;
-                _input.Suspended = true;
-                _loadoutRow = ChooseLink ? 0 : 1;
+                LaunchSortie(_choice);
                 return;
             }
-            LaunchSortie(_choice);
+            Phase = MissionPhase.Loadout;
+            _input.Suspended = true;
+            _loadoutRow = 0;
         }
 
         void UpdateLoadout()
@@ -194,17 +207,23 @@ namespace ModernDrone.Missions
             var pad = Gamepad.current;
             bool left = (kb != null && kb.leftArrowKey.wasPressedThisFrame) || (pad != null && pad.dpad.left.wasPressedThisFrame);
             bool right = (kb != null && kb.rightArrowKey.wasPressedThisFrame) || (pad != null && pad.dpad.right.wasPressedThisFrame);
-            bool vertical = (kb != null && (kb.upArrowKey.wasPressedThisFrame || kb.downArrowKey.wasPressedThisFrame))
-                         || (pad != null && (pad.dpad.up.wasPressedThisFrame || pad.dpad.down.wasPressedThisFrame));
-            if (vertical && ChooseLink && ChooseWarhead) _loadoutRow = 1 - _loadoutRow;
+            bool up = (kb != null && kb.upArrowKey.wasPressedThisFrame) || (pad != null && pad.dpad.up.wasPressedThisFrame);
+            bool down = (kb != null && kb.downArrowKey.wasPressedThisFrame) || (pad != null && pad.dpad.down.wasPressedThisFrame);
+            int n = _loadoutRows.Count;
+            if (up) _loadoutRow = (_loadoutRow + n - 1) % n;
+            if (down) _loadoutRow = (_loadoutRow + 1) % n;
             if (left || right)
             {
-                if (_loadoutRow == 0 && ChooseLink) _choice = _choice == LinkType.Radio ? LinkType.Fiber : LinkType.Radio;
-                else if (ChooseWarhead) _warheadChoice = (_warheadChoice + (right ? 1 : warheads.Length - 1)) % warheads.Length;
+                int step = right ? 1 : -1;
+                switch (_loadoutRows[_loadoutRow])
+                {
+                    case LoadoutRow.Drone: _droneChoice = (_droneChoice + step + droneClasses.Length) % droneClasses.Length; break;
+                    case LoadoutRow.Link: _choice = _choice == LinkType.Radio ? LinkType.Fiber : LinkType.Radio; break;
+                    case LoadoutRow.Warhead: _warheadChoice = (_warheadChoice + step + warheads.Length) % warheads.Length; break;
+                }
             }
             if (ConfirmPressed()) LaunchSortie(_choice);
         }
-
         void OnShotDown()
         {
             if (Phase != MissionPhase.Flying) return;
@@ -219,6 +238,15 @@ namespace ModernDrone.Missions
             if (!FreeFlight)
             {
                 if (type == LinkType.Fiber) _fiberLeft--; else _radioLeft--;
+            }
+            if (droneClasses.Length > 0)
+            {
+                var cfg = droneClasses[Mathf.Clamp(_droneChoice, 0, droneClasses.Length - 1)];
+                if (drone.Config == null || !drone.Config.name.StartsWith(cfg.name))
+                {
+                    drone.Initialize(cfg);
+                    ControlSettings.NotifyChanged(); // re-apply pilot rates / camera to the new runtime config
+                }
             }
             _link?.SetType(type);
             if (!_convoysStarted)
@@ -353,7 +381,7 @@ namespace ModernDrone.Missions
                     break;
                 case MissionPhase.Loadout:
                     Panel(new Rect(w * 0.28f, h * 0.28f, w * 0.44f, h * 0.4f), "СНАРЯЖЕНИЕ", LoadoutText(),
-                        ChooseLink && ChooseWarhead ? "↑↓ — строка,  ← → — выбор,  SPACE / A — взлёт" : "← → — выбор,  SPACE / A — взлёт");
+                        _loadoutRows.Count > 1 ? "↑↓ — строка,  ← → — выбор,  SPACE / A — взлёт" : "← → — выбор,  SPACE / A — взлёт");
                     break;
                 case MissionPhase.Debrief:
                     string header = _outcome == MissionOutcome.Success ? "ЗАДАЧА ВЫПОЛНЕНА" : "ЗАДАЧА НЕ ВЫПОЛНЕНА";
@@ -400,25 +428,32 @@ namespace ModernDrone.Missions
         string LoadoutText()
         {
             var sb = new StringBuilder();
-            if (ChooseLink)
+            for (int i = 0; i < _loadoutRows.Count; i++)
             {
-                string cursor = _loadoutRow == 0 && ChooseWarhead ? "» " : "";
-                sb.AppendLine($"{cursor}Канал:  ‹ {(_choice == LinkType.Radio ? "РАДИО (аналог)" : "ОПТОВОЛОКНО")} ›");
-                sb.AppendLine(_choice == LinkType.Radio
-                    ? $"   осталось {_radioLeft} · лёгкий, но уязвим к РЭБ и рельефу"
-                    : $"   осталось {_fiberLeft} · не глушится, катушка 5 км, тяжелее");
+                string cursor = _loadoutRows.Count > 1 && i == _loadoutRow ? "» " : "   ";
+                switch (_loadoutRows[i])
+                {
+                    case LoadoutRow.Drone:
+                        var cfg = droneClasses[Mathf.Clamp(_droneChoice, 0, droneClasses.Length - 1)];
+                        sb.AppendLine($"{cursor}Дрон:  ‹ {cfg.displayName} ›");
+                        sb.AppendLine("      " + cfg.summary);
+                        break;
+                    case LoadoutRow.Link:
+                        sb.AppendLine($"{cursor}Канал:  ‹ {(_choice == LinkType.Radio ? "РАДИО (аналог)" : "ОПТОВОЛОКНО")} ›");
+                        sb.AppendLine(_choice == LinkType.Radio
+                            ? $"      осталось {_radioLeft} · уязвим к РЭБ и рельефу"
+                            : $"      осталось {_fiberLeft} · не глушится, катушка 5 км, +масса");
+                        break;
+                    case LoadoutRow.Warhead:
+                        var w = warheads[Mathf.Clamp(_warheadChoice, 0, warheads.Length - 1)];
+                        sb.AppendLine($"{cursor}Боевая часть:  ‹ {w.displayName} ›");
+                        sb.AppendLine("      " + WarheadHint(w));
+                        break;
+                }
                 sb.AppendLine();
-            }
-            if (ChooseWarhead)
-            {
-                var w = warheads[Mathf.Clamp(_warheadChoice, 0, warheads.Length - 1)];
-                string cursor = _loadoutRow == 1 && ChooseLink ? "» " : "";
-                sb.AppendLine($"{cursor}Боевая часть:  ‹ {w.displayName} ›");
-                sb.AppendLine("   " + WarheadHint(w));
             }
             return sb.ToString();
         }
-
         static string WarheadHint(WarheadData w) => w.kind == WarheadKind.Fragmentation
             ? "против открытых целей: РЛС, орудия, грузовики"
             : w.tandem ? "пробивает динамическую защиту" : "против брони: борт, корма, крыша";

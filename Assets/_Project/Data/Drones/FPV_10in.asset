@@ -1,0 +1,66 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6b8669d5ef89d794faf1dc41d25281d1, type: 3}
+  m_Name: FPV_10in
+  m_EditorClassIdentifier: ModernDrone.Drone::ModernDrone.Drone.DroneConfig
+  displayName: "FPV 10\" (\u0442\u044F\u0436\u0451\u043B\u044B\u0439)"
+  summary: "\u0431\u043E\u043B\u044C\u0448\u0430\u044F \u043D\u0430\u0433\u0440\u0443\u0437\u043A\u0430 \u0438 \u0437\u0430\u043F\u0430\u0441 \u0431\u0430\u0442\u0430\u0440\u0435\u0438, \u0438\u043D\u0435\u0440\u0442\u043D\u044B\u0439"
+  frameMass: 1.6
+  payloadMass: 1
+  motorDiagonal: 0.42
+  inertia: {x: 0.03, y: 0.05, z: 0.03}
+  colliderSize: {x: 0.42, y: 0.1, z: 0.42}
+  thrustToWeight: 4
+  motorTauUp: 0.04
+  motorTauDown: 0.06
+  yawTorqueCoefficient: 0.02
+  propPitchSpeed: 35
+  dragArea: {x: 0.02, y: 0.07, z: 0.022}
+  angularDrag: 0.002
+  cells: 6
+  capacityMah: 6000
+  internalResistance: 0.04
+  maxCurrentPerMotor: 60
+  rollRates:
+    centerRate: 100
+    maxRate: 650
+    expo: 0.6
+  pitchRates:
+    centerRate: 100
+    maxRate: 650
+    expo: 0.6
+  yawRates:
+    centerRate: 100
+    maxRate: 500
+    expo: 0.5
+  setpointCutoffHz: 12
+  pitchPid:
+    kp: 18
+    ki: 6
+    kd: 0
+    iLimit: 40
+  rollPid:
+    kp: 18
+    ki: 6
+    kd: 0
+    iLimit: 40
+  yawPid:
+    kp: 12
+    ki: 4
+    kd: 0
+    iLimit: 20
+  maxAngle: 55
+  angleGain: 8
+  angleMaxRate: 400
+  cameraTilt: 20
+  cameraHorizontalFov: 118
+  crashSpeed: 7
