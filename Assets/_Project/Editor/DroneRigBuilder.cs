@@ -36,7 +36,7 @@ namespace ModernDrone.Editor
 
             var camGo = new GameObject("FpvCamera") { tag = "MainCamera" };
             camGo.transform.SetParent(root.transform, false);
-            camGo.transform.localPosition = new Vector3(0f, 0.04f, 0.1f);
+            camGo.transform.localPosition = new Vector3(0f, -0.003f, 0.095f); // at the model's FPV camera lens
             var cam = camGo.AddComponent<Camera>();
             cam.nearClipPlane = 0.03f;
             cam.farClipPlane = 3000f;

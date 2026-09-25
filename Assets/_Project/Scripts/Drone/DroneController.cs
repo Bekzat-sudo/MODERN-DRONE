@@ -100,6 +100,9 @@ namespace ModernDrone.Drone
         /// <summary>Velocity at the start of the last physics step, before any collision response.</summary>
         public Vector3 PreImpactVelocity { get; private set; }
 
+        /// <summary>Body forward (payload axis) at the start of the last physics step, before any collision response.</summary>
+        public Vector3 PreImpactForward { get; private set; } = Vector3.forward;
+
         /// <summary>Assigns a config at runtime (e.g. tests or loadout selection) and rebuilds the simulation.</summary>
         public void Initialize(DroneConfig cfg)
         {
@@ -271,6 +274,7 @@ namespace ModernDrone.Drone
         public void Step(float dt)
         {
             PreImpactVelocity = _rb.linearVelocity;
+            PreImpactForward = transform.forward;
             Vector3 up = transform.up;
             Vector3 omegaBody = transform.InverseTransformDirection(_rb.angularVelocity);
             float maxThrust = config.MaxThrustPerMotor;

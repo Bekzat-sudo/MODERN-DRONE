@@ -8,7 +8,7 @@ namespace ModernDrone.Missions
 {
     /// <summary>
     /// Contact-fuzed payload carried by the drone. Arms a few seconds after the drone is armed,
-    /// detonates on impact with anything in the fuze mask and resolves damage along the flight direction.
+    /// detonates on impact with anything in the fuze mask and resolves damage along the charge axis.
     /// </summary>
     [RequireComponent(typeof(DroneController))]
     public sealed class DroneWarhead : MonoBehaviour
@@ -58,7 +58,9 @@ namespace ModernDrone.Missions
             Vector3 velocity = _drone.PreImpactVelocity;
             if (velocity.magnitude < minImpactSpeed) return;
 
-            Detonate(collision.GetContact(0).point, velocity);
+            // The jet forms along the liner axis (the payload points along body forward), not along the flight path:
+            // tip speed is 7-14 km/s (en.wikipedia.org/wiki/Shaped_charge), so the drone's ~40 m/s bends it by <0.5 deg.
+            Detonate(collision.GetContact(0).point, _drone.PreImpactForward);
         }
 
         public void Detonate(Vector3 point, Vector3 direction)
