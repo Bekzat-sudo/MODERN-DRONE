@@ -233,6 +233,74 @@ namespace ModernDrone.Editor
             EditorSceneManager.SaveScene(scene, "Assets/_Project/Scenes/Mission_06.unity");
             ProvingGroundBuilder.AddToBuildSettings("Assets/_Project/Scenes/Mission_06.unity", 6);
         }
+
+        const string Briefing07 =
+            "Ночь. Техника противника стоит у лесополосы в ~330 м к северу. Дроны оснащены тепловизорами " +
+            "(384x288, узкий угол обзора, «белое — горячее»): тёплые моторы видны издалека, холодная земля почти чёрная.\n\n" +
+            "Среди целей есть надувные макеты — они холодные и на тепловизоре не светятся.\n\n" +
+            "Задача: вывести из строя танк, РСЗО и грузовик. За лесополосой дежурит расчёт перехватчиков.";
+
+        [MenuItem("Modern Drone/Setup/Build Mission 07 Scene")]
+        public static void BuildMission07()
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var terrain = ProvingGroundBuilder.CreateTerrain("Assets/_Project/Scenes/Mission_07_Terrain.asset");
+            ProvingGroundBuilder.CreateLighting();
+            MakeNight();
+            ProvingGroundBuilder.CreateTreeLines(terrain);
+            ProvingGroundBuilder.CreateSpawn(terrain);
+
+            var heat = HeatMaterial();
+            var c = ProvingGroundBuilder.Center;
+            foreach (var (prefab, pos, yaw, label) in new[]
+            {
+                (VehicleBuilder.TankPrefabPath, new Vector3(c.x - 40f, 0f, 1287f), 270f, "Танк"),
+                (VehicleCatalog.Mlrs, new Vector3(c.x + 60f, 0f, 1285f), 100f, "РСЗО"),
+                (VehicleCatalog.Truck, new Vector3(c.x + 150f, 0f, 1280f), 215f, "Грузовик")
+            })
+                TargetAt(terrain, prefab, pos, yaw, label, TargetRequirement.OutOfAction)
+                    .AddComponent<ModernDrone.Vehicles.HeatSignature>().Configure(heat);
+
+            ProvingGroundBuilder.PlacePrefab(terrain, VehicleCatalog.DecoyTank, new Vector3(c.x - 100f, 0f, 1288f), 90f);
+            ProvingGroundBuilder.PlacePrefab(terrain, VehicleCatalog.DecoyMlrs, new Vector3(c.x + 100f, 0f, 1288f), 260f);
+            var site = ProvingGroundBuilder.PlacePrefab(terrain, VehicleCatalog.InterceptorSite, new Vector3(c.x, 0f, 1360f), 180f, "Расчёт перехватчиков");
+            site.AddComponent<ModernDrone.Vehicles.HeatSignature>().Configure(heat);
+
+            var mission = ProvingGroundBuilder.CreateMissionRig("Задача 7: Ночная охота", Briefing07, 4);
+            mission.gameObject.AddComponent<ThermalNight>();
+            EditorSceneManager.SaveScene(scene, "Assets/_Project/Scenes/Mission_07.unity");
+            ProvingGroundBuilder.AddToBuildSettings("Assets/_Project/Scenes/Mission_07.unity", 7);
+        }
+
+        /// <summary>Moonlit night: dim bluish key light, almost no ambient, no sky.</summary>
+        static void MakeNight()
+        {
+            var sun = GameObject.Find("Sun").GetComponent<Light>();
+            sun.intensity = 0.035f;
+            sun.color = new Color(0.6f, 0.7f, 1f);
+            sun.shadows = LightShadows.None;
+            RenderSettings.skybox = null;
+            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
+            RenderSettings.ambientLight = new Color(0.015f, 0.015f, 0.018f);
+            RenderSettings.fogColor = new Color(0.005f, 0.005f, 0.01f);
+            RenderSettings.fogDensity = 0.002f;
+            // The ambient probe is otherwise still the daytime sky: rebuild it from the night ambient colour.
+            var probe = new UnityEngine.Rendering.SphericalHarmonicsL2();
+            probe.AddAmbientLight(RenderSettings.ambientLight);
+            RenderSettings.ambientProbe = probe;
+            RenderSettings.reflectionIntensity = 0f;
+        }
+
+        static Material HeatMaterial()
+        {
+            const string path = "Assets/_Project/Art/Materials/HeatUnlit.mat";
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (mat != null) return mat;
+            mat = new Material(Shader.Find("Universal Render Pipeline/Unlit")) { name = "HeatUnlit", enableInstancing = true };
+            mat.SetColor("_BaseColor", Color.white);
+            AssetDatabase.CreateAsset(mat, path);
+            return mat;
+        }
         static void Target(Terrain terrain, Vector3 pos, float yaw, string label)
         {
             var tank = ProvingGroundBuilder.PlaceTank(terrain, pos, yaw, label);

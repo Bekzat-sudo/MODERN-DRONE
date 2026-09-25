@@ -24,10 +24,18 @@ Shader "Hidden/ModernDrone/AnalogVideo"
             float _FpvSignal;
             float _FpvAnalog;
             float _FpvTime;
+            float _FpvThermal;
+            float _FpvThermalGain;
+            float _FpvThermalDrift;
 
             float Hash(float2 p)
             {
                 return frac(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453);
+            }
+
+            half ThermalLum(float2 uv)
+            {
+                return dot(SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, uv).rgb, half3(0.299, 0.587, 0.114));
             }
 
             half3 SampleRgbShift(float2 uv, float shift)
@@ -66,6 +74,26 @@ Shader "Hidden/ModernDrone/AnalogVideo"
 
                 float shift = (0.0012 + 0.007 * bad) * analog;
                 half3 col = SampleRgbShift(uvDistorted, shift);
+
+                // Thermal camera (white-hot) as seen through a CVBS FPV feed: 384x288 core (thermal-image.com),
+                // AGC-driven gain, detail enhancement (halo around hot objects), column fixed-pattern noise and a
+                // cloudy non-uniformity that builds up between shutter calibrations (flyeye.io FFC notes).
+                if (_FpvThermal > 0.5)
+                {
+                    float2 res = float2(384.0, 288.0);
+                    float2 px = 1.0 / res;
+                    float2 tuv = (floor(uvDistorted * res) + 0.5) / res;
+                    half l = ThermalLum(tuv);
+                    half blur = (ThermalLum(tuv + float2(px.x * 2.0, 0)) + ThermalLum(tuv - float2(px.x * 2.0, 0)) +
+                                 ThermalLum(tuv + float2(0, px.y * 2.0)) + ThermalLum(tuv - float2(0, px.y * 2.0))) * 0.25;
+                    l = l + (l - blur) * 1.5;
+                    l = saturate(pow(saturate(l * _FpvThermalGain), 0.7));
+                    l += (Hash(float2(floor(tuv.x * res.x), 3.0)) - 0.5) * 0.015;
+                    float cloud = sin(uv.x * 4.7 + 1.3) * sin(uv.y * 3.9 + 0.4) + 0.5 * sin(uv.x * 9.1 - uv.y * 6.3);
+                    float2 v = uv - 0.5;
+                    l += (cloud * 0.05 - dot(v, v) * 0.25) * _FpvThermalDrift;
+                    col = saturate(l).xxx;
+                }
 
                 // Colour fades out as the signal weakens.
                 half lum = dot(col, half3(0.299, 0.587, 0.114));

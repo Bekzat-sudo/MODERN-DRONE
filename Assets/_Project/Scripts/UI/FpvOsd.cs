@@ -50,7 +50,7 @@ namespace ModernDrone.UI
 
             // Corners
             Label(new Rect(pad, pad, 400, line), t.mode == FlightMode.Acro ? "ACRO" : "ANGL");
-            Label(new Rect(pad, pad + line, 400, line), input != null ? SourceName(input.ActiveSource) : "");
+            Label(new Rect(pad, pad + line, 400, line), (input != null ? SourceName(input.ActiveSource) : "") + (ModernDrone.Core.NightMode.Thermal ? "  TIR" : ""));
             if (VideoFeed.HasLink)
             {
                 var link = VideoFeed.Current;

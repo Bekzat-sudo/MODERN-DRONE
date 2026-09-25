@@ -12,6 +12,7 @@ namespace ModernDrone.Drone
 
         Camera _camera;
         float _appliedAspect;
+        Vector3 _mountPosition;
 
         public float TiltDeg
         {
@@ -32,6 +33,7 @@ namespace ModernDrone.Drone
         void Awake()
         {
             _camera = GetComponent<Camera>();
+            _mountPosition = transform.localPosition;
             if (drone == null) drone = GetComponentInParent<DroneController>();
             if (drone != null && drone.Config != null)
             {
@@ -41,8 +43,26 @@ namespace ModernDrone.Drone
             ApplyFov();
         }
 
+        float _frozenUntil;
+        Vector3 _frozenPos;
+        Quaternion _frozenRot;
+
+        /// <summary>Holds the current view for a moment (thermal shutter calibration freezes the picture).</summary>
+        public void Freeze(float seconds)
+        {
+            _frozenUntil = Time.time + seconds;
+            _frozenPos = transform.position;
+            _frozenRot = transform.rotation;
+        }
+
         void LateUpdate()
         {
+            if (Time.time < _frozenUntil)
+            {
+                transform.SetPositionAndRotation(_frozenPos, _frozenRot);
+                return;
+            }
+            transform.localPosition = _mountPosition;
             transform.localRotation = Quaternion.Euler(-tiltDeg, 0f, 0f);
             if (!Mathf.Approximately(_appliedAspect, _camera.aspect))
                 ApplyFov();

@@ -137,7 +137,7 @@ namespace ModernDrone.Missions
             var kb = Keyboard.current;
             var pad = Gamepad.current;
             return (kb != null && (kb.spaceKey.wasPressedThisFrame || kb.enterKey.wasPressedThisFrame))
-                || (pad != null && (pad.buttonSouth.wasPressedThisFrame || pad.startButton.wasPressedThisFrame));
+                || (pad != null && pad.buttonSouth.wasPressedThisFrame);
         }
 
         void OnDisable() => _xray?.Hide();

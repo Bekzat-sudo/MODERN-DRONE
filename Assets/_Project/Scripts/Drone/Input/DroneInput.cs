@@ -82,7 +82,7 @@ namespace ModernDrone.Drone
             if (droneCamera != null)
             {
                 droneCamera.TiltDeg = s.cameraTilt;
-                droneCamera.HorizontalFov = s.cameraFov;
+                droneCamera.HorizontalFov = ModernDrone.Core.NightMode.Thermal ? ModernDrone.Core.NightMode.ThermalHorizontalFov : s.cameraFov;
             }
         }
 

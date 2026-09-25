@@ -210,7 +210,7 @@ namespace ModernDrone.UI
             foreach (PilotAction action in Enum.GetValues(typeof(PilotAction)))
             {
                 var a = action;
-                bool keyboardOnly = a >= PilotAction.ThrottleUp;
+                bool keyboardOnly = a >= PilotAction.ThrottleUp && a <= PilotAction.ThrottleCut;
                 _rows.Add(MenuRow.Header(ActionName(a)));
                 _rows.Add(BindRow("  Клавиатура / мышь", a, b => b.keyboard, (b, v) => b.keyboard = v, d => d is Keyboard || d is Mouse));
                 if (keyboardOnly) continue;
@@ -316,6 +316,7 @@ namespace ModernDrone.UI
             PilotAction.YawLeft => "Рыскание влево",
             PilotAction.YawRight => "Рыскание вправо",
             PilotAction.ThrottleCut => "Сброс газа",
+            PilotAction.Restart => "Перезапуск задачи",
             _ => a.ToString()
         };
 

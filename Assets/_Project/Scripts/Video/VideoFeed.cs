@@ -26,6 +26,9 @@ namespace ModernDrone.Video
         static readonly int SignalId = Shader.PropertyToID("_FpvSignal");
         static readonly int AnalogId = Shader.PropertyToID("_FpvAnalog");
         static readonly int TimeId = Shader.PropertyToID("_FpvTime");
+        static readonly int ThermalId = Shader.PropertyToID("_FpvThermal");
+        static readonly int ThermalGainId = Shader.PropertyToID("_FpvThermalGain");
+        static readonly int ThermalDriftId = Shader.PropertyToID("_FpvThermalDrift");
 
         public static LinkTelemetry Current { get; private set; }
         public static bool HasLink { get; private set; }
@@ -38,6 +41,9 @@ namespace ModernDrone.Video
             // Fiber carries a clean picture; analog shows its characteristic artefacts even when strong.
             Shader.SetGlobalFloat(AnalogId, telemetry.type == LinkType.Radio ? 1f : 0.2f);
             Shader.SetGlobalFloat(TimeId, Time.unscaledTime);
+            Shader.SetGlobalFloat(ThermalId, ModernDrone.Core.NightMode.Thermal ? 1f : 0f);
+            Shader.SetGlobalFloat(ThermalGainId, ModernDrone.Core.NightMode.ThermalGain);
+            Shader.SetGlobalFloat(ThermalDriftId, ModernDrone.Core.NightMode.ThermalDrift);
         }
 
         /// <summary>Effect applies only while the FPV camera is the one being watched.</summary>

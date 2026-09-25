@@ -38,7 +38,9 @@ namespace ModernDrone.Drone
         ThrottleDown,
         YawLeft,
         YawRight,
-        ThrottleCut
+        ThrottleCut,
+        /// <summary>Restart the current mission (appended last: saved bindings are stored by enum value).</summary>
+        Restart
     }
 
     /// <summary>Calibrated analog axis of a joystick-class device (RC transmitter, HOTAS...).</summary>
@@ -122,7 +124,7 @@ namespace ModernDrone.Drone
 
         /// <summary>Bumped when defaults change in a way saved files must be migrated.</summary>
         public int version = CurrentVersion;
-        public const int CurrentVersion = 2;
+        public const int CurrentVersion = 3;
 
         public ControlDevice device = ControlDevice.Auto;
         [Tooltip("Display name of the preferred joystick; empty = first found.")]
@@ -196,15 +198,17 @@ namespace ModernDrone.Drone
         {
             new ActionBinding(PilotAction.Arm, "<Keyboard>/space", "<Gamepad>/rightShoulder"),
             new ActionBinding(PilotAction.Mode, "<Keyboard>/m", "<Gamepad>/leftShoulder"),
-            new ActionBinding(PilotAction.Reset, "<Keyboard>/r", "<Gamepad>/startButton"),
+            new ActionBinding(PilotAction.Reset, "<Keyboard>/r", "<Gamepad>/selectButton"),
             new ActionBinding(PilotAction.TiltUp, "<Keyboard>/rightBracket", "<Gamepad>/dpad/up"),
             new ActionBinding(PilotAction.TiltDown, "<Keyboard>/leftBracket", "<Gamepad>/dpad/down"),
-            new ActionBinding(PilotAction.Pause, "<Keyboard>/escape", "<Gamepad>/selectButton"),
+            // Menu / Start acts as Esc on gamepads.
+            new ActionBinding(PilotAction.Pause, "<Keyboard>/escape", "<Gamepad>/startButton"),
             new ActionBinding(PilotAction.ThrottleUp, "<Keyboard>/w", ""),
             new ActionBinding(PilotAction.ThrottleDown, "<Keyboard>/s", ""),
             new ActionBinding(PilotAction.YawLeft, "<Keyboard>/a", ""),
             new ActionBinding(PilotAction.YawRight, "<Keyboard>/d", ""),
             new ActionBinding(PilotAction.ThrottleCut, "<Keyboard>/x", ""),
+            new ActionBinding(PilotAction.Restart, "<Keyboard>/f5", "<Gamepad>/buttonNorth"),
         };
 
         public ActionBinding Binding(PilotAction action)
@@ -251,6 +255,14 @@ namespace ModernDrone.Drone
                 s.yawRates = d.yawRates;
                 s.stickSmoothingHz = d.stickSmoothingHz;
                 s.startMode = FlightMode.Acro;
+            }
+            if (s.version < 3)
+            {
+                // v3: gamepad Menu/Start opens the pause menu (like Esc); drone reset moved to View/Select.
+                var pause = s.Binding(PilotAction.Pause);
+                var reset = s.Binding(PilotAction.Reset);
+                if (pause.gamepad == "<Gamepad>/selectButton") pause.gamepad = "<Gamepad>/startButton";
+                if (reset.gamepad == "<Gamepad>/startButton") reset.gamepad = "<Gamepad>/selectButton";
             }
             s.version = CurrentVersion;
             return s;

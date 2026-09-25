@@ -7,9 +7,14 @@ namespace ModernDrone.Vehicles
     {
         static AudioClip _explosion;
         static AudioClip _shot;
+        static AudioClip _click;
 
         public static void Explosion(Vector3 position, float size) =>
             Play(position, _explosion != null ? _explosion : _explosion = Burst("Explosion", 2.2f, 0.004f, 1.6f), Mathf.Clamp01(0.5f + size * 0.25f), 12f * size);
+
+        /// <summary>Thermal camera shutter click.</summary>
+        public static void Click(Vector3 position) =>
+            Play(position, _click != null ? _click : _click = Burst("Click", 0.05f, 0.0005f, 0.01f), 0.25f, 2f);
 
         public static void Shot(Vector3 position) =>
             Play(position, _shot != null ? _shot : _shot = Burst("Shot", 0.35f, 0.0005f, 0.12f), 0.6f, 5f);

@@ -194,6 +194,12 @@ namespace ModernDrone.UI
             int visible = Mathf.Max(1, Mathf.FloorToInt(area.height / h));
             int first = Mathf.Clamp(selected - visible / 2, 0, Mathf.Max(0, rows.Count - visible));
             var e = Event.current;
+            // Mouse wheel scrolls the selection.
+            if (e.type == EventType.ScrollWheel && area.Contains(e.mousePosition) && rows.Count > 0)
+            {
+                selected = Step(rows, ClampToSelectable(rows, selected, 1), e.delta.y > 0f ? 1 : -1);
+                e.Use();
+            }
 
             for (int i = first; i < Mathf.Min(rows.Count, first + visible); i++)
             {

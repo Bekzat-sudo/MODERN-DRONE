@@ -14,6 +14,7 @@ namespace ModernDrone.UI
         public const string Mission04 = "Mission_04";
         public const string Mission05 = "Mission_05";
         public const string Mission06 = "Mission_06";
+        public const string Mission07 = "Mission_07";
         public const string ProvingGround = "ProvingGround";
 
         public static void Load(string scene)

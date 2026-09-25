@@ -131,6 +131,11 @@ namespace ModernDrone.Missions
         void Update()
         {
             if (ModernDrone.Core.GamePause.IsPaused) return;
+            if (ControlInput.WasPressed(PilotAction.Restart))
+            {
+                SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+                return;
+            }
             if (Phase == MissionPhase.Flying || Phase == MissionPhase.Killcam || Phase == MissionPhase.DroneLost)
                 _missionTime += Time.deltaTime;
 
@@ -344,14 +349,13 @@ namespace ModernDrone.Missions
             var kb = Keyboard.current;
             var pad = Gamepad.current;
             return (kb != null && (kb.spaceKey.wasPressedThisFrame || kb.enterKey.wasPressedThisFrame))
-                || (pad != null && (pad.buttonSouth.wasPressedThisFrame || pad.startButton.wasPressedThisFrame));
+                || (pad != null && pad.buttonSouth.wasPressedThisFrame);
         }
 
         static bool RestartPressed()
         {
             var kb = Keyboard.current;
-            var pad = Gamepad.current;
-            return (kb != null && kb.rKey.wasPressedThisFrame) || (pad != null && pad.startButton.wasPressedThisFrame);
+            return kb != null && kb.rKey.wasPressedThisFrame; // gamepad restart goes through the Restart binding
         }
 
         // ---------- HUD ----------
@@ -385,7 +389,8 @@ namespace ModernDrone.Missions
                     break;
                 case MissionPhase.Debrief:
                     string header = _outcome == MissionOutcome.Success ? "ЗАДАЧА ВЫПОЛНЕНА" : "ЗАДАЧА НЕ ВЫПОЛНЕНА";
-                    Panel(new Rect(w * 0.2f, h * 0.15f, w * 0.6f, h * 0.7f), header, DebriefText(), "R / START — повторить");
+                    Panel(new Rect(w * 0.2f, h * 0.15f, w * 0.6f, h * 0.7f), header, DebriefText(),
+                        $"{ControlInput.HintFor(PilotAction.Restart, _input != null ? _input.ActiveSource : InputSource.KeyboardMouse)} — повторить");
                     break;
             }
         }
