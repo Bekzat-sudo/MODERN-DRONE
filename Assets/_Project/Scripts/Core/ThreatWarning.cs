@@ -28,6 +28,13 @@ namespace ModernDrone.Core
             }
         }
 
+        static float _groundFireTime = -10f;
+
+        /// <summary>The drone is being shot at from the ground.</summary>
+        public static void ReportGroundFire() => _groundFireTime = Time.time;
+
+        public static bool UnderGroundFire => Time.time - _groundFireTime < 1.2f;
+
         static void Roll()
         {
             if (Time.frameCount == _frame) return;

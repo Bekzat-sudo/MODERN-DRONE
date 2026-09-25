@@ -27,6 +27,14 @@ namespace ModernDrone.Core
             _lastPosition = position;
         }
 
+        static float _missTime = -10f;
+
+        /// <summary>An interceptor passed within fuze range but missed.</summary>
+        public static void ReportMiss() => _missTime = Time.time;
+
+        /// <summary>True for a moment after a missed interception.</summary>
+        public static bool RecentMiss => Time.time - _missTime < 1.5f;
+
         /// <summary>True if an interceptor reported this frame or the previous one.</summary>
         public static bool Active => Time.frameCount - _lastReportFrame <= 1;
         public static float Distance => _lastDistance;

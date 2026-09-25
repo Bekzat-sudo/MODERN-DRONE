@@ -18,23 +18,27 @@ namespace ModernDrone.Missions
         [SerializeField] Transform launchPoint;
         [SerializeField] Material interceptorMaterial;
 
+        // Detection: small FPV drones are hard to spot and track; interceptors are mostly effective against larger,
+        // predictable targets (Wikipedia "Interceptor drone"; Defense News 2026-03). Values below are abstract gameplay.
         [Header("Detection")]
-        [SerializeField] float detectionRange = 700f;
-        [SerializeField] float minAltitude = 5f;
+        [SerializeField] float detectionRange = 350f;
+        [SerializeField] float minAltitude = 10f;
         [Tooltip("Seconds of continuous observation before a launch.")]
-        [SerializeField] float detectTime = 2.5f;
+        [SerializeField] float detectTime = 5f;
 
         [Header("Interceptors")]
-        [SerializeField] int stock = 4;
+        [SerializeField] int stock = 2;
         [SerializeField] int maxAirborne = 1;
-        [SerializeField] float launchCooldown = 6f;
+        [SerializeField] float launchCooldown = 15f;
         // Top speed: publicly reported ~310 km/h (~86 m/s) for P1-SUN-class interceptors
         // (pravda.com.ua, militarnyi.com, united24media.com, 2026). Turn rate, acceleration and fuze radius are
         // abstract gameplay values.
         [SerializeField] float maxSpeed = 80f;
-        [SerializeField] float acceleration = 30f;
-        [SerializeField] float turnRate = 140f;
+        [SerializeField] float acceleration = 20f;
+        [SerializeField] float turnRate = 100f;
         [SerializeField] float fuzeRadius = 2.5f;
+        [Tooltip("Chance that a pass inside the fuze radius kills the drone (reported interceptor success ~60-90% vs larger targets).")]
+        [Range(0f, 1f)] [SerializeField] float killChance = 0.55f;
         [SerializeField] float endurance = 70f;
 
         readonly List<InterceptorDrone> _airborne = new List<InterceptorDrone>();
@@ -92,7 +96,7 @@ namespace ModernDrone.Missions
             _cooldown = launchCooldown;
             Vector3 origin = (launchPoint != null ? launchPoint : transform).position + Vector3.up * 0.5f;
             var interceptor = InterceptorDrone.Create(origin, interceptorMaterial);
-            interceptor.Launch(this, _drone, Vector3.up * 10f, maxSpeed, acceleration, turnRate, fuzeRadius, endurance);
+            interceptor.Launch(this, _drone, Vector3.up * 10f, maxSpeed, acceleration, turnRate, fuzeRadius, endurance, killChance);
             _airborne.Add(interceptor);
         }
 

@@ -105,6 +105,10 @@ namespace ModernDrone.UI
         void DrawThreat(float w, float h)
         {
             float y = h * 0.2f;
+            if (ModernDrone.Core.ThreatWarning.UnderGroundFire && Mathf.Repeat(Time.unscaledTime, 0.3f) < 0.2f)
+                Shadowed(new Rect(0, h * 0.3f, w, _big.fontSize * 1.4f), "ОБСТРЕЛ С ЗЕМЛИ", _big, Color.red);
+            if (ModernDrone.Core.InterceptorWarning.RecentMiss)
+                Shadowed(new Rect(0, y - _big.fontSize * 1.6f, w, _big.fontSize * 1.4f), "ПРОМАХ ПЕРЕХВАТЧИКА", _big, new Color(0.4f, 1f, 0.4f));
             if (ModernDrone.Core.InterceptorWarning.Active)
             {
                 float dist = ModernDrone.Core.InterceptorWarning.Distance;

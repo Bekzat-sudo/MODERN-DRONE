@@ -21,6 +21,8 @@ namespace ModernDrone.Missions
         float _fuzeRadius = 2.5f;
         float _endurance = 70f;
         float _trackLossTime = 2f;
+        float _killChance = 0.55f;
+        float _missCooldown;
 
         InterceptorSite _site;
         DroneController _target;
@@ -34,8 +36,9 @@ namespace ModernDrone.Missions
         public bool Alive => !_dead;
 
         public void Launch(InterceptorSite site, DroneController target, Vector3 initialVelocity,
-            float maxSpeed, float acceleration, float turnRate, float fuzeRadius, float endurance)
+            float maxSpeed, float acceleration, float turnRate, float fuzeRadius, float endurance, float killChance)
         {
+            _killChance = killChance;
             _site = site;
             _target = target;
             _velocity = initialVelocity;
@@ -109,10 +112,20 @@ namespace ModernDrone.Missions
             {
                 float dist = Vector3.Distance(transform.position, _target.transform.position);
                 InterceptorWarning.Report(transform.position, dist);
-                if (controlled && dist <= _fuzeRadius)
+                _missCooldown -= dt;
+                if (controlled && dist <= _fuzeRadius && _missCooldown <= 0f)
                 {
-                    _target.ShootDown("ДРОН ПЕРЕХВАЧЕН");
-                    Explode();
+                    if (Random.value < _killChance)
+                    {
+                        _target.ShootDown("ДРОН ПЕРЕХВАЧЕН");
+                        Explode();
+                    }
+                    else
+                    {
+                        // Missed pass: overshoots and must come around again.
+                        _missCooldown = 2.5f;
+                        InterceptorWarning.ReportMiss();
+                    }
                 }
             }
         }

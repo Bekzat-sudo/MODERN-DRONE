@@ -71,13 +71,11 @@ namespace ModernDrone.Editor
             }
             data.SetHeights(0, 0, heights);
 
-            // URP terrain reads smoothness from diffuse alpha; keep it matte.
-            var grassTex = SolidTexture("Grass", new Color(0.36f, 0.40f, 0.22f, 0.05f));
-            var grass = new TerrainLayer { name = "Grass", diffuseTexture = grassTex, tileSize = new Vector2(10f, 10f) };
+            // Procedural grass / dry grass / dirt layers mixed by noise patches and slope.
+            data.alphamapResolution = 512;
             AssetDatabase.CreateAsset(data, terrainDataPath);
-            AssetDatabase.AddObjectToAsset(grassTex, data);
-            AssetDatabase.AddObjectToAsset(grass, data);
-            data.terrainLayers = new[] { grass };
+            data.terrainLayers = TerrainTextures.LoadOrCreateLayers();
+            TerrainTextures.Paint(data, 7);
             AssetDatabase.SaveAssets();
 
             var go = Terrain.CreateTerrainGameObject(data);
@@ -88,16 +86,6 @@ namespace ModernDrone.Editor
             if (GraphicsSettings.currentRenderPipeline != null)
                 terrain.materialTemplate = GraphicsSettings.currentRenderPipeline.defaultTerrainMaterial;
             return terrain;
-        }
-
-        static Texture2D SolidTexture(string name, Color c)
-        {
-            var tex = new Texture2D(4, 4) { name = name };
-            var px = new Color[16];
-            for (int i = 0; i < px.Length; i++) px[i] = c;
-            tex.SetPixels(px);
-            tex.Apply();
-            return tex;
         }
 
         internal static void CreateLighting()

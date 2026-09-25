@@ -13,6 +13,7 @@ namespace ModernDrone.Vehicles
 
         public static void Explosion(Vector3 position, float size)
         {
+            SimpleAudio.Explosion(position, size);
             var root = new GameObject("VFX_Explosion");
             root.transform.position = position;
 

@@ -131,7 +131,8 @@ namespace ModernDrone.Editor
             "По грунтовке за лесополосой, в ~500 м к северу, с запада на восток идёт колонна: БТР, грузовик, РСЗО и танк.\n\n" +
             "Задача: вывести из строя 3 машины из 4, пока колонна не ушла. Подбитая машина встаёт и задерживает остальных; " +
             "после первого попадания колонна ускоряется и ставит дым.\n\n" +
-            "Дорогу прикрывает расчёт дронов-перехватчиков к северу от неё. Колонна тронется с вашим первым взлётом.";
+            "Два участка дороги закрыты противодроновыми сетками — дрон подорвётся на сетке, но в ней есть разрывы. " +
+            "Техника отстреливается вблизи (до ~50 м), дорогу прикрывает расчёт дронов-перехватчиков. Колонна тронется с вашим первым взлётом.";
 
         [MenuItem("Modern Drone/Setup/Build Mission 04 Scene")]
         public static void BuildMission04()
@@ -148,6 +149,9 @@ namespace ModernDrone.Editor
                 new Vector3(1400f, 0f, 1495f), new Vector3(1780f, 0f, 1465f)
             };
             ProvingGroundBuilder.CreateRoad(terrain, road);
+            // Two netted stretches of the road.
+            NetTunnelBuilder.Build(terrain, road, 430f, 590f, 5);
+            NetTunnelBuilder.Build(terrain, road, 880f, 980f, 9);
 
             var column = new System.Collections.Generic.List<ModernDrone.Damage.VehicleDamageModel>();
             (string prefab, string label)[] order =
