@@ -33,3 +33,13 @@
   vehicle/drone characteristics and functionality, check public sources on the internet (docs, specs, reputable
   articles) and note the source in the commit message or a code comment. Keep numbers at the level of publicly
   reported figures; gameplay balance numbers that are deliberately abstract must be marked as such.
+
+## Rule: use the code graph
+- The project has a graphify knowledge graph of the game code in `graphify-out/` (scope set by `.graphifyignore`;
+  generated, not committed).
+- Before every code change, consult it: `graphify query "<question>"`, `graphify explain "<Class>"` or
+  `graphify path "<A>" "<B>"` to find what the change touches (callers, dependents, related tests), and read
+  `graphify-out/GRAPH_REPORT.md` for the hub classes (e.g. `VehicleDamageModel`, `MissionController`,
+  `DroneController`).
+- After every code change, update it from the repo root: `graphify update .` (AST only, no LLM or API key).
+  Use `graphify update . --force` after deleting or merging classes (the update refuses to shrink the graph otherwise).
