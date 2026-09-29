@@ -34,6 +34,9 @@ namespace ModernDrone.Missions
         [Tooltip("Seconds before impact the replay starts from (the whole flight can be rewound).")]
         [SerializeField] float replayWindow = 20f;
         [SerializeField] float scrubSpeed = 4f;
+        [Tooltip("Manual zoom range during the replay, as a multiple of the automatic framing.")]
+        [SerializeField] float minUserZoom = 0.3f;
+        [SerializeField] float maxUserZoom = 12f;
         [SerializeField] float xrayPhase = 9f;
         [SerializeField] float orbitSpeed = 22f;
         [SerializeField] float orbitRadius = 11f;
@@ -46,6 +49,10 @@ namespace ModernDrone.Missions
         string _caption;
         bool _static, _recon, _showSummary, _replay, _replayPaused, _frozen;
         float _reconStart, _reconZoom, _replayTime, _replayRate, _baseFov;
+        float _userZoom = 1f;
+        // Narrowest view: about 55x on the 55 deg base, in line with the Mavic 3T's 56x hybrid zoom
+        // (dji.com/mavic-3-enterprise/specs).
+        const float MinFov = 1f;
         readonly FlightTrack _track = new FlightTrack();
         // Vehicles drive at ~10 m/s at most, so 10 Hz with interpolation keeps them within centimetres of the recording.
         const float VehicleInterval = 0.1f;
@@ -143,6 +150,7 @@ namespace ModernDrone.Missions
         public IEnumerator Play(StrikeReport report, Action onDone)
         {
             Running = true;
+            _userZoom = 1f;
             _report = report;
             // Strikes land in FixedUpdate, whose clock can trail the last frame's sample.
             float impact = Mathf.Max(report.time, _track.EndTime + 0.001f);
@@ -195,8 +203,8 @@ namespace ModernDrone.Missions
             while (t < duration && !SkipPressed())
             {
                 float k = Mathf.SmoothStep(0f, 1f, t / duration);
-                float frame = Mathf.Lerp(reconFrameStart, reconFrameEnd, k);
-                _camera.fieldOfView = 2f * Mathf.Atan(frame * 0.5f / _camera.aspect / distance) * Mathf.Rad2Deg;
+                float frame = Mathf.Lerp(reconFrameStart, reconFrameEnd, k) / _userZoom;
+                _camera.fieldOfView = Mathf.Clamp(2f * Mathf.Atan(frame * 0.5f / _camera.aspect / distance) * Mathf.Rad2Deg, MinFov, 60f);
                 _reconZoom = fov / _camera.fieldOfView;
                 transform.position = reconPos;
                 transform.rotation = Quaternion.LookRotation(focus - reconPos) * Wander();
@@ -270,6 +278,7 @@ namespace ModernDrone.Missions
                     if ((kb != null && kb.rKey.wasPressedThisFrame) || (pad != null && pad.buttonNorth.wasPressedThisFrame))
                         _replayTime = start;
                     _replayRate = back ? -scrubSpeed : fwd ? scrubSpeed : _replayPaused ? 0f : 1f;
+                    _userZoom = Mathf.Clamp(_userZoom * ZoomStep(), minUserZoom, maxUserZoom);
                     _replayTime = Mathf.Clamp(_replayTime + _replayRate * Time.unscaledDeltaTime, start, end);
                     if (_replayTime >= end && _replayRate > 0f) break;
                 }
@@ -278,9 +287,9 @@ namespace ModernDrone.Missions
                 _ghost.transform.SetPositionAndRotation(pose.position, pose.rotation);
                 PoseVehicles(_replayTime);
                 Vector3 aim = Vector3.Lerp(focus, pose.position, 0.5f);
-                float frame = Mathf.Min(Vector3.Distance(focus, pose.position) + reconFrameStart, 900f);
+                float frame = Mathf.Min(Vector3.Distance(focus, pose.position) + reconFrameStart, 900f) / _userZoom;
                 float distance = Mathf.Max(1f, Vector3.Distance(reconPos, aim));
-                _camera.fieldOfView = Mathf.Min(60f, 2f * Mathf.Atan(frame * 0.5f / _camera.aspect / distance) * Mathf.Rad2Deg);
+                _camera.fieldOfView = Mathf.Clamp(2f * Mathf.Atan(frame * 0.5f / _camera.aspect / distance) * Mathf.Rad2Deg, MinFov, 60f);
                 _reconZoom = _baseFov / _camera.fieldOfView;
                 // A few pixels wide at any zoom, like a route drawn over the video.
                 if (path != null) path.widthMultiplier = frame / Mathf.Max(1, Screen.width) * 3f;
@@ -371,6 +380,24 @@ namespace ModernDrone.Missions
             lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             lr.receiveShadows = false;
             return lr;
+        }
+
+        /// <summary>Manual zoom factor for this frame: mouse wheel notches, held + / − keys or the gamepad triggers.</summary>
+        static float ZoomStep()
+        {
+            float step = 1f;
+            var mouse = Mouse.current;
+            if (mouse != null) step *= Mathf.Pow(1.15f, mouse.scroll.ReadValue().y / 120f);
+            float rate = 0f; // e-folds per second while held
+            var kb = Keyboard.current;
+            if (kb != null)
+            {
+                if (kb.equalsKey.isPressed || kb.numpadPlusKey.isPressed) rate += 1.5f;
+                if (kb.minusKey.isPressed || kb.numpadMinusKey.isPressed) rate -= 1.5f;
+            }
+            var pad = Gamepad.current;
+            if (pad != null) rate += 1.5f * (pad.rightTrigger.ReadValue() - pad.leftTrigger.ReadValue());
+            return step * Mathf.Exp(rate * Time.unscaledDeltaTime);
         }
 
         /// <summary>Gimbal-stabilised, so only a slow sub-degree wander.</summary>
@@ -480,7 +507,7 @@ namespace ModernDrone.Missions
             }
 
             GUI.Label(new Rect(0, h * 0.92f, w, _body.fontSize * 1.5f), _replay
-                ? "← → / LB RB — перемотка     ↓ / X — пауза     R / Y — с начала     SPACE / A — дальше"
+                ? "← → / LB RB — перемотка     колесо, + − / LT RT — зум     ↓ / X — пауза     R / Y — с начала     SPACE / A — дальше"
                 : "SPACE / A — продолжить", _legendCentered);
         }
 
