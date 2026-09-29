@@ -12,6 +12,31 @@ namespace ModernDrone.Damage
         Fragment
     }
 
+    /// <summary>What a strike leaves on the vehicle's surface.</summary>
+    public enum MarkKind
+    {
+        /// <summary>Jet went through: small hole with a ring of molten liner metal and radial soot.</summary>
+        JetHole,
+        /// <summary>Jet stopped in the plate: shallow crater, scorched paint, no through hole.</summary>
+        JetCrater,
+        /// <summary>Soot and burnt paint from the charge's blast.</summary>
+        Scorch,
+        /// <summary>Fragment pitting and chipped paint.</summary>
+        Pocks,
+        /// <summary>An explosive reactive armour block that went off.</summary>
+        EraBlast
+    }
+
+    public struct SurfaceMark
+    {
+        public Vector3 point;
+        public Vector3 normal;
+        public MarkKind kind;
+        /// <summary>Part the mark sticks to (it follows a turret or a moving vehicle).</summary>
+        public Transform surface;
+        public VehicleDamageModel owner;
+    }
+
     public struct Trace
     {
         public Vector3 from;
@@ -37,6 +62,7 @@ namespace ModernDrone.Damage
 
         public readonly List<Trace> traces = new List<Trace>();
         public readonly List<ModuleHit> hits = new List<ModuleHit>();
+        public readonly List<SurfaceMark> marks = new List<SurfaceMark>();
         public readonly Dictionary<VehicleDamageModel, KillState> stateBefore = new Dictionary<VehicleDamageModel, KillState>();
         /// <summary>Where each vehicle's incident log stood when this strike reached it.</summary>
         readonly Dictionary<VehicleDamageModel, int> logStart = new Dictionary<VehicleDamageModel, int>();

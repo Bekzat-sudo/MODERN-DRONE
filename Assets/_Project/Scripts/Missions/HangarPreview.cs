@@ -16,7 +16,7 @@ namespace ModernDrone.Missions
 
         [SerializeField] Material outline;
 
-        Transform _stage, _turntable;
+        Transform _stage, _turntable, _floor;
         Camera _camera;
         RenderTexture _texture;
         GameObject _drone, _exploded;
@@ -80,6 +80,7 @@ namespace ModernDrone.Missions
             _turntable.SetParent(_stage, false);
 
             var floor = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            _floor = floor.transform;
             Destroy(floor.GetComponent<Collider>());
             floor.transform.SetParent(_stage, false);
             floor.transform.localPosition = new Vector3(0f, -0.16f, 0f);
@@ -128,8 +129,10 @@ namespace ModernDrone.Missions
             _drone = Instantiate(model.visualPrefab, _turntable, false);
             foreach (var r in _drone.GetComponentsInChildren<Renderer>())
                 if (r.name.StartsWith("Prop_")) _modelProps.Add(r);
-            var b = Bounds(_drone);
-            _distance = b.extents.magnitude * 3.4f;
+            // Frame by the motor diagonal (props included): renderer bounds right after spawning were unreliable
+            // and pushed the 10" model too far away.
+            _distance = model.motorDiagonal * 3.3f;
+            _floor.localScale = new Vector3(model.motorDiagonal * 3f, 0.005f, model.motorDiagonal * 3f);
         }
 
         void SetProps(DronePart part, bool outlined)

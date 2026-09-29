@@ -3,7 +3,11 @@ using UnityEngine;
 
 namespace ModernDrone.Vehicles
 {
-    /// <summary>Visual consequences of vehicle damage: fire, ammo detonation, turret toss, burnt paint.</summary>
+    /// <summary>
+    /// Visual consequences of vehicle damage: fire, ammo detonation, turret toss, strike marks (HitMarks) and burnt paint.
+    /// Paint chars while fires burn: first black soot and paint ash, then, as the hot steel oxidises, rust red
+    /// (burnt-out vehicles "rust immediately": steel that got hot enough oxidises fast, armorama.com / quora.com notes).
+    /// </summary>
     [RequireComponent(typeof(VehicleDamageModel))]
     public sealed class VehicleEffects : MonoBehaviour
     {
@@ -13,7 +17,11 @@ namespace ModernDrone.Vehicles
 
         [SerializeField] Transform turret;
         [SerializeField] float turretTossImpulse = 9f;
-        [SerializeField] float burntDarkness = 0.22f;
+        [Tooltip("Seconds of burning for the paint to char fully.")]
+        [SerializeField] float charTime = 90f;
+
+        static readonly Color Soot = new Color(0.06f, 0.055f, 0.05f);
+        static readonly Color Rust = new Color(0.33f, 0.17f, 0.1f);
 
         VehicleDamageModel _model;
         GameObject _fire;
@@ -25,6 +33,7 @@ namespace ModernDrone.Vehicles
         {
             _model = GetComponent<VehicleDamageModel>();
             if (turret == null) turret = transform.Find("Turret");
+            if (GetComponent<HitMarks>() == null) gameObject.AddComponent<HitMarks>();
         }
 
         void OnEnable()
@@ -108,6 +117,11 @@ namespace ModernDrone.Vehicles
 
         void Update()
         {
+            if (_fires.Count > 0 && _char < 1f)
+            {
+                _char = Mathf.Min(1f, _char + Time.deltaTime / charTime);
+                if (Time.time >= _nextPaint) Paint();
+            }
             if (_spill == null) return;
             float d = 5f * Mathf.Sqrt(_model.TotalSpilled);
             _spill.localScale = new Vector3(d, 0.005f, d);
@@ -115,7 +129,9 @@ namespace ModernDrone.Vehicles
 
         void OnDestroyed(VehicleDamageModel model, DestructionCause cause)
         {
-            Darken();
+            // A catastrophic kill scorches the whole vehicle at once; a burn-out has charred it already.
+            if (cause == DestructionCause.AmmoDetonation) _char = Mathf.Max(_char, 0.55f);
+            Paint();
             if (cause == DestructionCause.AmmoDetonation)
             {
                 Vector3 center = turret != null ? turret.position : transform.position + Vector3.up * 1.5f;
@@ -145,17 +161,35 @@ namespace ModernDrone.Vehicles
             rb.AddTorque(Random.insideUnitSphere * 2f, ForceMode.VelocityChange);
         }
 
-        void Darken()
+        float _char, _nextPaint;
+        readonly System.Collections.Generic.List<(Renderer r, int id, Color paint)> _paint = new System.Collections.Generic.List<(Renderer, int, Color)>();
+        MaterialPropertyBlock _block;
+
+        /// <summary>Tints every painted renderer towards soot, then rust, by how long the vehicle has burned.</summary>
+        void Paint()
         {
-            var block = new MaterialPropertyBlock();
-            foreach (var r in GetComponentsInChildren<Renderer>())
+            _nextPaint = Time.time + 0.5f;
+            if (_block == null)
             {
-                if (r is ParticleSystemRenderer || r.sharedMaterial == null) continue;
-                int id = r.sharedMaterial.HasProperty(BaseColor) ? BaseColor : r.sharedMaterial.HasProperty(GltfBaseColor) ? GltfBaseColor : -1;
-                if (id < 0) continue;
-                r.GetPropertyBlock(block);
-                block.SetColor(id, r.sharedMaterial.GetColor(id) * burntDarkness);
-                r.SetPropertyBlock(block);
+                _block = new MaterialPropertyBlock();
+                foreach (var r in GetComponentsInChildren<Renderer>(true))
+                {
+                    if (r is ParticleSystemRenderer || r.sharedMaterial == null) continue;
+                    int id = r.sharedMaterial.HasProperty(BaseColor) ? BaseColor : r.sharedMaterial.HasProperty(GltfBaseColor) ? GltfBaseColor : -1;
+                    if (id >= 0) _paint.Add((r, id, r.sharedMaterial.GetColor(id)));
+                }
+            }
+            // Soot builds first; rust takes over in the second half as the steel stays hot.
+            var burnt = Color.Lerp(Soot, Rust, Mathf.InverseLerp(0.4f, 1f, _char));
+            float amount = Mathf.SmoothStep(0f, 0.85f, _char);
+            foreach (var (r, id, paint) in _paint)
+            {
+                if (r == null) continue;
+                r.GetPropertyBlock(_block);
+                var c = Color.Lerp(paint, burnt * paint.maxColorComponent * 2f, amount);
+                c.a = paint.a;
+                _block.SetColor(id, c);
+                r.SetPropertyBlock(_block);
             }
         }
     }

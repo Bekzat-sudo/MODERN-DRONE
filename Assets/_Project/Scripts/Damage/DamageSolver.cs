@@ -28,6 +28,12 @@ namespace ModernDrone.Damage
         static readonly HashSet<VehicleModule> BlastSeen = new HashSet<VehicleModule>();
         static readonly IComparer<RaycastHit> ByDistance = Comparer<RaycastHit>.Create((a, b) => a.distance.CompareTo(b.distance));
 
+        /// <summary>Surfaces a strike can mark: hull and armour colliders (the visual model has none).</summary>
+        const int SurfaceMask = GameLayers.VehicleHullMask | GameLayers.ArmorMask | GameLayers.ERAMask | GameLayers.ScreenMask;
+
+        /// <summary>Raised after every detonation, e.g. for persistent marks on the struck vehicle.</summary>
+        public static event Action<StrikeReport> Detonated;
+
         const int JetMask = GameLayers.ArmorMask | GameLayers.ERAMask | GameLayers.ScreenMask | GameLayers.ModuleMask;
         const int SpallMask = GameLayers.ArmorMask | GameLayers.ModuleMask;
         const int ShieldMask = GameLayers.ArmorMask;
@@ -38,6 +44,8 @@ namespace ModernDrone.Damage
         {
             Vector3 dir = direction.sqrMagnitude > 1e-6f ? direction.normalized : Vector3.down;
             var report = new StrikeReport(warhead, point, dir);
+            // Find the struck surface first: an ERA block that fires is disabled by the jet.
+            bool surface = FindSurface(point, dir, out var surfaceHit);
 
             if (warhead.kind == WarheadKind.ShapedCharge)
                 Jet(report, warhead, point, dir, random);
@@ -46,8 +54,10 @@ namespace ModernDrone.Damage
             if (warhead.blastRadius > 0f && !report.dud)
                 Blast(report, warhead, point - dir * 0.1f);
 
+            if (surface) MarkSurface(report, warhead, surfaceHit);
             LastReport = report;
             DrawDebug(report, 15f);
+            Detonated?.Invoke(report);
             return report;
         }
 
@@ -101,7 +111,11 @@ namespace ModernDrone.Damage
                     report.Track(armor.Owner);
                     if (report.impactElement == null) report.impactElement = armor;
                     if (armor.Kind == ArmorKind.Reactive || (armor.Kind == ArmorKind.Screen && r.triggered))
+                    {
+                        if (armor.Kind == ArmorKind.Reactive && !armor.Consumed)
+                            report.marks.Add(new SurfaceMark { point = hit.point, normal = hit.normal, kind = MarkKind.EraBlast, surface = hit.collider.transform, owner = armor.Owner });
                         armor.Consume();
+                    }
                     if (armor.Kind == ArmorKind.Plate && r.passed) lastPlate = i;
                 }
                 else
@@ -131,6 +145,29 @@ namespace ModernDrone.Damage
                 float scale = Mathf.Lerp(0.4f, 1f, residual);
                 Spall(report, w, ExitPoint(Crossed[lastPlate].hit, dir) + dir * 0.02f, dir, scale, random);
             }
+        }
+
+        /// <summary>
+        /// Marks where the warhead met the vehicle: a shaped charge leaves a hole if it penetrated or a crater if the
+        /// plate stopped it, both inside a scorch; a fragmentation charge scorches and pits the surface. A dud
+        /// (fuze crushed by a screen) leaves nothing.
+        /// </summary>
+        static bool FindSurface(Vector3 point, Vector3 dir, out RaycastHit hit)
+        {
+            int n = SortedRaycast(point - dir * BackOff, dir, BackOff + ContactTolerance, SurfaceMask, SubHits);
+            hit = n > 0 ? SubHits[0] : default;
+            return n > 0;
+        }
+
+        static void MarkSurface(StrikeReport report, WarheadData w, RaycastHit hit)
+        {
+            if (report.dud) return;
+            var owner = hit.collider.GetComponentInParent<VehicleDamageModel>();
+            if (owner == null) return;
+            void Add(MarkKind kind) => report.marks.Add(new SurfaceMark { point = hit.point, normal = hit.normal, kind = kind, surface = hit.collider.transform, owner = owner });
+            Add(MarkKind.Scorch);
+            if (w.kind == WarheadKind.ShapedCharge) Add(report.armorPenetrated ? MarkKind.JetHole : MarkKind.JetCrater);
+            else Add(MarkKind.Pocks);
         }
 
         /// <summary>Back face of the struck plate along the jet: spall leaves from there, not from the entry hole.</summary>

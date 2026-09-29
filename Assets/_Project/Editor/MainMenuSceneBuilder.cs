@@ -64,6 +64,7 @@ namespace ModernDrone.Editor
         public static void RebuildAll()
         {
             VideoFeedSetup.Install();
+            HitMarkAssets.Build();
             WarheadAssets.CreateAll();
             VehicleBuilder.BuildTank();
             VehicleBuilder.BuildEwStation();
