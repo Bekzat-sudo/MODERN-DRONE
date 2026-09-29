@@ -59,7 +59,7 @@ namespace ModernDrone.Vehicles
 
         void OnTriggered(ArmorElement _)
         {
-            SimpleVfx.Explosion(transform.position, 0.6f);
+            SimpleVfx.Explosion(transform.position, 0.6f, ExplosionKind.Era);
             Detach();
         }
 

@@ -96,7 +96,7 @@ namespace ModernDrone.Vehicles
             if (roar != null) roar.Stop();
         }
 
-        void OnFlash(VehicleDamageModel model, Vector3 at, float size) => SimpleVfx.Explosion(at, size * 0.6f);
+        void OnFlash(VehicleDamageModel model, Vector3 at, float size) => SimpleVfx.Explosion(at, size * 0.6f, ExplosionKind.Fuel);
 
         /// <summary>Dark stain of leaked fuel spreading under the vehicle.</summary>
         void OnLeak(VehicleDamageModel model, VehicleModule tank)
@@ -137,7 +137,10 @@ namespace ModernDrone.Vehicles
             if (cause == DestructionCause.AmmoDetonation)
             {
                 Vector3 center = turret != null ? turret.position : transform.position + Vector3.up * 1.5f;
-                SimpleVfx.Explosion(center, 2.5f);
+                SimpleVfx.Explosion(center, 2.5f, ExplosionKind.Ammo);
+                // Propellant keeps burning after the blast: a flame jet out of the open hull for seconds.
+                SimpleVfx.CookOff(transform, transform.position + Vector3.up * 1.6f, 10f);
+                SimpleVfx.ScatterFires(transform.position, Random.Range(3, 6), 9f);
                 TossTurret();
                 if (_fire == null)
                     _fire = SimpleVfx.Fire(transform, transform.position + Vector3.up * 1.5f, 1.4f);
