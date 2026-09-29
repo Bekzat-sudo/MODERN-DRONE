@@ -18,6 +18,10 @@ namespace ModernDrone.Editor
             "Лобовая броня закрыта динамической защитой — ищите борт, корму, крышу моторного отсека и башни. " +
             "Взрыватель взводится через 2 с после арма.";
 
+        /// <summary>A mobile fire group hunting drones: not a mission target, but it can be struck.</summary>
+        static GameObject Mog(Terrain terrain, string prefab, Vector3 pos, float yaw) =>
+            ProvingGroundBuilder.PlacePrefab(terrain, prefab, pos, yaw, "МОГ");
+
         [MenuItem("Modern Drone/Setup/Build Mission 01 Scene")]
         public static void Build()
         {
@@ -34,6 +38,7 @@ namespace ModernDrone.Editor
             Target(terrain, new Vector3(c.x + 60f, 0f, 1283f), 180f, "Танк №2 (лбом к нам)");
             Target(terrain, new Vector3(c.x + 150f, 0f, 1278f), 215f, "Танк №3 (на выезде)");
 
+            Mog(terrain, VehicleCatalog.MogUral, new Vector3(c.x + 20f, 0f, 1335f), 190f);
             ProvingGroundBuilder.CreateMissionRig("Задача 1: Стоянка у посадки", Briefing, 4);
 
             EditorSceneManager.SaveScene(scene, ScenePath);
@@ -73,6 +78,7 @@ namespace ModernDrone.Editor
             Target(terrain, new Vector3(c.x - 50f, 0f, 1286f), 270f, "Танк №1 (у посадки)");
             Target(terrain, new Vector3(c.x + 70f, 0f, 1283f), 200f, "Танк №2 (у посадки)");
 
+            Mog(terrain, VehicleCatalog.MogZil, new Vector3(c.x - 15f, 0f, 1320f), 170f);
             ProvingGroundBuilder.CreateMissionRig("Задача 2: Прикрытие РЭБ", Briefing02, 3, 2);
 
             EditorSceneManager.SaveScene(scene, Scene02Path);
@@ -112,6 +118,7 @@ namespace ModernDrone.Editor
             // Bait south of the trees, in plain view of the launch site.
             ProvingGroundBuilder.PlacePrefab(terrain, VehicleCatalog.DecoyTank, new Vector3(c.x - 20f, 0f, 1286f), 160f, "Танк");
 
+            Mog(terrain, VehicleCatalog.MogUral, new Vector3(c.x + 40f, 0f, 1385f), 180f);
             ProvingGroundBuilder.CreateMissionRig("Задача 3: Огневые позиции", Briefing03, 5, 1);
 
             EditorSceneManager.SaveScene(scene, Scene03Path);
@@ -134,7 +141,7 @@ namespace ModernDrone.Editor
             "Задача: вывести из строя 3 машины из 6, пока колонна не ушла. Подбитая машина встаёт и задерживает остальных; " +
             "после первого попадания колонна ускоряется и ставит дым.\n\n" +
             "Два участка дороги закрыты противодроновыми сетками — в сетке дрон застревает и чаще всего не взрывается, но в ней есть разрывы. " +
-            "Техника отстреливается вблизи (до ~50 м), дорогу прикрывает расчёт дронов-перехватчиков. Колонна тронется с вашим первым взлётом.";
+            "В колонне идёт ЗИЛ с ДШК (мобильная огневая группа), дорогу прикрывает расчёт дронов-перехватчиков. Колонна тронется с вашим первым взлётом.";
 
         [MenuItem("Modern Drone/Setup/Build Mission 04 Scene")]
         public static void BuildMission04()
@@ -162,7 +169,11 @@ namespace ModernDrone.Editor
                 (VehicleCatalog.Mlrs, "РСЗО"), (VehicleCatalog.SamLauncherTravel, "ПУ С-400"), (VehicleBuilder.TankPrefabPath, "Танк")
             };
             foreach (var (prefab, label) in order)
+            {
                 column.Add(TargetAt(terrain, prefab, road[0], 90f, label, TargetRequirement.OutOfAction).GetComponent<ModernDrone.Damage.VehicleDamageModel>());
+                // The MOG rides third, covering the middle of the column.
+                if (label == "БТР") column.Add(Mog(terrain, VehicleCatalog.MogZil, road[0], 90f).GetComponent<ModernDrone.Damage.VehicleDamageModel>());
+            }
 
             var convoy = new GameObject("Convoy").AddComponent<ModernDrone.Vehicles.Convoy>();
             convoy.Configure(road, column, 7f);
@@ -200,6 +211,7 @@ namespace ModernDrone.Editor
             TargetAt(terrain, VehicleBuilder.EwStationPrefabPath, new Vector3(930f, 0f, 1700f), 90f, "Станция РЭБ", TargetRequirement.Silenced);
             ProvingGroundBuilder.PlacePrefab(terrain, VehicleCatalog.InterceptorSite, new Vector3(1090f, 0f, 1740f), 200f, "Расчёт перехватчиков");
 
+            Mog(terrain, VehicleCatalog.MogUral, new Vector3(1070f, 0f, 1700f), 200f);
             var mission = ProvingGroundBuilder.CreateMissionRig("Задача 5: Позиция ЗРК", Briefing05, 3, 3);
             mission.SetRequiredTargets(3);
             EditorSceneManager.SaveScene(scene, "Assets/_Project/Scenes/Mission_05.unity");
@@ -208,7 +220,7 @@ namespace ModernDrone.Editor
 
         internal const string Briefing06 =
             "Вдоль лесополосы в ~330 м к северу стоит техника: разведка насчитала восемь машин, но большинство — надувные макеты.\n\n" +
-            "Настоящих три: САУ, РСЗО и грузовик. Макеты блестят, у них упрощённые формы и лёгкий крен; настоящая техника отстреливается вблизи.\n\n" +
+            "Настоящих три: САУ, РСЗО и грузовик. Макеты блестят, у них упрощённые формы и лёгкий крен. Позицию прикрывает мобильная огневая группа.\n\n" +
             "Задача: вывести из строя все три настоящие машины. Каждый удар по макету — потерянный дрон.";
 
         [MenuItem("Modern Drone/Setup/Build Mission 06 Scene")]
@@ -231,6 +243,7 @@ namespace ModernDrone.Editor
             foreach (var (prefab, x, yaw) in decoys)
                 ProvingGroundBuilder.PlacePrefab(terrain, prefab, new Vector3(x, 0f, 1288f), yaw);
 
+            Mog(terrain, VehicleCatalog.MogZil, new Vector3(1150f, 0f, 1330f), 180f);
             ProvingGroundBuilder.CreateMissionRig("Задача 6: Ложные цели", Briefing06, 5);
             EditorSceneManager.SaveScene(scene, "Assets/_Project/Scenes/Mission_06.unity");
             ProvingGroundBuilder.AddToBuildSettings("Assets/_Project/Scenes/Mission_06.unity", 6);
@@ -268,6 +281,7 @@ namespace ModernDrone.Editor
             var site = ProvingGroundBuilder.PlacePrefab(terrain, VehicleCatalog.InterceptorSite, new Vector3(c.x, 0f, 1360f), 180f, "Расчёт перехватчиков");
             site.AddComponent<ModernDrone.Vehicles.HeatSignature>().Configure(heat);
 
+            Mog(terrain, VehicleCatalog.MogUral, new Vector3(c.x + 20f, 0f, 1335f), 190f).AddComponent<ModernDrone.Vehicles.HeatSignature>().Configure(heat);
             var mission = ProvingGroundBuilder.CreateMissionRig("Задача 7: Ночная охота", Briefing07, 4);
             mission.gameObject.AddComponent<ThermalNight>();
             EditorSceneManager.SaveScene(scene, "Assets/_Project/Scenes/Mission_07.unity");
@@ -297,6 +311,7 @@ namespace ModernDrone.Editor
             flight.Configure(points, heli.transform.Find("Rotor"));
             EditorUtility.SetDirty(flight);
 
+            Mog(terrain, VehicleCatalog.MogZil, new Vector3(1000f, 0f, 1720f), 200f);
             ProvingGroundBuilder.CreateMissionRig("Задача 8: Охота на вертолёт", Briefing08, 4);
             EditorSceneManager.SaveScene(scene, "Assets/_Project/Scenes/Mission_08.unity");
             ProvingGroundBuilder.AddToBuildSettings("Assets/_Project/Scenes/Mission_08.unity", 8);

@@ -45,7 +45,7 @@ namespace ModernDrone.Damage
             Vector3 dir = direction.sqrMagnitude > 1e-6f ? direction.normalized : Vector3.down;
             var report = new StrikeReport(warhead, point, dir);
             // Find the struck surface first: an ERA block that fires is disabled by the jet.
-            bool surface = FindSurface(point, dir, out var surfaceHit);
+            var surface = FindSurface(point, dir);
 
             if (warhead.kind == WarheadKind.ShapedCharge)
                 Jet(report, warhead, point, dir, random);
@@ -54,7 +54,7 @@ namespace ModernDrone.Damage
             if (warhead.blastRadius > 0f && !report.dud)
                 Blast(report, warhead, point - dir * 0.1f);
 
-            if (surface) MarkSurface(report, warhead, surfaceHit);
+            if (surface.owner != null) MarkSurface(report, warhead, surface);
             LastReport = report;
             DrawDebug(report, 15f);
             Detonated?.Invoke(report);
@@ -113,7 +113,9 @@ namespace ModernDrone.Damage
                     if (armor.Kind == ArmorKind.Reactive || (armor.Kind == ArmorKind.Screen && r.triggered))
                     {
                         if (armor.Kind == ArmorKind.Reactive && !armor.Consumed)
-                            report.marks.Add(new SurfaceMark { point = hit.point, normal = hit.normal, kind = MarkKind.EraBlast, surface = hit.collider.transform, owner = armor.Owner });
+                            // The soot stays on the hull: a model block flies off, so stick the mark to its parent.
+                            report.marks.Add(new SurfaceMark { point = hit.point, normal = hit.normal, kind = MarkKind.EraBlast,
+                                surface = hit.collider.transform.parent != null ? hit.collider.transform.parent : hit.collider.transform, owner = armor.Owner });
                         armor.Consume();
                     }
                     if (armor.Kind == ArmorKind.Plate && r.passed) lastPlate = i;
@@ -152,19 +154,24 @@ namespace ModernDrone.Damage
         /// plate stopped it, both inside a scorch; a fragmentation charge scorches and pits the surface. A dud
         /// (fuze crushed by a screen) leaves nothing.
         /// </summary>
-        static bool FindSurface(Vector3 point, Vector3 dir, out RaycastHit hit)
+        /// <summary>
+        /// The struck surface, resolved before the jet: a reactive block that fires may fly off, so the marks go on
+        /// the part it was mounted on.
+        /// </summary>
+        static (Vector3 point, Vector3 normal, Transform surface, VehicleDamageModel owner) FindSurface(Vector3 point, Vector3 dir)
         {
             int n = SortedRaycast(point - dir * BackOff, dir, BackOff + ContactTolerance, SurfaceMask, SubHits);
-            hit = n > 0 ? SubHits[0] : default;
-            return n > 0;
+            if (n == 0) return default;
+            var hit = SubHits[0];
+            var t = hit.collider.transform;
+            if (hit.collider.GetComponent<ArmorElement>() is ArmorElement a && a.Kind == ArmorKind.Reactive && t.parent != null) t = t.parent;
+            return (hit.point, hit.normal, t, hit.collider.GetComponentInParent<VehicleDamageModel>());
         }
 
-        static void MarkSurface(StrikeReport report, WarheadData w, RaycastHit hit)
+        static void MarkSurface(StrikeReport report, WarheadData w, (Vector3 point, Vector3 normal, Transform surface, VehicleDamageModel owner) s)
         {
             if (report.dud) return;
-            var owner = hit.collider.GetComponentInParent<VehicleDamageModel>();
-            if (owner == null) return;
-            void Add(MarkKind kind) => report.marks.Add(new SurfaceMark { point = hit.point, normal = hit.normal, kind = kind, surface = hit.collider.transform, owner = owner });
+            void Add(MarkKind kind) => report.marks.Add(new SurfaceMark { point = s.point, normal = s.normal, kind = kind, surface = s.surface, owner = s.owner });
             Add(MarkKind.Scorch);
             if (w.kind == WarheadKind.ShapedCharge) Add(report.armorPenetrated ? MarkKind.JetHole : MarkKind.JetCrater);
             else Add(MarkKind.Pocks);

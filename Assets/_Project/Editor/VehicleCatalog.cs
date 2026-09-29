@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using ModernDrone.Damage;
 using ModernDrone.Missions;
 using ModernDrone.Vehicles;
@@ -34,6 +35,9 @@ namespace ModernDrone.Editor
         public const string Mtlb = Dir + "MTLB_Tractor.prefab";
         public const string SamLauncherTravel = Dir + "SAM_Launcher_Travel.prefab";
         public const string Helicopter = Dir + "Helicopter_Mi28.prefab";
+        public const string MogUral = Dir + "MOG_Ural_ZU23.prefab";
+        public const string MogZil = Dir + "MOG_ZIL157_DShK.prefab";
+        const string WeaponDir = "Assets/_Project/Art/Models/Weapons/";
         const string ModelDir = "Assets/_Project/Art/Models/Vehicles/";
 
         static readonly Color Green = new Color(0.29f, 0.33f, 0.22f);
@@ -55,6 +59,8 @@ namespace ModernDrone.Editor
             BuildTruck();
             BuildMrap();
             BuildHelicopter();
+            BuildMogUral();
+            BuildMogZil();
             BuildDecoyTank();
             BuildDecoyMlrs();
             BuildDecoySpaag();
@@ -90,7 +96,7 @@ namespace ModernDrone.Editor
             k.Plate("Roof", v(0, 1.85f, 0.2f), v(2.9f, 0.05f, 6.6f), 18f);
             k.Plate("Floor", v(0, 0.5f, 0.2f), v(2.9f, 0.05f, 6.8f), 15f);
 
-            var turret = k.Group("Turret", v(0.001f, 1.636f, 0.391f));
+            var turret = k.Group("Turret", v(0.001f, 1.636f, era ? 0.327f : 0.391f));
             k.Plate("Turret_Front", v(0, 0.55f, 1.05f), v(2.0f, 0.8f, 0.1f), 45f, turret, Pitch(-30f));
             k.Plate("Turret_Side_L", v(-1.0f, 0.55f, 0), v(0.06f, 0.8f, 2.0f), 25f, turret);
             k.Plate("Turret_Side_R", v(1.0f, 0.55f, 0), v(0.06f, 0.8f, 2.0f), 25f, turret);
@@ -109,18 +115,15 @@ namespace ModernDrone.Editor
             k.Module("Module_Fuel", ModuleType.FuelTank, 70f, 15f, v(0, 1.0f, 1.8f), v(2.0f, 0.6f, 0.6f));
             if (era)
             {
-                // Reactive blocks along the side frames, slat screens over the rear flanks and the turret rear.
-                foreach (float x in new[] { -1.6f, 1.6f })
-                    for (int i = 0; i < 6; i++)
-                        k.Era($"Era_Side_{(x < 0 ? "L" : "R")}{i}", v(x, 1.35f, 3.4f - i * 0.85f), v(0.12f, 0.8f, 0.8f));
+                // Reactive blocks come from the model itself (ModelParts); slat screens over the rear flanks and turret rear.
                 k.Cage("Slat_L", v(-1.62f, 1.33f, -2.19f), v(0.3f, 0.8f, 1.3f), 0.5f);
                 k.Cage("Slat_R", v(1.62f, 1.33f, -2.19f), v(0.3f, 0.8f, 1.3f), 0.5f);
                 k.Cage("Slat_Turret", v(0, 0.45f, -0.55f), v(2.7f, 0.4f, 1.2f), 0.5f, turret);
             }
             k.AttachModel(ModelDir + (era ? "BMP3M/bmp3m_era.glb" : "BMP3M/bmp3m.glb"), Vector3.zero, turret, "Turret");
+            if (era) ModelParts(k);
             k.SliceHull();
             k.Finish(era ? "БМП-3М с ДЗ" : "БМП-3М").SetAmmoConfinement(0.6f);
-            k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
             k.Save(era ? IfvEra : Ifv);
         }
 
@@ -162,7 +165,6 @@ namespace ModernDrone.Editor
             k.AttachModel(ModelDir + "Msta/msta_s.glb", Vector3.zero, turret, "Turret");
             k.SliceHull();
             k.Finish("САУ 2С19М1 «Мста-С»").SetAmmoConfinement(0.6f);
-            k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
             k.Save(Spg);
         }
 
@@ -202,7 +204,6 @@ namespace ModernDrone.Editor
             k.AttachModel(ModelDir + "BTR82/btr82.glb", Vector3.zero, turret, "Turret");
             k.SliceHull();
             k.Finish("БТР-82А").SetAmmoConfinement(0.4f);
-            k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
             k.Save(Apc);
         }
 
@@ -344,7 +345,6 @@ namespace ModernDrone.Editor
                 .GetComponent<VehicleModule>().SetContents(Combustible.RocketPropellant, explosive: true);
             k.Module("Module_Launcher", ModuleType.Launcher, 70f, 20f, v(0, -0.75f, 0), v(0.8f, 0.4f, 0.8f), pod);
             k.Finish("РСЗО (заглушка)");
-            k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
             k.Save(Mlrs);
         }
 
@@ -375,8 +375,135 @@ namespace ModernDrone.Editor
             k.SliceHull();
             // Ammunition crates in an open, tented bed: burning propellant vents instead of building pressure.
             k.Finish("Урал-4320 (снабжение)").SetAmmoConfinement(0.1f);
-            k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
             k.Save(Truck);
+        }
+
+        // ------------------------------------------------------------------ mobile fire groups
+
+        /// <summary>
+        /// Mobile fire group (MOG) on an Ural-4320 with the tent removed and a ZU-23-2 in the bed, the common
+        /// anti-drone "technical" of this war (en.wikipedia.org/wiki/ZU-23-2: "mounted on chassis or trailers ...
+        /// standard weapons for anti-drone groups"). Unarmoured; the gun and its crew are the Launcher module.
+        /// </summary>
+        static void BuildMogUral()
+        {
+            var k = new VehicleKit("MOG_Ural_ZU23", Green);
+            k.Visual("Chassis", v(0, 0.95f, 0), v(2.2f, 0.4f, 7.2f), k.Dark);
+            k.Wheels(new[] { 2.6f, -0.93f, -2.33f }, 1.0f, 0.6f, 0.45f);
+            k.Plate("Hood_Front", v(0, 1.5f, 3.68f), v(2.1f, 1.1f, 0.06f), 8f);
+            k.Plate("Cab_Front", v(0, 2.45f, 2.2f), v(2.3f, 0.9f, 0.06f), 8f);
+            k.Plate("Cab_Side_L", v(-1.2f, 2.2f, 1.55f), v(0.06f, 1.4f, 1.3f), 8f);
+            k.Plate("Cab_Side_R", v(1.2f, 2.2f, 1.55f), v(0.06f, 1.4f, 1.3f), 8f);
+            k.Plate("Cab_Roof", v(0, 2.9f, 1.55f), v(2.3f, 0.06f, 1.3f), 8f);
+            k.Module("Module_Engine", ModuleType.Engine, 120f, 30f, v(0, 1.6f, 3.1f), v(1.2f, 0.8f, 1.1f));
+            k.Module("Module_ControlStation", ModuleType.ControlStation, 60f, 10f, v(0, 2.2f, 1.55f), v(1.8f, 1.0f, 1.1f));
+            k.Module("Module_Fuel", ModuleType.FuelTank, 60f, 10f, v(1.05f, 1.1f, 0.3f), v(0.5f, 0.5f, 1.0f))
+                .GetComponent<VehicleModule>().SetContents(Combustible.Diesel, fill: 0.6f);
+            k.Visual("Bed", v(0, 1.45f, -1.8f), v(2.4f, 0.6f, 4.1f), k.Hull);
+            k.AttachModel(ModelDir + "Ural4320/ural4320_open.glb");
+            k.SliceHull();
+            MountGun(k, WeaponDir + "zu23_2.glb", v(0f, 0f, -1.9f), v(1.4f, 1.3f, 1.6f),
+                2000f, 970f, 0.6f, 1.2f, 0.02f, 1200f, 250f);
+            k.Finish("МОГ: Урал + ЗУ-23-2").SetAmmoConfinement(0.05f);
+            k.Save(MogUral);
+        }
+
+        /// <summary>
+        /// Mobile fire group on a ZIL-157 flatbed (6.92 x 2.32 x 2.36 m, en.wikipedia.org/wiki/ZIL-157) with a DShK
+        /// 12.7 mm on a pintle pedestal, standing in for the pickup "technicals" these groups also use. Model
+        /// "ZIL157 bort platforma" by Labus (CC BY 4.0), tent hoops removed.
+        /// </summary>
+        static void BuildMogZil()
+        {
+            var k = new VehicleKit("MOG_ZIL157_DShK", Green);
+            k.Visual("Chassis", v(0, 0.8f, 0), v(2.0f, 0.35f, 6.6f), k.Dark);
+            k.Wheels(new[] { 2.35f, -0.8f, -1.95f }, 0.9f, 0.55f, 0.35f);
+            k.Plate("Hood", v(0, 1.4f, 2.7f), v(1.8f, 0.9f, 1.4f), 5f);
+            k.Plate("Cab", v(0, 1.9f, 1.4f), v(2.1f, 1.2f, 1.3f), 5f);
+            k.Module("Module_Engine", ModuleType.Engine, 100f, 25f, v(0, 1.3f, 2.6f), v(1.0f, 0.7f, 1.0f));
+            k.Module("Module_ControlStation", ModuleType.ControlStation, 50f, 8f, v(0, 1.9f, 1.4f), v(1.7f, 0.9f, 1.0f));
+            k.Module("Module_Fuel", ModuleType.FuelTank, 50f, 8f, v(0.95f, 0.95f, 0.5f), v(0.4f, 0.4f, 0.9f))
+                .GetComponent<VehicleModule>().SetContents(Combustible.Gasoline, fill: 0.6f);
+            k.Visual("Bed", v(0, 1.3f, -1.2f), v(2.3f, 0.5f, 3.6f), k.Hull);
+            k.AttachModel(ModelDir + "ZIL157/zil157.glb");
+            k.SliceHull();
+            MountGun(k, WeaponDir + "dshk.glb", v(0f, 0f, -1.3f), v(0.9f, 1.6f, 0.9f),
+                600f, 850f, 1.0f, 1.5f, 0.02f, 800f, 150f);
+            k.Finish("МОГ: ЗИЛ-157 + ДШК").SetAmmoConfinement(0.05f);
+            k.Save(MogZil);
+        }
+
+        /// <summary>
+        /// Stands a weapon model on the cargo bed (floor found by a raycast on the visual model), adds its gun/crew
+        /// module and an AntiDroneGun driving the model's Traverse and Elevation joints.
+        /// </summary>
+        static void MountGun(VehicleKit k, string modelPath, Vector3 bedXZ, Vector3 moduleSize, float rpm, float velocity,
+            float burst, float pause, float perRound, float range, float optimal)
+        {
+            float floor = BedHeight(k.Root, bedXZ);
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(modelPath);
+            var gun = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+            PrefabUtility.UnpackPrefabInstance(gun, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
+            gun.name = "Gun";
+            gun.transform.SetParent(k.Root.transform, false);
+            gun.transform.localPosition = new Vector3(bedXZ.x, floor, bedXZ.z);
+            var traverse = FindDeep(gun.transform, "Traverse");
+            var elevation = FindDeep(gun.transform, "Elevation");
+            k.Module("Module_Gun", ModuleType.Launcher, 50f, 5f, new Vector3(bedXZ.x, floor + moduleSize.y * 0.5f, bedXZ.z), moduleSize);
+            k.Root.AddComponent<AntiDroneGun>().Configure(traverse, elevation, elevation, rpm, velocity, burst, pause, perRound, range, optimal);
+        }
+
+        /// <summary>
+        /// Turns separate model pieces into damage parts: every ERA_### block becomes a reactive element on its own
+        /// collider (so coverage follows the real block layout) that flies off when it fires; Hatch_* pieces blow off
+        /// when the ammunition detonates. Kontakt-type block ~6 kg, hatch ~30 kg (estimates).
+        /// </summary>
+        static void ModelParts(VehicleKit k)
+        {
+            foreach (var t in k.Root.GetComponentsInChildren<Transform>(true))
+            {
+                if (t.name.StartsWith("ERA_"))
+                {
+                    t.gameObject.AddComponent<BoxCollider>();
+                    var armor = t.gameObject.AddComponent<ArmorElement>();
+                    armor.Configure(ArmorKind.Reactive, 0.5f);
+                    armor.SetHideWhenConsumed(false);
+                    t.gameObject.AddComponent<DetachablePart>().Configure(DetachCause.ReactiveFired, 6f, 18f, 1f);
+                }
+                else if (t.name.StartsWith("Hatch_"))
+                {
+                    var box = t.gameObject.AddComponent<BoxCollider>();
+                    box.enabled = false; // only as debris
+                    t.gameObject.AddComponent<DetachablePart>().Configure(DetachCause.Catastrophic, 30f, 12f, 0.7f);
+                }
+            }
+        }
+
+        /// <summary>Top of the cargo floor under a point, from the visual model's meshes.</summary>
+        static float BedHeight(GameObject root, Vector3 at)
+        {
+            var added = new List<MeshCollider>();
+            foreach (var mf in root.GetComponentsInChildren<MeshFilter>())
+                if (mf.GetComponent<Collider>() == null && mf.GetComponent<MeshRenderer>() != null && mf.GetComponent<MeshRenderer>().enabled)
+                    added.Add(mf.gameObject.AddComponent<MeshCollider>());
+            Physics.SyncTransforms();
+            float y = 1.4f;
+            var from = root.transform.TransformPoint(new Vector3(at.x, 2.25f, at.z));
+            if (Physics.Raycast(from, Vector3.down, out var hit, 3f))
+                y = root.transform.InverseTransformPoint(hit.point).y;
+            foreach (var c in added) Object.DestroyImmediate(c);
+            return y;
+        }
+
+        static Transform FindDeep(Transform t, string name)
+        {
+            if (t.name == name) return t;
+            foreach (Transform child in t)
+            {
+                var r = FindDeep(child, name);
+                if (r != null) return r;
+            }
+            return null;
         }
 
         /// <summary>
@@ -401,7 +528,6 @@ namespace ModernDrone.Editor
             k.AttachModel(ModelDir + "Typhoon/typhoon.glb");
             k.SliceHull();
             k.Finish("КамАЗ «Тайфун-К»");
-            k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
             k.Save(Mrap);
         }
 
@@ -480,7 +606,6 @@ namespace ModernDrone.Editor
             k.Module("Module_OperatorPost", ModuleType.ControlStation, 60f, 5f, v(4.0f, 0.6f, -1.5f), v(1.6f, 1.1f, 1.6f), visible: true, mat: k.ModuleMat);
 
             k.Finish("Расчёт перехватчиков (заглушка)");
-            k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
             var site = k.Root.AddComponent<ModernDrone.Missions.InterceptorSite>();
             site.Configure(antenna.transform, table.transform, VehicleKit.Material("InterceptorBody", new Color(0.18f, 0.18f, 0.2f)));
             k.Save(InterceptorSite);
@@ -533,7 +658,6 @@ namespace ModernDrone.Editor
             k.AttachModel(ModelDir + "MTLBM/mtlbm.glb", Vector3.zero, turret, "Turret");
             k.SliceHull();
             k.Finish("МТ-ЛБМ").SetAmmoConfinement(0.3f);
-            k.Root.AddComponent<CloseInDefense>().Configure(null, 40f);
             k.Save(Mtlb);
         }
 

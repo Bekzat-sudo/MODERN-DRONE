@@ -102,12 +102,10 @@ namespace ModernDrone.UI
             }
         }
 
-        /// <summary>Enemy observation (detection bar) and interceptor warning with an on-screen marker or edge arrow.</summary>
+        /// <summary>Interceptor warning with an on-screen marker or edge arrow (no detection warning: the pilot cannot tell when they have been spotted).</summary>
         void DrawThreat(float w, float h)
         {
             float y = h * 0.2f;
-            if (ModernDrone.Core.ThreatWarning.UnderGroundFire && Mathf.Repeat(Time.unscaledTime, 0.3f) < 0.2f)
-                Shadowed(new Rect(0, h * 0.3f, w, _big.fontSize * 1.4f), "ОБСТРЕЛ С ЗЕМЛИ", _big, Color.red);
             if (ModernDrone.Core.InterceptorWarning.RecentMiss)
                 Shadowed(new Rect(0, y - _big.fontSize * 1.6f, w, _big.fontSize * 1.4f), "ПРОМАХ ПЕРЕХВАТЧИКА", _big, new Color(0.4f, 1f, 0.4f));
             if (ModernDrone.Core.InterceptorWarning.Active)
@@ -117,20 +115,7 @@ namespace ModernDrone.UI
                 if (!close || Mathf.Repeat(Time.unscaledTime, 0.3f) < 0.2f)
                     Shadowed(new Rect(0, y, w, _big.fontSize * 1.4f), $"ПЕРЕХВАТЧИК {dist:0}м", _big, close ? Color.red : new Color(1f, 0.6f, 0.2f));
                 DrawInterceptorMarker(w, h, ModernDrone.Core.InterceptorWarning.Position);
-                return;
             }
-
-            float detection = ModernDrone.Core.ThreatWarning.Lock;
-            if (detection <= 0f) return;
-            Shadowed(new Rect(0, y, w, _big.fontSize * 1.4f), "ОБНАРУЖЕН", _big, detection > 0.7f ? Color.red : new Color(1f, 0.6f, 0.2f));
-            float bw = w * 0.2f, bh = Mathf.Max(4f, h * 0.008f);
-            var bar = new Rect(w * 0.5f - bw * 0.5f, y + _big.fontSize * 1.5f, bw, bh);
-            var prev = GUI.color;
-            GUI.color = new Color(0f, 0f, 0f, 0.6f);
-            GUI.DrawTexture(bar, Texture2D.whiteTexture);
-            GUI.color = Color.red;
-            GUI.DrawTexture(new Rect(bar.x, bar.y, bar.width * detection, bar.height), Texture2D.whiteTexture);
-            GUI.color = prev;
         }
 
         void DrawInterceptorMarker(float w, float h, Vector3 world)

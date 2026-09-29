@@ -73,7 +73,6 @@ namespace ModernDrone.Missions
             _cooldown -= Time.deltaTime;
             bool seen = CanSee(_drone);
             Detection = Mathf.Clamp01(Detection + (seen ? Time.deltaTime / detectTime : -Time.deltaTime / detectTime));
-            if (Detection > 0f && _airborne.Count == 0) ThreatWarning.Report(Detection);
 
             if (Detection >= 1f && _cooldown <= 0f && stock > 0 && _airborne.Count < maxAirborne)
                 Launch();

@@ -15,11 +15,18 @@ namespace ModernDrone.Damage
         [SerializeField] float value = 50f;
         [Tooltip("Reactive blocks and screens are consumed when triggered.")]
         [SerializeField] bool consumable;
+        [Tooltip("Hide when consumed (placeholder boxes). Model parts that fly off (DetachablePart) stay visible.")]
+        [SerializeField] bool hideWhenConsumed = true;
 
         public ArmorKind Kind => kind;
         public float Value => value;
         public bool Consumed { get; private set; }
         public VehicleDamageModel Owner { get; internal set; }
+
+        /// <summary>Raised when a reactive block fires or a screen is spent.</summary>
+        public event System.Action<ArmorElement> Triggered;
+
+        public void SetHideWhenConsumed(bool hide) => hideWhenConsumed = hide;
 
         public void Configure(ArmorKind kind, float value)
         {
@@ -34,8 +41,10 @@ namespace ModernDrone.Damage
             if (!consumable || Consumed) return;
             Consumed = true;
             // Hide and stop blocking raycasts / the drone; keeps the object for the debrief view.
-            foreach (var r in GetComponentsInChildren<Renderer>()) r.enabled = false;
+            if (hideWhenConsumed)
+                foreach (var r in GetComponentsInChildren<Renderer>()) r.enabled = false;
             foreach (var c in GetComponents<Collider>()) c.enabled = false;
+            Triggered?.Invoke(this);
         }
 
         public static int LayerFor(ArmorKind kind) => kind switch

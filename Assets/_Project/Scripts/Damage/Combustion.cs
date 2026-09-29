@@ -13,7 +13,9 @@ namespace ModernDrone.Damage
         /// <summary>Gun propellant charges (nitrocellulose, partly combustible cases).</summary>
         Propellant,
         /// <summary>Solid rocket motors (MLRS rockets, SAM missiles).</summary>
-        RocketPropellant
+        RocketPropellant,
+        /// <summary>Petrol (ZIL-157 and other old trucks, pickups).</summary>
+        Gasoline
     }
 
     /// <summary>How a module was struck.</summary>
@@ -76,6 +78,8 @@ namespace ModernDrone.Damage
     /// charge sets off the next and the overpressure lifts the turret (en.wikipedia.org/wiki/Cooking_off; Zaloga in
     /// taskandpurpose.com). Rocket motors burn fiercely when hit or heated (fast cook-off). High explosive is initiated
     /// by a shaped-charge jet (Held v2d criterion, OSTI LA-8647) but only cooks off after long heating.
+    /// Gasoline: flash point about -45 C, autoignition ~280 C (en.wikipedia.org/wiki/Gasoline): the vapour over the
+    /// fuel is flammable at almost any temperature, so even fragments and bullets light it far more often than diesel.
     /// </summary>
     public static class Combustion
     {
@@ -84,6 +88,7 @@ namespace ModernDrone.Damage
         static readonly CombustionProfile JetFuelProfile = new CombustionProfile(0.55f, 0.2f, 0.08f, true, true, 3f, 25f, 1.2f, 2.5f, false, true);
         static readonly CombustionProfile OilProfile = new CombustionProfile(0.25f, 0.05f, 0.01f, false, true, 5f, 15f, 0.6f, 1.5f, false, true);
         static readonly CombustionProfile PropellantProfile = new CombustionProfile(0.9f, 0.5f, 0.15f, false, false, 12f, 8f, 3.0f, 3.5f, true, false);
+        static readonly CombustionProfile GasolineProfile = new CombustionProfile(0.8f, 0.35f, 0.15f, true, true, 2f, 20f, 1.3f, 2.8f, false, true);
         static readonly CombustionProfile RocketProfile = new CombustionProfile(0.85f, 0.45f, 0.15f, false, false, 10f, 12f, 2.5f, 4.0f, false, false);
 
         public static CombustionProfile Of(Combustible c) => c switch
@@ -93,6 +98,7 @@ namespace ModernDrone.Damage
             Combustible.Oil => OilProfile,
             Combustible.Propellant => PropellantProfile,
             Combustible.RocketPropellant => RocketProfile,
+            Combustible.Gasoline => GasolineProfile,
             _ => NoneProfile
         };
 
