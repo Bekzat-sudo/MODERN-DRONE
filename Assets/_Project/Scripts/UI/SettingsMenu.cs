@@ -153,7 +153,7 @@ namespace ModernDrone.UI
 
         void GamepadRows()
         {
-            _rows.Add(MenuRow.Choice("Режим газа", new[] { "Центр = 50%", "Центр = висение", "Газ на удержание", "Правый курок" },
+            _rows.Add(MenuRow.Choice("Режим газа", new[] { "Центр = 50%", "Центр = висение", "Газ на удержание", "Правый курок", "Центр = 0%" },
                 () => (int)S.gpThrottleMode, v => S.gpThrottleMode = (GamepadThrottleMode)v));
             _rows.Add(MenuRow.Slider("Скорость газа (удержание), /с", () => S.gpIncrementalSpeed, v => S.gpIncrementalSpeed = v, 0.1f, 3f, 0.1f, "0.0"));
             _rows.Add(MenuRow.Slider("Мёртвая зона", () => S.gpDeadzone, v => S.gpDeadzone = v, 0f, 0.25f, 0.01f));

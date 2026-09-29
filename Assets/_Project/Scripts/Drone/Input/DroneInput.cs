@@ -196,7 +196,8 @@ namespace ModernDrone.Drone
             float ly = Deadband(left.y, dz);
             // Spring-centred throttle: released stick counts as "throttle at rest" for arming.
             state.throttleAtRest = ly <= 0.1f &&
-                (s.gpThrottleMode == GamepadThrottleMode.CenterIsHalf || s.gpThrottleMode == GamepadThrottleMode.CenterIsHover);
+                (s.gpThrottleMode == GamepadThrottleMode.CenterIsHalf || s.gpThrottleMode == GamepadThrottleMode.CenterIsHover ||
+                 s.gpThrottleMode == GamepadThrottleMode.CenterIsZero);
             switch (s.gpThrottleMode)
             {
                 case GamepadThrottleMode.CenterIsHalf:
@@ -209,6 +210,9 @@ namespace ModernDrone.Drone
                 case GamepadThrottleMode.Incremental:
                     _heldThrottle = Mathf.Clamp01(_heldThrottle + ly * s.gpIncrementalSpeed * Time.deltaTime);
                     state.throttle = _heldThrottle;
+                    break;
+                case GamepadThrottleMode.CenterIsZero:
+                    state.throttle = Mathf.Clamp01(ly);
                     break;
                 case GamepadThrottleMode.Trigger:
                     state.throttle = Mathf.Clamp01(gp.rightTrigger.ReadUnprocessedValue());

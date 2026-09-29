@@ -55,6 +55,9 @@ namespace ModernDrone.Editor
             c.visualPrefab = DroneRigBuilder.VisualPrefab(DroneRigBuilder.Model.Fpv7);
             c.cameraPosition = new Vector3(0f, -0.003f, 0.095f);
             c.cameraTilt = 8f; // lens face normal measured on the model: 7.6 deg up
+            c.batteryMount = new Vector3(0f, 0.075f, -0.04f);
+            c.antennaMount = new Vector3(0f, 0.07f, -0.16f);
+            c.spoolMount = new Vector3(0f, -0.08f, -0.08f);
             c.airframeMass = 0.47f; // 7" frame, 2807 motors, 4-in-1 ESC, FC, props: ~0.45-0.5 kg (oscarliang.com 7" builds)
             c.motorDiagonal = 0.3f;
             c.colliderSize = new Vector3(0.3f, 0.08f, 0.3f);
@@ -71,6 +74,9 @@ namespace ModernDrone.Editor
             c.summary = "тяжёлый: большая нагрузка и запас батареи, инертный";
             c.visualPrefab = DroneRigBuilder.VisualPrefab(DroneRigBuilder.Model.NonStop);
             c.cameraPosition = new Vector3(0f, 0.004f, 0.14f);
+            c.batteryMount = new Vector3(0f, 0.15f, -0.03f);
+            c.antennaMount = new Vector3(0f, 0.13f, -0.2f);
+            c.spoolMount = new Vector3(0f, -0.08f, -0.1f);
             c.airframeMass = 0.68f; // 10" frame, 3115 motors, ESC, FC, props (~1.6 kg AUW with a 6S2P 21700 pack)
             c.motorDiagonal = 0.495f;
             c.inertia = new Vector3(0.03f, 0.05f, 0.03f);

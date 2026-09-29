@@ -16,6 +16,10 @@ namespace ModernDrone.Drone
         public GameObject visualPrefab;
         [Tooltip("FPV camera mount: the model's camera lens, in drone space.")]
         public Vector3 cameraPosition = new Vector3(0f, -0.003f, 0.095f);
+        [Tooltip("Hangar: where the battery, the VTX antenna and a fiber spool sit on the model, in drone space.")]
+        public Vector3 batteryMount = new Vector3(0f, 0.07f, -0.03f);
+        public Vector3 antennaMount = new Vector3(0f, 0.06f, -0.15f);
+        public Vector3 spoolMount = new Vector3(0f, -0.07f, -0.08f);
 
         // Defaults describe a 7" long-range class quad. Airframe figures follow public hobby data
         // (AUW, thrust-to-weight classes: unmannedtechshop.co.uk TWR guide, oscarliang.com 7" reviews);

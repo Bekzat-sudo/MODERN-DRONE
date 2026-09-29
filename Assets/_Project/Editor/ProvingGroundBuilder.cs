@@ -243,6 +243,17 @@ namespace ModernDrone.Editor
         }
 
         /// <summary>Killcam camera plus mission controller. Zero sorties = free flight.</summary>
+        /// <summary>Accent outline for the hangar (inverted hull).</summary>
+        static Material OutlineMaterial()
+        {
+            const string path = "Assets/_Project/Art/Materials/HangarOutline.mat";
+            var m = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (m != null) return m;
+            m = new Material(Shader.Find("ModernDrone/Outline"));
+            AssetDatabase.CreateAsset(m, path);
+            return m;
+        }
+
         internal static MissionController CreateMissionRig(string name, string briefing, int sorties, int fiberSorties = 0)
         {
             var camGo = new GameObject("Killcam");
@@ -264,6 +275,7 @@ namespace ModernDrone.Editor
             });
             mission.SetDroneModels(DroneModels.LoadAll());
             mission.SetParts(DroneParts.LoadAll());
+            mission.gameObject.AddComponent<HangarPreview>().SetOutline(OutlineMaterial());
             mission.gameObject.AddComponent<ModernDrone.UI.PauseMenu>();
             return mission;
         }

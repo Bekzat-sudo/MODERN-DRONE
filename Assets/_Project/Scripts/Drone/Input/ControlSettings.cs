@@ -23,7 +23,9 @@ namespace ModernDrone.Drone
         /// <summary>Stick changes throttle gradually; value is held when released.</summary>
         Incremental,
         /// <summary>Right trigger is throttle 0..100%.</summary>
-        Trigger
+        Trigger,
+        /// <summary>Spring-centred stick, centre = 0%, full up = 100% (lower half unused).</summary>
+        CenterIsZero
     }
 
     public enum PilotAction
@@ -124,7 +126,7 @@ namespace ModernDrone.Drone
 
         /// <summary>Bumped when defaults change in a way saved files must be migrated.</summary>
         public int version = CurrentVersion;
-        public const int CurrentVersion = 4;
+        public const int CurrentVersion = 5;
 
         public ControlDevice device = ControlDevice.Auto;
         [Tooltip("Display name of the preferred joystick; empty = first found.")]
@@ -142,7 +144,7 @@ namespace ModernDrone.Drone
         public float jsDeadband = 0.01f;
 
         [Header("Gamepad")]
-        public GamepadThrottleMode gpThrottleMode = GamepadThrottleMode.CenterIsHover;
+        public GamepadThrottleMode gpThrottleMode = GamepadThrottleMode.CenterIsZero;
         public float gpDeadzone = 0.03f;
         public float gpIncrementalSpeed = 0.8f;
         [Tooltip("Stick up = nose up (camera style). Off = stick forward pitches the nose down (FPV / aircraft).")]
@@ -273,6 +275,8 @@ namespace ModernDrone.Drone
                 // previous 25 deg default.
                 s.cameraTiltOffset = Mathf.Clamp(s.cameraTilt - 25f, -30f, 40f);
             }
+            if (s.version < 5 && s.gpThrottleMode == GamepadThrottleMode.CenterIsHover)
+                s.gpThrottleMode = GamepadThrottleMode.CenterIsZero; // v5: released stick = no throttle by default
             s.version = CurrentVersion;
             return s;
         }
