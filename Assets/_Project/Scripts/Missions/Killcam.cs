@@ -13,9 +13,10 @@ namespace ModernDrone.Missions
     /// vehicle with module states and strike traces.
     /// Overwatch geometry is illustrative: Mavic 3T-class quadcopters hover roughly 100-200 m up and 300-500 m out
     /// so they stay unheard, zooming in to about 28x (dji.com/mavic-3-enterprise/specs: 56x hybrid zoom).
-    /// Only the drone's flight is recorded (<see cref="FlightTrack"/>): during the replay the world is frozen at the
-    /// moment of impact (timeScale 0, audio paused, the fresh explosion hidden), so moving vehicles stand where they
-    /// were hit rather than where they were earlier in the run.
+    /// The drone and every vehicle's root pose are recorded (<see cref="FlightTrack"/>). During the replay the world is
+    /// frozen at the moment of impact (timeScale 0, audio paused, the fresh explosion hidden) and vehicles are posed
+    /// from the recording, then put back exactly where the strike found them before physics resumes. Turrets, gun
+    /// mounts, interceptors and vehicles that left the map before the strike are not replayed.
     /// </summary>
     [RequireComponent(typeof(Camera))]
     public sealed class Killcam : MonoBehaviour
@@ -46,6 +47,11 @@ namespace ModernDrone.Missions
         bool _static, _recon, _showSummary, _replay, _replayPaused, _frozen;
         float _reconStart, _reconZoom, _replayTime, _replayRate, _baseFov;
         readonly FlightTrack _track = new FlightTrack();
+        // Vehicles drive at ~10 m/s at most, so 10 Hz with interpolation keeps them within centimetres of the recording.
+        const float VehicleInterval = 0.1f;
+        readonly System.Collections.Generic.List<(Transform, FlightTrack)> _vehicles = new System.Collections.Generic.List<(Transform, FlightTrack)>();
+        readonly System.Collections.Generic.List<Rigidbody> _unInterpolated = new System.Collections.Generic.List<Rigidbody>();
+        readonly System.Collections.Generic.List<(Vector3, Quaternion)> _impactPoses = new System.Collections.Generic.List<(Vector3, Quaternion)>();
         Transform _tracked;
         GameObject _ghost;
         readonly System.Collections.Generic.List<Behaviour> _hiddenLights = new System.Collections.Generic.List<Behaviour>();
@@ -58,16 +64,50 @@ namespace ModernDrone.Missions
 
         public void SetAssets(KillcamAssets a) => assets = a;
 
-        /// <summary>Starts a fresh flight recording of <paramref name="drone"/> for the next replay.</summary>
+        /// <summary>Starts a fresh recording of <paramref name="drone"/> and of every vehicle for the next replay.</summary>
         public void BeginRecording(Transform drone)
         {
             _track.Clear();
             _tracked = drone;
+            _vehicles.Clear();
+            foreach (var v in FindObjectsByType<VehicleDamageModel>(FindObjectsSortMode.None))
+                _vehicles.Add((v.transform, new FlightTrack(VehicleInterval)));
         }
 
         void LateUpdate()
         {
-            if (!Running && _tracked != null) _track.Add(Time.time, _tracked.position, _tracked.rotation);
+            if (Running || _tracked == null) return;
+            _track.Add(Time.time, _tracked.position, _tracked.rotation);
+            RecordVehicles(Time.time, false);
+        }
+
+        void RecordVehicles(float time, bool force)
+        {
+            foreach (var (t, track) in _vehicles)
+                if (t != null && t.gameObject.activeInHierarchy) track.Add(time, t.position, t.rotation, force);
+        }
+
+        /// <summary>Hands the vehicles back to physics exactly where the strike found them.</summary>
+        void RestoreVehicles()
+        {
+            for (int i = 0; i < _vehicles.Count && i < _impactPoses.Count; i++)
+            {
+                var t = _vehicles[i].Item1;
+                if (t != null && t.gameObject.activeInHierarchy) t.SetPositionAndRotation(_impactPoses[i].Item1, _impactPoses[i].Item2);
+            }
+            foreach (var rb in _unInterpolated) if (rb != null) rb.interpolation = RigidbodyInterpolation.Interpolate;
+            _unInterpolated.Clear();
+        }
+
+        /// <summary>Puts each recorded vehicle where it was at <paramref name="time"/> (the world is frozen meanwhile).</summary>
+        void PoseVehicles(float time)
+        {
+            foreach (var (t, track) in _vehicles)
+            {
+                if (t == null || track.Count < 2 || !t.gameObject.activeInHierarchy) continue;
+                var pose = track.Sample(time);
+                t.SetPositionAndRotation(pose.position, pose.rotation);
+            }
         }
 
         void Awake()
@@ -104,7 +144,13 @@ namespace ModernDrone.Missions
         {
             Running = true;
             _report = report;
-            if (_tracked != null) _track.Add(report.time, _tracked.position, _tracked.rotation, force: true);
+            // Strikes land in FixedUpdate, whose clock can trail the last frame's sample.
+            float impact = Mathf.Max(report.time, _track.EndTime + 0.001f);
+            if (_tracked != null) _track.Add(impact, _tracked.position, _tracked.rotation, force: true);
+            RecordVehicles(impact, true);
+            _impactPoses.Clear();
+            foreach (var (vt, _) in _vehicles)
+                _impactPoses.Add(vt != null ? (vt.position, vt.rotation) : default);
             // Before any frame runs, so the strike's effects cannot start ahead of the replay.
             Freeze(true);
             _xray ??= new XRayView(assets);
@@ -201,6 +247,13 @@ namespace ModernDrone.Missions
             _replayTime = Mathf.Max(start, end - replayWindow);
             _ghost = BuildGhost();
             var path = BuildPath();
+            // Interpolation would keep writing the body's own pose over the replayed one.
+            foreach (var (t, _) in _vehicles)
+                if (t != null && t.TryGetComponent<Rigidbody>(out var rb) && rb.interpolation == RigidbodyInterpolation.Interpolate)
+                {
+                    rb.interpolation = RigidbodyInterpolation.None;
+                    _unInterpolated.Add(rb);
+                }
             bool first = true;
             while (true)
             {
@@ -223,6 +276,7 @@ namespace ModernDrone.Missions
 
                 var pose = _track.Sample(_replayTime);
                 _ghost.transform.SetPositionAndRotation(pose.position, pose.rotation);
+                PoseVehicles(_replayTime);
                 Vector3 aim = Vector3.Lerp(focus, pose.position, 0.5f);
                 float frame = Mathf.Min(Vector3.Distance(focus, pose.position) + reconFrameStart, 900f);
                 float distance = Mathf.Max(1f, Vector3.Distance(reconPos, aim));
@@ -237,6 +291,7 @@ namespace ModernDrone.Missions
                 first = false;
                 yield return null;
             }
+            RestoreVehicles();
             if (path != null) Destroy(path.gameObject);
             Destroy(_ghost);
             _ghost = null;

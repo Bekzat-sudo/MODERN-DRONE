@@ -4,8 +4,8 @@ using UnityEngine;
 namespace ModernDrone.Missions
 {
     /// <summary>
-    /// Recorded drone poses for the post-strike replay: sampled at a fixed minimum interval, interpolated on playback.
-    /// Only the drone is recorded; the world is replayed as it stands frozen at the moment of impact.
+    /// Recorded poses of one object (the drone, a vehicle) for the post-strike replay: sampled at a fixed minimum
+    /// interval, interpolated on playback.
     /// </summary>
     public sealed class FlightTrack
     {
@@ -36,9 +36,20 @@ namespace ModernDrone.Missions
             {
                 float dt = time - _poses[_poses.Count - 1].time;
                 if (dt <= 0f || (!force && dt < _interval)) return;
+                // Standing still: stretch the last sample instead of adding one, so a parked vehicle stays two samples.
+                int n = _poses.Count;
+                if (n >= 2 && Same(_poses[n - 2], _poses[n - 1]) && _poses[n - 1].position == position && _poses[n - 1].rotation == rotation)
+                {
+                    var last = _poses[n - 1];
+                    last.time = time;
+                    _poses[n - 1] = last;
+                    return;
+                }
             }
             _poses.Add(new Pose { time = time, position = position, rotation = rotation });
         }
+
+        static bool Same(in Pose a, in Pose b) => a.position == b.position && a.rotation == b.rotation;
 
         /// <summary>Pose at <paramref name="time"/>, clamped to the recorded span.</summary>
         public Pose Sample(float time)

@@ -20,6 +20,19 @@ namespace ModernDrone.Tests
         }
 
         [Test]
+        public void Add_CollapsesStandingStill_WithoutSmearingTheStart()
+        {
+            var track = new FlightTrack(0.1f);
+            for (int i = 0; i <= 20; i++) track.Add(i * 0.25f, Vector3.zero, Quaternion.identity);
+            Assert.AreEqual(2, track.Count);
+            track.Add(5.25f, new Vector3(1f, 0f, 0f), Quaternion.identity);
+            Assert.AreEqual(3, track.Count);
+            // Still parked just before it drove off, not creeping forward since t = 0.
+            Assert.AreEqual(0f, track.Sample(4.9f).position.x, 1e-4f);
+            Assert.AreEqual(0.5f, track.Sample(5.125f).position.x, 1e-4f);
+        }
+
+        [Test]
         public void Sample_InterpolatesAndClamps()
         {
             var track = new FlightTrack(0.1f);
