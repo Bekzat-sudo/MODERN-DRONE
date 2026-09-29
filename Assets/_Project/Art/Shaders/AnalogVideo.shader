@@ -1,6 +1,7 @@
 // Full-screen FPV video look for URP's Full Screen Pass renderer feature.
 // Driven by globals from ModernDrone.Video.VideoFeed:
-//   _FpvEnabled (0/1), _FpvSignal (0..1 video quality), _FpvAnalog (1 analog, ~0.2 fiber), _FpvTime.
+//   _FpvEnabled (0/1), _FpvSignal (0..1 video quality), _FpvAnalog (1 analog, ~0.2 fiber), _FpvTime,
+//   _FpvLens (0..1 fisheye strength), _FpvFrameAspect (4:3 = 1.333 pillarboxed, 0 = full screen).
 Shader "Hidden/ModernDrone/AnalogVideo"
 {
     SubShader
@@ -28,6 +29,28 @@ Shader "Hidden/ModernDrone/AnalogVideo"
             float _FpvThermalGain;
             float _FpvThermalDrift;
             float4 _FpvThermalRes;
+            float _FpvLens;
+            float _FpvFrameAspect;
+
+            // Wide-angle FPV lens: barrel distortion of the rendered (rectilinear) image inside the camera's frame.
+            // The horizontal frame edge samples the far edge of the render, the corners fall off into darkness,
+            // like a 2.1 mm fisheye on a 4:3 analog camera. Returns the source uv; `inside` is 0 outside the image.
+            float2 Lens(float2 uv, out float inside)
+            {
+                float screenAspect = _ScreenParams.x / _ScreenParams.y;
+                float frameAspect = _FpvFrameAspect > 0.1 ? min(_FpvFrameAspect, screenAspect) : screenAspect;
+                float fw = frameAspect / screenAspect;                  // frame width in screen uv
+                float2 f = float2((uv.x - 0.5) / fw, uv.y - 0.5);        // -0.5..0.5 inside the frame
+                inside = step(abs(f.x), 0.5);
+                float2 p = float2(f.x * frameAspect, f.y) * 2.0;          // frame half-height = 1
+                float r2 = dot(p, p) / (frameAspect * frameAspect);       // 1 at the horizontal edge
+                float k = _FpvLens * (screenAspect / frameAspect - 1.0 + 0.25);
+                float2 q = p * (1.0 + k * r2) / (1.0 + k * 0.5625);        // keep the vertical edge on the image
+                float2 src = 0.5 + float2(q.x / (2.0 * screenAspect), q.y * 0.5);
+                float2 over = max(abs(src - 0.5) - 0.5, 0.0);
+                inside *= saturate(1.0 - length(over) * 40.0);             // soft dark corners where the lens runs out
+                return src;
+            }
 
             float Hash(float2 p)
             {
@@ -53,6 +76,9 @@ Shader "Hidden/ModernDrone/AnalogVideo"
                 float2 uv = input.texcoord;
                 if (_FpvEnabled < 0.5)
                     return SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, uv);
+                float inside;
+                uv = Lens(uv, inside);
+                if (inside <= 0.0) return half4(0, 0, 0, 1);
 
                 float signal = saturate(_FpvSignal);
                 float bad = 1.0 - signal;
@@ -71,9 +97,11 @@ Shader "Hidden/ModernDrone/AnalogVideo"
 
                 // Vertical sync loss (picture rolls) when the signal is very weak.
                 float roll = bad > 0.7 ? frac(t * 0.9) * saturate((bad - 0.7) * 3.3) * analog : 0.0;
-                float2 uvDistorted = float2(uv.x + jitter, frac(uv.y + roll));
+                // Only a rolling picture wraps vertically; otherwise stay on the image (no sky at the bottom corners).
+                float2 uvDistorted = float2(uv.x + jitter, roll > 0.0 ? frac(uv.y + roll) : saturate(uv.y));
 
-                float shift = (0.0012 + 0.007 * bad) * analog;
+                // A strong analog link is nearly clean (strike footage): artefacts come with a weakening signal.
+                float shift = (0.0005 + 0.007 * bad) * analog;
                 half3 col = SampleRgbShift(uvDistorted, shift);
 
                 // Thermal camera (white-hot) as seen through a CVBS FPV feed: core resolution from the fitted camera,
@@ -102,11 +130,11 @@ Shader "Hidden/ModernDrone/AnalogVideo"
 
                 // Grain -> snow.
                 float n = Hash(uv * float2(720.0, 480.0) + frac(t * 17.0) * 100.0);
-                float snow = (0.03 + pow(bad, 2.4) * 0.95) * analog;
+                float snow = (0.012 + pow(bad, 2.4) * 0.95) * analog;
                 col = lerp(col, n.xxx, saturate(snow));
 
                 // Scanlines and vignette (lens + CRT feel).
-                col *= 1.0 - 0.07 * analog * (0.5 + 0.5 * sin(uv.y * 960.0));
+                col *= 1.0 - (0.025 + 0.06 * bad) * analog * (0.5 + 0.5 * sin(uv.y * 960.0));
                 float2 d = uv - 0.5;
                 col *= 1.0 - dot(d, d) * 0.7;
 
@@ -114,7 +142,7 @@ Shader "Hidden/ModernDrone/AnalogVideo"
                 if (signal <= 0.02)
                     col = analog > 0.5 ? n.xxx * 0.55 : half3(0, 0, 0);
 
-                return half4(col, 1.0);
+                return half4(col * inside, 1.0);
             }
             ENDHLSL
         }

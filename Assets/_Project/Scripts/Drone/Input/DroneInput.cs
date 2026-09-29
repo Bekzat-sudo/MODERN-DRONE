@@ -68,6 +68,9 @@ namespace ModernDrone.Drone
             ReleaseCursor();
         }
 
+        static readonly int LensId = Shader.PropertyToID("_FpvLens");
+        static readonly int FrameAspectId = Shader.PropertyToID("_FpvFrameAspect");
+
         void Start() => Apply(ControlSettings.Current);
 
         /// <summary>Pushes rates and camera settings to the drone.</summary>
@@ -79,6 +82,9 @@ namespace ModernDrone.Drone
                 drone.Config.maxAngle = Mathf.Clamp(s.angleMaxTilt, 10f, 80f);
                 drone.Config.setpointCutoffHz = Mathf.Clamp(s.stickSmoothingHz, 0f, 100f);
             }
+            // Lens and frame of the video feed (read by the AnalogVideo pass and the OSD).
+            Shader.SetGlobalFloat(LensId, Mathf.Clamp01(s.lensDistortion));
+            Shader.SetGlobalFloat(FrameAspectId, s.frame43 ? 4f / 3f : 0f);
             if (droneCamera != null)
             {
                 droneCamera.TiltDeg = StockTilt + s.cameraTiltOffset;

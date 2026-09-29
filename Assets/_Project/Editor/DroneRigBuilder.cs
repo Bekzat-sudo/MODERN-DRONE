@@ -102,6 +102,15 @@ namespace ModernDrone.Editor
             var inst = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(glb), root.transform);
             inst.name = "Model";
             inst.transform.localScale = Vector3.one * scale;
+            // Contact fuze wire ahead of the warhead nose, as seen at the bottom of strike feeds. Mounts are drone
+            // space, measured from each model's camera (just below it) so the loop shows in the lower picture.
+            var fuze = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Art/Models/Weapons/fuze_wire.glb");
+            if (fuze != null)
+            {
+                var wire = Object.Instantiate(fuze, root.transform);
+                wire.name = "FuzeWire";
+                wire.transform.localPosition = model == Model.NonStop ? new Vector3(0f, -0.075f, 0.2f) : new Vector3(0f, -0.085f, 0.13f);
+            }
             foreach (var c in root.GetComponentsInChildren<Collider>()) Object.DestroyImmediate(c);
             foreach (var t in root.GetComponentsInChildren<Transform>()) t.gameObject.layer = GameLayers.Drone;
             var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);

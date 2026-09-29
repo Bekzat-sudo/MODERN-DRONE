@@ -39,81 +39,122 @@ namespace ModernDrone.UI
             finally { CultureInfo.CurrentCulture = culture; }
         }
 
+        /// <summary>The camera's frame on screen: 4:3 with side bars when the pilot shows it, else the full screen.</summary>
+        static Rect Frame()
+        {
+            float w = Screen.width, h = Screen.height;
+            if (!ControlSettings.Current.frame43) return new Rect(0, 0, w, h);
+            float fw = Mathf.Min(w, h * 4f / 3f);
+            return new Rect((w - fw) * 0.5f, 0, fw, h);
+        }
+
+        readonly System.Collections.Generic.List<(string text, Color color)> _lines = new System.Collections.Generic.List<(string, Color)>();
+
         void Draw()
         {
             EnsureStyles();
 
             var t = drone.Telemetry;
-            float w = Screen.width, h = Screen.height;
-            float pad = h * 0.04f;
+            var osd = ControlSettings.Current.osd;
+            var f = Frame();
+            float h = f.height;
+            float pad = h * 0.05f;
             float line = _style.fontSize * 1.3f;
-
-            // Corners
-            Label(new Rect(pad, pad, 400, line), t.mode == FlightMode.Acro ? "ACRO" : "ANGL");
-            Label(new Rect(pad, pad + line, 400, line), (input != null ? SourceName(input.ActiveSource) : "") + (ModernDrone.Core.NightMode.Thermal ? "  TIR" : ""));
-            if (VideoFeed.HasLink)
-            {
-                var link = VideoFeed.Current;
-                bool lowLq = link.control < 0.3f;
-                Label(new Rect(pad, pad + line * 2, 500, line), $"LQ {link.control * 100f:0}  VID {link.video * 100f:0}", lowLq ? Color.red : textColor);
-                if (link.type == LinkType.Fiber)
-                    Label(new Rect(pad, pad + line * 3, 500, line), $"SPOOL {link.cableUsed / 1000f:0.00}/{link.spoolLength / 1000f:0.0}km",
-                        link.cableUsed > link.spoolLength * 0.85f ? Color.red : textColor);
-                else if (link.jam > 0.05f)
-                    Label(new Rect(pad, pad + line * 3, 500, line), $"EW {link.jam * 100f:0}%", Color.red);
-            }
-            LabelRight(new Rect(w - pad - 400, pad, 400, line), FormatTime(t.flightTime));
-            Label(new Rect(w * 0.5f - 150, pad, 300, line), $"{Compass(t.headingDeg)} {t.headingDeg:000}", textColor, TextAnchor.MiddleCenter);
-
             bool lowBat = t.cellVoltage < lowCellVoltage;
-            Label(new Rect(pad, h - pad - line * 2, 400, line), $"{t.voltage:0.0}V  {t.cellVoltage:0.00}v", lowBat ? Color.red : textColor);
-            Label(new Rect(pad, h - pad - line, 400, line), $"{t.current:0}A");
-            LabelRight(new Rect(w - pad - 400, h - pad - line * 2, 400, line), $"{t.usedMah:0}mAh");
-            LabelRight(new Rect(w - pad - 400, h - pad - line, 400, line), $"THR {t.throttle * 100f:0}%");
 
-            // Side columns: speed left, altitude right
-            Label(new Rect(w * 0.18f, h * 0.5f - line * 0.5f, 300, line), $"{t.speed * 3.6f:0}km/h");
-            string alt = t.altitudeAgl >= 0f ? $"{t.altitudeAgl:0.0}m" : $"{t.heightAboveHome:0}m";
-            LabelRight(new Rect(w * 0.82f - 300, h * 0.5f - line * 0.5f, 300, line), alt);
-            LabelRight(new Rect(w * 0.82f - 300, h * 0.5f + line * 0.5f, 300, line), $"{t.verticalSpeed:+0.0;-0.0}m/s");
-            Label(new Rect(w * 0.5f - 150, h - pad - line, 300, line), $"H {t.distanceHome:0}m", textColor, TextAnchor.MiddleCenter);
+            // Text elements, stacked in their slots in list order.
+            foreach (OsdSlot slot in System.Enum.GetValues(typeof(OsdSlot)))
+            {
+                if (slot == OsdSlot.Off) continue;
+                _lines.Clear();
+                foreach (var e in osd.entries)
+                    if (e.slot == slot) Text(e.item, t, lowBat, osd);
+                if (_lines.Count == 0) continue;
+                bool top = slot == OsdSlot.TopLeft || slot == OsdSlot.TopCenter || slot == OsdSlot.TopRight;
+                bool bottom = slot == OsdSlot.BottomLeft || slot == OsdSlot.BottomCenter || slot == OsdSlot.BottomRight;
+                bool left = slot == OsdSlot.TopLeft || slot == OsdSlot.MiddleLeft || slot == OsdSlot.BottomLeft;
+                bool right = slot == OsdSlot.TopRight || slot == OsdSlot.MiddleRight || slot == OsdSlot.BottomRight;
+                float y0 = top ? f.y + pad : bottom ? f.yMax - pad - line * _lines.Count : f.y + h * 0.5f - line * _lines.Count * 0.5f;
+                float x = left ? f.x + pad : right ? f.xMax - pad - 400f : f.center.x - 250f;
+                float width = left || right ? 400f : 500f;
+                var anchor = left ? TextAnchor.MiddleLeft : right ? TextAnchor.MiddleRight : TextAnchor.MiddleCenter;
+                // Middle slots sit in from the edge like Betaflight's speed / altitude columns.
+                if (slot == OsdSlot.MiddleLeft) x = f.x + f.width * 0.12f;
+                if (slot == OsdSlot.MiddleRight) x = f.xMax - f.width * 0.12f - 400f;
+                for (int k = 0; k < _lines.Count; k++)
+                    Label(new Rect(x, y0 + k * line, width, line), _lines[k].text, _lines[k].color, anchor);
+            }
 
-            DrawCrosshair(w * 0.5f, h * 0.5f, h * 0.02f);
-            DrawChargeAxis(h);
-            if (t.armed && !t.crashed) DrawThreat(w, h);
-            DrawHorizon(w, h, t);
+            if (osd.crosshair) DrawCrosshair(f.center.x, f.center.y, h * 0.02f);
+            if (osd.chargeAxis) DrawChargeAxis(h);
+            if (t.armed && !t.crashed) DrawThreat(f.width, h, f.x);
+            if (osd.horizon) DrawHorizon(f, t);
 
             // Centre warnings
             var source = input != null ? input.ActiveSource : InputSource.KeyboardMouse;
             var linkNow = VideoFeed.HasLink ? VideoFeed.Current : default;
             string crash = input != null && !input.AllowReset ? "CRASH" : $"CRASH  [{ControlInput.HintFor(PilotAction.Reset, source)}]";
-            string warning = linkNow.cableCut ? "CABLE CUT"
-                : drone.Failsafe ? "FAILSAFE"
-                : t.crashed ? crash
+            // Arming and crash prompts always show; the rest follow the warnings switch.
+            string warning = t.crashed ? crash
                 : drone.ArmBlock == ArmBlockReason.Throttle ? "ARM BLOCKED: THROTTLE"
                 : drone.ArmBlock == ArmBlockReason.Failsafe ? "ARM BLOCKED: FAILSAFE"
                 : !t.armed ? $"DISARMED  [{ControlInput.HintFor(PilotAction.Arm, source)}]"
+                : !osd.warnings ? null
+                : linkNow.cableCut ? "CABLE CUT"
+                : drone.Failsafe ? "FAILSAFE"
                 : lowBat ? "LOW BATTERY"
                 : VideoFeed.HasLink && linkNow.control < 0.3f ? "LOW LQ" : null;
             if (warning != null)
             {
-                var r = new Rect(0, h * 0.62f, w, _big.fontSize * 1.4f);
+                var r = new Rect(f.x, h * 0.62f, f.width, _big.fontSize * 1.4f);
                 Shadowed(r, warning, _big, t.crashed || lowBat || drone.Failsafe || linkNow.cableCut || (VideoFeed.HasLink && linkNow.control < 0.3f) || drone.ArmBlock != ArmBlockReason.None ? Color.red : textColor);
             }
         }
 
+        /// <summary>Lines one OSD element contributes to its slot.</summary>
+        void Text(OsdItem item, in DroneTelemetry t, bool lowBat, OsdSettings osd)
+        {
+            switch (item)
+            {
+                case OsdItem.FlightMode: _lines.Add((t.mode == FlightMode.Acro ? "ACRO" : "ANGL", textColor)); break;
+                case OsdItem.InputSource:
+                    _lines.Add(((input != null ? SourceName(input.ActiveSource) : "") + (ModernDrone.Core.NightMode.Thermal ? "  TIR" : ""), textColor));
+                    break;
+                case OsdItem.Link:
+                    if (!VideoFeed.HasLink) break;
+                    var link = VideoFeed.Current;
+                    _lines.Add(($"LQ {link.control * 100f:0}  VID {link.video * 100f:0}", link.control < 0.3f ? Color.red : textColor));
+                    if (link.type == LinkType.Fiber)
+                        _lines.Add(($"SPOOL {link.cableUsed / 1000f:0.00}/{link.spoolLength / 1000f:0.0}km", link.cableUsed > link.spoolLength * 0.85f ? Color.red : textColor));
+                    else if (link.jam > 0.05f)
+                        _lines.Add(($"EW {link.jam * 100f:0}%", Color.red));
+                    break;
+                case OsdItem.Timer: _lines.Add((FormatTime(t.flightTime), textColor)); break;
+                case OsdItem.Heading: _lines.Add(($"{Compass(t.headingDeg)} {t.headingDeg:000}", textColor)); break;
+                case OsdItem.Voltage: _lines.Add(($"{t.voltage:0.0}V  {t.cellVoltage:0.00}v", lowBat ? Color.red : textColor)); break;
+                case OsdItem.Current: _lines.Add(($"{t.current:0}A", textColor)); break;
+                case OsdItem.UsedMah: _lines.Add(($"{t.usedMah:0}mAh", textColor)); break;
+                case OsdItem.Throttle: _lines.Add(($"THR {t.throttle * 100f:0}", textColor)); break;
+                case OsdItem.Speed: _lines.Add(($"{t.speed * 3.6f:0}km/h", textColor)); break;
+                case OsdItem.Altitude: _lines.Add((t.altitudeAgl >= 0f ? $"{t.altitudeAgl:0.0}m" : $"{t.heightAboveHome:0}m", textColor)); break;
+                case OsdItem.VerticalSpeed: _lines.Add(($"{t.verticalSpeed:+0.0;-0.0}m/s", textColor)); break;
+                case OsdItem.HomeDistance: _lines.Add(($"H {t.distanceHome:0}m", textColor)); break;
+                case OsdItem.CraftName: _lines.Add((osd.craftName.ToUpperInvariant(), textColor)); break;
+            }
+        }
+
         /// <summary>Interceptor warning with an on-screen marker or edge arrow (no detection warning: the pilot cannot tell when they have been spotted).</summary>
-        void DrawThreat(float w, float h)
+        void DrawThreat(float w, float h, float x0)
         {
             float y = h * 0.2f;
             if (ModernDrone.Core.InterceptorWarning.RecentMiss)
-                Shadowed(new Rect(0, y - _big.fontSize * 1.6f, w, _big.fontSize * 1.4f), "ПРОМАХ ПЕРЕХВАТЧИКА", _big, new Color(0.4f, 1f, 0.4f));
+                Shadowed(new Rect(x0, y - _big.fontSize * 1.6f, w, _big.fontSize * 1.4f), "ПРОМАХ ПЕРЕХВАТЧИКА", _big, new Color(0.4f, 1f, 0.4f));
             if (ModernDrone.Core.InterceptorWarning.Active)
             {
                 float dist = ModernDrone.Core.InterceptorWarning.Distance;
                 bool close = dist < 60f;
                 if (!close || Mathf.Repeat(Time.unscaledTime, 0.3f) < 0.2f)
-                    Shadowed(new Rect(0, y, w, _big.fontSize * 1.4f), $"ПЕРЕХВАТЧИК {dist:0}м", _big, close ? Color.red : new Color(1f, 0.6f, 0.2f));
+                    Shadowed(new Rect(x0, y, w, _big.fontSize * 1.4f), $"ПЕРЕХВАТЧИК {dist:0}м", _big, close ? Color.red : new Color(1f, 0.6f, 0.2f));
                 DrawInterceptorMarker(w, h, ModernDrone.Core.InterceptorWarning.Position);
             }
         }
@@ -175,18 +216,28 @@ namespace ModernDrone.UI
             Line(c + Vector2.down * thick * 0.5f, c + Vector2.up * thick * 0.5f, thick);
         }
 
-        /// <summary>Artificial horizon: rolls with the frame and shifts with pitch (camera tilt ignored).</summary>
-        void DrawHorizon(float w, float h, in DroneTelemetry t)
+        /// <summary>
+        /// Artificial horizon as Betaflight draws it: a row of dots that rolls with the frame and shifts with pitch
+        /// (camera tilt ignored), clamped to the middle of the picture.
+        /// </summary>
+        void DrawHorizon(Rect f, in DroneTelemetry t)
         {
+            float h = f.height;
             float pxPerDeg = h / 90f;
             float offset = Mathf.Clamp(-t.pitchDeg * pxPerDeg, -h * 0.3f, h * 0.3f);
-            Vector2 c = new Vector2(w * 0.5f, h * 0.5f + offset);
-            float half = w * 0.12f;
+            Vector2 c = new Vector2(f.center.x, f.y + h * 0.5f + offset);
+            float half = f.width * 0.22f;
             float ang = -t.rollDeg * Mathf.Deg2Rad;
             Vector2 dir = new Vector2(Mathf.Cos(ang), Mathf.Sin(ang));
-            float thick = Mathf.Max(2f, h * 0.003f);
-            Line(c - dir * half, c - dir * half * 0.3f, thick);
-            Line(c + dir * half * 0.3f, c + dir * half, thick);
+            float dot = Mathf.Max(3f, h * 0.007f);
+            const int Dots = 9;
+            for (int i = 0; i < Dots; i++)
+            {
+                float u = Mathf.Lerp(-1f, 1f, i / (float)(Dots - 1));
+                if (Mathf.Abs(u) < 0.12f) continue; // gap for the crosshair
+                var p = c + dir * half * u;
+                Line(p - dir * dot, p + dir * dot, dot);
+            }
         }
 
         void Line(Vector2 a, Vector2 b, float thickness)

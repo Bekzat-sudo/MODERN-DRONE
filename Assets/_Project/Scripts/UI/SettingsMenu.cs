@@ -14,7 +14,7 @@ namespace ModernDrone.UI
     /// </summary>
     public sealed class SettingsMenu
     {
-        static readonly string[] Tabs = { "Устройство", "Клавиатура+мышь", "Геймпад", "Аппаратура / джойстик", "Кнопки", "Полёт", "Экран и звук" };
+        static readonly string[] Tabs = { "Устройство", "Клавиатура+мышь", "Геймпад", "Аппаратура / джойстик", "Кнопки", "Полёт", "Экран и звук", "OSD" };
 
         readonly MenuGui _gui;
         readonly List<MenuRow> _rows = new List<MenuRow>();
@@ -100,6 +100,7 @@ namespace ModernDrone.UI
                 case 4: BindingRows(); break;
                 case 5: FlightRows(); break;
                 case 6: DisplayAudioRows(); break;
+                case 7: OsdRows(); break;
             }
             _rows.Add(MenuRow.Header(""));
             _rows.Add(MenuRow.Button("← Назад (сохранить)", () => { ControlSettings.Save(); Closed = true; }));
@@ -284,6 +285,38 @@ namespace ModernDrone.UI
             _rows.Add(MenuRow.Header("Камера"));
             _rows.Add(MenuRow.Slider("Наклон камеры к штатному, °", () => S.cameraTiltOffset, v => S.cameraTiltOffset = v, -30f, 40f, 1f, "+0;-0;0"));
             _rows.Add(MenuRow.Slider("Угол обзора (гориз.), °", () => S.cameraFov, v => S.cameraFov = v, 80f, 150f, 1f, "0"));
+            _rows.Add(MenuRow.Slider("«Рыбий глаз» объектива", () => S.lensDistortion, v => { S.lensDistortion = v; ControlSettings.NotifyChanged(); }, 0f, 1f, 0.05f));
+            _rows.Add(MenuRow.Toggle("Кадр 4:3 (как в очках)", () => S.frame43, v => { S.frame43 = v; ControlSettings.NotifyChanged(); }));
+        }
+
+        static readonly string[] SlotNames = { "выкл", "слева сверху", "сверху", "справа сверху", "слева", "справа", "слева снизу", "снизу", "справа снизу" };
+
+        static readonly (OsdItem item, string label)[] OsdItems =
+        {
+            (OsdItem.FlightMode, "Режим полёта"), (OsdItem.InputSource, "Устройство управления"), (OsdItem.Link, "Связь (LQ / видео / катушка)"),
+            (OsdItem.Timer, "Время полёта"), (OsdItem.Heading, "Курс"), (OsdItem.Voltage, "Напряжение"), (OsdItem.Current, "Ток"),
+            (OsdItem.UsedMah, "Израсходовано мА·ч"), (OsdItem.Throttle, "Газ"), (OsdItem.Speed, "Скорость"), (OsdItem.Altitude, "Высота"),
+            (OsdItem.VerticalSpeed, "Вертикальная скорость"), (OsdItem.HomeDistance, "До точки взлёта"), (OsdItem.CraftName, "Позывной"),
+        };
+
+        /// <summary>OSD layout: a preset, then a slot for every element and the graphic overlays.</summary>
+        void OsdRows()
+        {
+            var osd = S.osd;
+            _rows.Add(MenuRow.Header("Пресет"));
+            _rows.Add(MenuRow.Button("Минимальный (как на ударных FPV)", () => { osd.entries = OsdSettings.Minimal(); BuildRows(); }));
+            _rows.Add(MenuRow.Button("Полный (Betaflight)", () => { osd.entries = OsdSettings.Full(); BuildRows(); }));
+            _rows.Add(MenuRow.Header("Элементы и их место"));
+            foreach (var (item, label) in OsdItems)
+            {
+                var it = item;
+                _rows.Add(MenuRow.Choice(label, SlotNames, () => (int)osd.SlotOf(it), v => osd.SetSlot(it, (OsdSlot)v)));
+            }
+            _rows.Add(MenuRow.Header("Графика"));
+            _rows.Add(MenuRow.Toggle("Прицельный крест", () => osd.crosshair, v => osd.crosshair = v));
+            _rows.Add(MenuRow.Toggle("Искусственный горизонт", () => osd.horizon, v => osd.horizon = v));
+            _rows.Add(MenuRow.Toggle("Ось заряда", () => osd.chargeAxis, v => osd.chargeAxis = v));
+            _rows.Add(MenuRow.Toggle("Предупреждения (батарея, связь)", () => osd.warnings, v => osd.warnings = v));
         }
 
         void RateRows(string axis, Func<AxisRates> get, Action<AxisRates> set)

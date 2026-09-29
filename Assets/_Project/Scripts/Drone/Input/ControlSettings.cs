@@ -180,6 +180,13 @@ namespace ModernDrone.Drone
         /// <summary>Absolute uptilt saved before v4; migrated into <see cref="cameraTiltOffset"/>.</summary>
         public float cameraTilt = 25f;
         public float cameraFov = 118f;
+        [Tooltip("Fisheye strength of the FPV lens, 0 = rectilinear.")]
+        [Range(0f, 1f)] public float lensDistortion = 0.6f;
+        [Tooltip("Show the analog camera's 4:3 frame with side bars, as FPV goggles and DVRs do.")]
+        public bool frame43 = true;
+
+        [Header("OSD")]
+        public OsdSettings osd = new OsdSettings();
 
         [Header("Display & audio")]
         public bool fullscreen = true;

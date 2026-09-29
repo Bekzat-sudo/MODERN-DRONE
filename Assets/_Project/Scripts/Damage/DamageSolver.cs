@@ -82,7 +82,9 @@ namespace ModernDrone.Damage
                 {
                     kind = armor != null ? armor.Kind : ArmorKind.Module,
                     value = armor != null ? armor.Value : module.Absorb,
-                    cosAngle = Vector3.Dot(-dir, hit.normal),
+                    // Obliquity thickens a plate along the jet; a module is a volume the jet cuts through (a gun
+                    // barrel, a run of track), so a grazing hit must not multiply its resistance.
+                    cosAngle = armor != null ? Vector3.Dot(-dir, hit.normal) : 1f,
                     distance = hit.distance
                 });
                 Crossed.Add((hit, armor, module));

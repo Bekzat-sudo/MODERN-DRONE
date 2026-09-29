@@ -119,6 +119,26 @@ namespace ModernDrone.Missions
             lr.endColor = new Color(c.r, c.g, c.b, 0.4f);
             lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             lr.receiveShadows = false;
+
+            // Where the jet ended: a bright marker, so even a jet stopped a hand's width in is easy to find.
+            if (trace.kind != TraceKind.Jet && trace.kind != TraceKind.JetStopped) return;
+            var end = new GameObject("TraceEnd");
+            end.transform.SetParent(go.transform, false);
+            var ring = end.AddComponent<LineRenderer>();
+            ring.sharedMaterial = _assets.line;
+            ring.useWorldSpace = true;
+            ring.loop = true;
+            const int n = 16;
+            ring.positionCount = n;
+            var dir = (trace.to - trace.from).sqrMagnitude > 1e-6f ? (trace.to - trace.from).normalized : Vector3.forward;
+            var rot = Quaternion.LookRotation(dir);
+            for (int i = 0; i < n; i++)
+            {
+                float a = i * Mathf.PI * 2f / n;
+                ring.SetPosition(i, trace.to + rot * new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0f) * 0.18f);
+            }
+            ring.startWidth = ring.endWidth = 0.04f;
+            ring.startColor = ring.endColor = c;
         }
     }
 }
