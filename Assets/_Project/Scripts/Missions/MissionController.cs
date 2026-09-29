@@ -153,6 +153,7 @@ namespace ModernDrone.Missions
         {
             Phase = MissionPhase.Flying;
             _input.Suspended = false;
+            if (killcam != null) killcam.BeginRecording(drone.transform);
         }
 
         void OnStrike(StrikeReport report)

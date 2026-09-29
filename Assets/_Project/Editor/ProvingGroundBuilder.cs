@@ -270,6 +270,7 @@ namespace ModernDrone.Editor
             cam.fieldOfView = 55f;
             cam.enabled = false; // enabled by the killcam only while replaying
             camGo.AddComponent<AudioListener>().enabled = false;
+            UnityEngine.Rendering.Universal.CameraExtensions.GetUniversalAdditionalCameraData(cam).renderPostProcessing = true;
             var killcam = camGo.AddComponent<Killcam>();
             killcam.SetAssets(MissionAssets.LoadKillcamAssets());
 
