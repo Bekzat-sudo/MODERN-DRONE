@@ -72,6 +72,24 @@ namespace ModernDrone.Missions
             SetType(type);
         }
 
+        /// <summary>Fits a video-link part: a VTX (range, foliage loss vs. the 5.8 GHz 800 mW baseline) or a fiber spool.</summary>
+        public void ApplyPart(DronePart part)
+        {
+            if (part.fiber)
+            {
+                spoolLength = part.spoolLength;
+                spoolMass = part.mass;
+            }
+            else
+            {
+                radio = RadioParams.Default;
+                radio.videoRangeStart *= part.videoRangeScale;
+                radio.videoRangeEnd *= part.videoRangeScale;
+                radio.foliageBlock = part.foliageBlock;
+            }
+            SetType(part.fiber ? LinkType.Fiber : LinkType.Radio);
+        }
+
         public void SetType(LinkType linkType)
         {
             type = linkType;

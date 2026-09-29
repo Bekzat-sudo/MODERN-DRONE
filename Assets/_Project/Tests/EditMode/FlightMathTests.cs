@@ -112,6 +112,41 @@ namespace ModernDrone.Tests
         }
 
         [Test]
+        public void Parts_HeavierBatteryKeepsThrust_LowersTwr_LongerHover()
+        {
+            var model = ScriptableObject.CreateInstance<DroneConfig>();
+            model.airframeMass = 0.5f;
+            model.frameMass = 1.1f; // airframe + a 0.6 kg stock pack
+            var light = Part(PartSlot.Battery, 0.6f, 5600f);
+            var heavy = Part(PartSlot.Battery, 0.9f, 9000f);
+            var stock = DroneBuild.Compose(model, new[] { light });
+            var big = DroneBuild.Compose(model, new[] { heavy });
+            Assert.AreEqual(model.MaxThrustPerMotor, stock.MaxThrustPerMotor, 1e-3f);
+            Assert.AreEqual(model.MaxThrustPerMotor, big.MaxThrustPerMotor, 1e-3f); // motors unchanged
+            Assert.AreEqual(1.4f, big.frameMass, 1e-4f);
+            Assert.Less(big.thrustToWeight, stock.thrustToWeight);
+            Assert.AreEqual(9000f, big.capacityMah);
+            Assert.Greater(DroneBuild.HoverMinutes(big, 0.5f), DroneBuild.HoverMinutes(stock, 0.5f));
+
+            var props = Part(PartSlot.Propellers, 0f, 0f);
+            props.thrustScale = 0.9f; props.currentScale = 0.85f;
+            var twoBlade = DroneBuild.Compose(model, new[] { light, props });
+            Assert.AreEqual(model.MaxThrustPerMotor * 0.9f, twoBlade.MaxThrustPerMotor, 1e-3f);
+
+            var spool = Part(PartSlot.VideoLink, 1.1f, 0f);
+            spool.fiber = true; // carried by the link as extra mass, not by the airframe
+            Assert.AreEqual(1.1f, DroneBuild.Compose(model, new[] { light, spool }).frameMass, 1e-4f);
+            foreach (var o in new Object[] { model, light, heavy, props, spool, stock, big, twoBlade }) Object.DestroyImmediate(o);
+        }
+
+        static DronePart Part(PartSlot slot, float mass, float mah)
+        {
+            var p = ScriptableObject.CreateInstance<DronePart>();
+            p.slot = slot; p.mass = mass; p.capacityMah = mah; p.internalResistance = 0.05f;
+            return p;
+        }
+
+        [Test]
         public void Battery_SagsUnderLoadAndDrains()
         {
             var b = new BatteryModel(6, 3000f, 0.05f);

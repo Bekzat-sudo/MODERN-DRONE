@@ -24,7 +24,8 @@ namespace ModernDrone.Missions
 
         void Awake()
         {
-            NightMode.Thermal = true;
+            NightMode.Night = true;
+            NightMode.Thermal = true; // until the loadout fits a camera
             NightMode.ThermalGain = MaxGain;
             NightMode.ThermalDrift = 0f;
         }
@@ -95,6 +96,6 @@ namespace ModernDrone.Missions
             return sum;
         }
 
-        void OnDestroy() => NightMode.Thermal = false;
+        void OnDestroy() => NightMode.Night = NightMode.Thermal = false;
     }
 }

@@ -38,6 +38,8 @@ namespace ModernDrone.Missions
         [Tooltip("Drone classes the pilot can choose from (index 1 = default when present).")]
         [UnityEngine.Serialization.FormerlySerializedAs("droneClasses")]
         [SerializeField] DroneConfig[] droneModels = new DroneConfig[0];
+        [Tooltip("Swappable parts offered in the loadout (battery, props, camera at night, video link).")]
+        [SerializeField] DronePart[] parts = new DronePart[0];
         [Tooltip("Targets that must be neutralized; 0 = all.")]
         [SerializeField] int requiredTargets;
         [SerializeField] DroneController drone;
@@ -50,7 +52,6 @@ namespace ModernDrone.Missions
         DroneInput _input;
         int _sortiesFlown;
         int _radioLeft, _fiberLeft;
-        LinkType _choice;
         int _warheadChoice;
         int _loadoutRow;
         int _decoyStrikes;
@@ -75,6 +76,8 @@ namespace ModernDrone.Missions
         public void SetRequiredTargets(int count) => requiredTargets = count;
 
         public void SetDroneModels(DroneConfig[] models) => droneModels = models ?? new DroneConfig[0];
+
+        public void SetParts(DronePart[] options) => parts = options ?? new DronePart[0];
 
         int Required => requiredTargets > 0 ? Mathf.Min(requiredTargets, _targets.Count) : _targets.Count;
 
@@ -181,25 +184,73 @@ namespace ModernDrone.Missions
             StartCoroutine(DelayThen(droneLostDelay, EndSortie));
         }
 
-        enum LoadoutRow { Drone, Link, Warhead }
+        enum LoadoutRow { Drone, Battery, Propellers, Camera, Link, Warhead }
+
+        static readonly (LoadoutRow row, PartSlot slot)[] PartRows =
+        {
+            (LoadoutRow.Battery, PartSlot.Battery),
+            (LoadoutRow.Propellers, PartSlot.Propellers),
+            (LoadoutRow.Camera, PartSlot.Camera),
+            (LoadoutRow.Link, PartSlot.VideoLink),
+        };
 
         readonly List<LoadoutRow> _loadoutRows = new List<LoadoutRow>();
+        readonly List<DronePart> _options = new List<DronePart>();
+        readonly DronePart[] _picked = new DronePart[4]; // by PartSlot
         int _droneChoice = -1;
 
-        bool ChooseLink => !FreeFlight && _radioLeft > 0 && _fiberLeft > 0;
+        DroneConfig Model => droneModels.Length > 0 ? droneModels[Mathf.Clamp(_droneChoice, 0, droneModels.Length - 1)] : drone.Config;
+
+        /// <summary>
+        /// Parts the pilot can fit in a slot now: thermal cores only at night (an analog camera sees nothing there,
+        /// and in daylight the stock camera is kept), links only of a kind still in stock.
+        /// </summary>
+        List<DronePart> Options(PartSlot slot)
+        {
+            _options.Clear();
+            foreach (var p in parts)
+            {
+                if (p == null || p.slot != slot) continue;
+                if (slot == PartSlot.Camera && p.thermal != NightMode.Night) continue;
+                if (slot == PartSlot.VideoLink && !FreeFlight && (p.fiber ? _fiberLeft : _radioLeft) <= 0) continue;
+                _options.Add(p);
+            }
+            return _options;
+        }
+
+        DronePart Stock(PartSlot slot)
+        {
+            var model = Model;
+            if (model != null)
+                foreach (var p in model.stockParts)
+                    if (p != null && p.slot == slot) return p;
+            return null;
+        }
+
+        /// <summary>Starts every slot from the drone model's stock part (or the first allowed one).</summary>
+        void PickStockParts()
+        {
+            foreach (var (_, slot) in PartRows)
+            {
+                var options = Options(slot);
+                var stock = Stock(slot);
+                _picked[(int)slot] = options.Contains(stock) ? stock : options.Count > 0 ? options[0] : stock;
+            }
+        }
 
         /// <summary>Picks the next drone: asks the pilot when there is anything to choose.</summary>
         void PrepareSortie()
         {
-            _choice = FreeFlight || _radioLeft > 0 ? LinkType.Radio : LinkType.Fiber;
             if (_droneChoice < 0) _droneChoice = 0;
+            PickStockParts();
             _loadoutRows.Clear();
             if (droneModels.Length > 1) _loadoutRows.Add(LoadoutRow.Drone);
-            if (ChooseLink) _loadoutRows.Add(LoadoutRow.Link);
+            foreach (var (row, slot) in PartRows)
+                if (Options(slot).Count > 1) _loadoutRows.Add(row);
             if (warheads.Length > 1) _loadoutRows.Add(LoadoutRow.Warhead);
             if (_loadoutRows.Count == 0)
             {
-                LaunchSortie(_choice);
+                LaunchSortie();
                 return;
             }
             Phase = MissionPhase.Loadout;
@@ -221,15 +272,32 @@ namespace ModernDrone.Missions
             if (left || right)
             {
                 int step = right ? 1 : -1;
-                switch (_loadoutRows[_loadoutRow])
+                var row = _loadoutRows[_loadoutRow];
+                if (row == LoadoutRow.Drone)
                 {
-                    case LoadoutRow.Drone: _droneChoice = (_droneChoice + step + droneModels.Length) % droneModels.Length; break;
-                    case LoadoutRow.Link: _choice = _choice == LinkType.Radio ? LinkType.Fiber : LinkType.Radio; break;
-                    case LoadoutRow.Warhead: _warheadChoice = (_warheadChoice + step + warheads.Length) % warheads.Length; break;
+                    _droneChoice = (_droneChoice + step + droneModels.Length) % droneModels.Length;
+                    PickStockParts();
+                }
+                else if (row == LoadoutRow.Warhead)
+                    _warheadChoice = (_warheadChoice + step + warheads.Length) % warheads.Length;
+                else
+                {
+                    var slot = SlotOf(row);
+                    var options = Options(slot);
+                    int i = options.IndexOf(_picked[(int)slot]);
+                    _picked[(int)slot] = options[(i + step + options.Count) % options.Count];
                 }
             }
-            if (ConfirmPressed()) LaunchSortie(_choice);
+            if (ConfirmPressed()) LaunchSortie();
         }
+
+        static PartSlot SlotOf(LoadoutRow row)
+        {
+            foreach (var (r, slot) in PartRows)
+                if (r == row) return slot;
+            return PartSlot.Battery;
+        }
+
         void OnShotDown()
         {
             if (Phase != MissionPhase.Flying) return;
@@ -239,22 +307,36 @@ namespace ModernDrone.Missions
             StartCoroutine(DelayThen(droneLostDelay, EndSortie));
         }
 
-        void LaunchSortie(LinkType type)
+        void LaunchSortie()
         {
+            var link = _picked[(int)PartSlot.VideoLink];
+            bool fiber = link != null ? link.fiber : !FreeFlight && _radioLeft <= 0;
             if (!FreeFlight)
             {
-                if (type == LinkType.Fiber) _fiberLeft--; else _radioLeft--;
+                if (fiber) _fiberLeft--; else _radioLeft--;
             }
             if (droneModels.Length > 0)
             {
-                var cfg = droneModels[Mathf.Clamp(_droneChoice, 0, droneModels.Length - 1)];
-                if (drone.Config == null || !drone.Config.name.StartsWith(cfg.name))
-                {
-                    drone.Initialize(cfg);
-                    ControlSettings.NotifyChanged(); // re-apply pilot rates / camera to the new runtime config
-                }
+                // Models without stock parts (older assets, tests) fly as defined.
+                var model = Model;
+                var old = drone.Config;
+                drone.Initialize(model.stockParts.Length > 0 ? DroneBuild.Compose(model, _picked) : model);
+                if (old != null && old != drone.Config && old.name.EndsWith("(Runtime)")) Destroy(old);
+                ControlSettings.NotifyChanged(); // re-apply pilot rates / camera to the new runtime config
             }
-            _link?.SetType(type);
+            var cam = _picked[(int)PartSlot.Camera];
+            if (NightMode.Night && cam != null)
+            {
+                NightMode.Thermal = cam.thermal;
+                NightMode.ThermalHorizontalFov = cam.horizontalFov;
+                NightMode.ThermalResolution = cam.thermalResolution;
+                ControlSettings.NotifyChanged();
+            }
+            if (_link != null)
+            {
+                if (link != null) _link.ApplyPart(link);
+                else _link.SetType(fiber ? LinkType.Fiber : LinkType.Radio);
+            }
             if (!_convoysStarted)
             {
                 _convoysStarted = true;
@@ -385,7 +467,7 @@ namespace ModernDrone.Missions
                     GUI.Label(new Rect(0, h * 0.4f, w, _title.fontSize * 1.5f), _lostMessage, _title);
                     break;
                 case MissionPhase.Loadout:
-                    Panel(new Rect(w * 0.28f, h * 0.28f, w * 0.44f, h * 0.4f), "СНАРЯЖЕНИЕ", LoadoutText(),
+                    Panel(new Rect(w * 0.25f, h * 0.2f, w * 0.5f, h * 0.6f), "СНАРЯЖЕНИЕ", LoadoutText(),
                         _loadoutRows.Count > 1 ? "↑↓ — строка,  ← → — выбор,  SPACE / A — взлёт" : "← → — выбор,  SPACE / A — взлёт");
                     break;
                 case MissionPhase.Debrief:
@@ -434,38 +516,62 @@ namespace ModernDrone.Missions
         string LoadoutText()
         {
             var sb = new StringBuilder();
+            string note = "";
             for (int i = 0; i < _loadoutRows.Count; i++)
             {
-                string cursor = _loadoutRows.Count > 1 && i == _loadoutRow ? "» " : "   ";
-                switch (_loadoutRows[i])
+                bool selected = i == _loadoutRow;
+                string cursor = _loadoutRows.Count > 1 && selected ? "» " : "   ";
+                string label, value, hint;
+                var row = _loadoutRows[i];
+                if (row == LoadoutRow.Drone)
                 {
-                    case LoadoutRow.Drone:
-                        var cfg = droneModels[Mathf.Clamp(_droneChoice, 0, droneModels.Length - 1)];
-                        sb.AppendLine($"{cursor}Дрон:  ‹ {cfg.displayName} ›");
-                        sb.AppendLine("      " + cfg.summary);
-                        break;
-                    case LoadoutRow.Link:
-                        sb.AppendLine($"{cursor}Канал:  ‹ {(_choice == LinkType.Radio ? "РАДИО (аналог)" : "ОПТОВОЛОКНО")} ›");
-                        sb.AppendLine(_choice == LinkType.Radio
-                            ? $"      осталось {_radioLeft} · уязвим к РЭБ и рельефу"
-                            : $"      осталось {_fiberLeft} · не глушится, катушка 5 км, +масса");
-                        break;
-                    case LoadoutRow.Warhead:
-                        var w = warheads[Mathf.Clamp(_warheadChoice, 0, warheads.Length - 1)];
-                        sb.AppendLine($"{cursor}Боевая часть:  ‹ {w.displayName} ›");
-                        sb.AppendLine("      " + WarheadHint(w));
-                        if (droneModels.Length > 0)
-                        {
-                            var dc = droneModels[Mathf.Clamp(_droneChoice, 0, droneModels.Length - 1)];
-                            float twr = dc.frameMass * dc.thrustToWeight / (dc.frameMass + w.mass);
-                            sb.AppendLine($"      масса {w.mass:0.0} кг · дрон {dc.frameMass + w.mass:0.0} кг · тяга/вес {twr:0.0}");
-                        }
-                        break;
+                    label = "Дрон"; value = Model.displayName; hint = Model.summary;
                 }
-                sb.AppendLine();
+                else if (row == LoadoutRow.Warhead)
+                {
+                    var w = warheads[Mathf.Clamp(_warheadChoice, 0, warheads.Length - 1)];
+                    label = "Боевая часть"; value = w.displayName; hint = $"{w.mass:0.0} кг · {WarheadHint(w)}";
+                }
+                else
+                {
+                    var part = _picked[(int)SlotOf(row)];
+                    label = row switch
+                    {
+                        LoadoutRow.Battery => "Батарея",
+                        LoadoutRow.Propellers => "Винты",
+                        LoadoutRow.Camera => "Камера",
+                        _ => "Канал"
+                    };
+                    value = part != null ? part.displayName : "—";
+                    hint = part == null ? "" : part.summary + LinkStock(part);
+                }
+                sb.AppendLine($"{cursor}{label}:  ‹ {value} ›");
+                if (selected) note = hint;
             }
+            if (note.Length > 0) sb.AppendLine().AppendLine(note);
+            sb.AppendLine().Append(BuildSummary());
             return sb.ToString();
         }
+
+        string LinkStock(DronePart p) =>
+            p.slot != PartSlot.VideoLink || FreeFlight ? "" : $" · осталось {(p.fiber ? _fiberLeft : _radioLeft)}";
+
+        /// <summary>The drone this loadout makes: take-off mass, thrust-to-weight, hover endurance.</summary>
+        string BuildSummary()
+        {
+            var model = Model;
+            if (model == null) return "";
+            var cfg = model.stockParts.Length > 0 ? DroneBuild.Compose(model, _picked) : model;
+            var link = _picked[(int)PartSlot.VideoLink];
+            float payload = (warheads.Length > 0 ? warheads[Mathf.Clamp(_warheadChoice, 0, warheads.Length - 1)].mass : 0f)
+                            + (link != null && link.fiber ? link.mass : 0f);
+            float mass = cfg.frameMass + payload;
+            float twr = cfg.frameMass * cfg.thrustToWeight / mass;
+            float minutes = DroneBuild.HoverMinutes(cfg, payload);
+            if (cfg != model) Destroy(cfg);
+            return $"Взлётная масса {mass:0.00} кг · тяга/вес {twr:0.0} · висение ~{minutes:0} мин";
+        }
+
         static string WarheadHint(WarheadData w) => w.kind == WarheadKind.Fragmentation
             ? "против открытых целей: РЛС, орудия, грузовики"
             : w.tandem ? "пробивает динамическую защиту" : "против брони: борт, корма, крыша";

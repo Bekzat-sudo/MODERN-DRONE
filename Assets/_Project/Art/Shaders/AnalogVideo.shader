@@ -27,6 +27,7 @@ Shader "Hidden/ModernDrone/AnalogVideo"
             float _FpvThermal;
             float _FpvThermalGain;
             float _FpvThermalDrift;
+            float4 _FpvThermalRes;
 
             float Hash(float2 p)
             {
@@ -75,12 +76,12 @@ Shader "Hidden/ModernDrone/AnalogVideo"
                 float shift = (0.0012 + 0.007 * bad) * analog;
                 half3 col = SampleRgbShift(uvDistorted, shift);
 
-                // Thermal camera (white-hot) as seen through a CVBS FPV feed: 384x288 core (thermal-image.com),
+                // Thermal camera (white-hot) as seen through a CVBS FPV feed: core resolution from the fitted camera,
                 // AGC-driven gain, detail enhancement (halo around hot objects), column fixed-pattern noise and a
                 // cloudy non-uniformity that builds up between shutter calibrations (flyeye.io FFC notes).
                 if (_FpvThermal > 0.5)
                 {
-                    float2 res = float2(384.0, 288.0);
+                    float2 res = max(_FpvThermalRes.xy, float2(64.0, 48.0));
                     float2 px = 1.0 / res;
                     float2 tuv = (floor(uvDistorted * res) + 0.5) / res;
                     half l = ThermalLum(tuv);

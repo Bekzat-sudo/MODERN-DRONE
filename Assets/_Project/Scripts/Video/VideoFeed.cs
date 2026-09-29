@@ -29,6 +29,7 @@ namespace ModernDrone.Video
         static readonly int ThermalId = Shader.PropertyToID("_FpvThermal");
         static readonly int ThermalGainId = Shader.PropertyToID("_FpvThermalGain");
         static readonly int ThermalDriftId = Shader.PropertyToID("_FpvThermalDrift");
+        static readonly int ThermalResId = Shader.PropertyToID("_FpvThermalRes");
 
         public static LinkTelemetry Current { get; private set; }
         public static bool HasLink { get; private set; }
@@ -44,6 +45,7 @@ namespace ModernDrone.Video
             Shader.SetGlobalFloat(ThermalId, ModernDrone.Core.NightMode.Thermal ? 1f : 0f);
             Shader.SetGlobalFloat(ThermalGainId, ModernDrone.Core.NightMode.ThermalGain);
             Shader.SetGlobalFloat(ThermalDriftId, ModernDrone.Core.NightMode.ThermalDrift);
+            Shader.SetGlobalVector(ThermalResId, ModernDrone.Core.NightMode.ThermalResolution);
         }
 
         /// <summary>Effect applies only while the FPV camera is the one being watched.</summary>

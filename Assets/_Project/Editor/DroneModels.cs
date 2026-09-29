@@ -25,10 +25,26 @@ namespace ModernDrone.Editor
             bool created = cfg == null;
             if (created) cfg = ScriptableObject.CreateInstance<DroneConfig>(); // field defaults = the 7" model
             if (path == NonStop) ConfigureNonStop(cfg); else ConfigureFpv7(cfg);
+            ApplyStock(cfg, DroneParts.Stock(path == NonStop ? DroneParts.NonStopBattery : DroneParts.Fpv7Battery));
             if (created) AssetDatabase.CreateAsset(cfg, path);
             else EditorUtility.SetDirty(cfg);
             AssetDatabase.SaveAssets();
             return cfg;
+        }
+
+        /// <summary>All-up weight and battery come from the stock parts, so the loadout can swap them.</summary>
+        static void ApplyStock(DroneConfig c, DronePart[] stock)
+        {
+            c.stockParts = stock;
+            c.frameMass = c.airframeMass;
+            foreach (var p in stock)
+            {
+                c.frameMass += p.mass;
+                if (p.slot != PartSlot.Battery) continue;
+                c.cells = p.cells;
+                c.capacityMah = p.capacityMah;
+                c.internalResistance = p.internalResistance;
+            }
         }
 
         /// <summary>"FPV Drone" by Jeyhun1985: 7" long-range quad, ~0.5 kg airframe + 6S2P Li-ion ~0.55 kg.</summary>
@@ -39,6 +55,7 @@ namespace ModernDrone.Editor
             c.visualPrefab = DroneRigBuilder.VisualPrefab(DroneRigBuilder.Model.Fpv7);
             c.cameraPosition = new Vector3(0f, -0.003f, 0.095f);
             c.cameraTilt = 8f; // lens face normal measured on the model: 7.6 deg up
+            c.airframeMass = 0.47f; // 7" frame, 2807 motors, 4-in-1 ESC, FC, props: ~0.45-0.5 kg (oscarliang.com 7" builds)
             c.motorDiagonal = 0.3f;
             c.colliderSize = new Vector3(0.3f, 0.08f, 0.3f);
         }
@@ -54,7 +71,7 @@ namespace ModernDrone.Editor
             c.summary = "тяжёлый: большая нагрузка и запас батареи, инертный";
             c.visualPrefab = DroneRigBuilder.VisualPrefab(DroneRigBuilder.Model.NonStop);
             c.cameraPosition = new Vector3(0f, 0.004f, 0.14f);
-            c.frameMass = 1.6f;
+            c.airframeMass = 0.68f; // 10" frame, 3115 motors, ESC, FC, props (~1.6 kg AUW with a 6S2P 21700 pack)
             c.motorDiagonal = 0.495f;
             c.inertia = new Vector3(0.03f, 0.05f, 0.03f);
             c.colliderSize = new Vector3(0.45f, 0.2f, 0.45f);
@@ -65,8 +82,6 @@ namespace ModernDrone.Editor
             c.yawTorqueCoefficient = 0.02f;
             c.propPitchSpeed = 35f;
             c.dragArea = new Vector3(0.02f, 0.07f, 0.022f);
-            c.capacityMah = 6000f;
-            c.internalResistance = 0.04f;
             c.maxCurrentPerMotor = 60f;
             c.cameraTilt = 0f; // the model's lens looks straight ahead, so the warhead nose and fuze wires show at the bottom
         }

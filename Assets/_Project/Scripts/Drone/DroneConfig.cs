@@ -23,6 +23,10 @@ namespace ModernDrone.Drone
         [Header("Mass")]
         [Tooltip("Airframe + battery (all-up weight without payload), kg.")]
         [Min(0.1f)] public float frameMass = 1.1f;
+        [Tooltip("Frame, motors, ESC and flight controller without the swappable parts (battery, camera, VTX), kg.")]
+        [Min(0.05f)] public float airframeMass = 0.47f;
+        [Tooltip("Parts this model ships with; frameMass = airframeMass + their masses.")]
+        public DronePart[] stockParts = new DronePart[0];
         [Tooltip("Payload axis below the centre of mass, m (adds pitch/roll inertia).")]
         [Min(0f)] public float payloadDepth = 0.05f;
 
