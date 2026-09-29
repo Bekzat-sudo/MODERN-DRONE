@@ -27,7 +27,8 @@ namespace ModernDrone.Missions
             if (ConfirmPressed()) LaunchSortie();
         }
 
-        void DrawLoadout() => HangarScreen.Draw("АНГАР · СНАРЯЖЕНИЕ",
-            "↑↓ — слот,  ← → — вариант,  мышь: клик по строке, тянуть — повернуть дрон,  SPACE / A — взлёт");
+        void DrawLoadout() => HangarScreen.Draw("СНАРЯЖЕНИЕ",
+            FreeFlight ? missionName.ToUpperInvariant() : $"{missionName.ToUpperInvariant()} · ДРОН {_sortiesFlown + 1} ИЗ {Sorties}",
+            ("Q·E / LB·RB", "дрон"), ("↑↓", "слот"), ("←→", "вариант"), ("SPACE / A", "взлёт"));
     }
 }

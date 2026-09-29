@@ -11,7 +11,7 @@ namespace ModernDrone.Editor
         const string ScenePath = "Assets/_Project/Scenes/Mission_01.unity";
         const string TerrainDataPath = "Assets/_Project/Scenes/Mission_01_Terrain.asset";
 
-        const string Briefing =
+        internal const string Briefing =
             "Разведка обнаружила бронетехнику противника у лесополосы примерно в 330 м к северу " +
             "от точки взлёта (курс 000).\n\n" +
             "Задача: вывести из строя все три танка.\n\n" +
@@ -44,7 +44,7 @@ namespace ModernDrone.Editor
         const string Scene02Path = "Assets/_Project/Scenes/Mission_02.unity";
         const string Terrain02Path = "Assets/_Project/Scenes/Mission_02_Terrain.asset";
 
-        const string Briefing02 =
+        internal const string Briefing02 =
             "Два танка у той же лесополосы прикрыты станцией РЭБ: она стоит примерно в 280 м к северу от точки взлёта, " +
             "перед посадкой.\n\n" +
             "Рядом со станцией радиоканал почти не работает — видео в «снегу», управление запаздывает, возможен failsafe.\n\n" +
@@ -83,7 +83,7 @@ namespace ModernDrone.Editor
         const string Scene03Path = "Assets/_Project/Scenes/Mission_03.unity";
         const string Terrain03Path = "Assets/_Project/Scenes/Mission_03_Terrain.asset";
 
-        const string Briefing03 =
+        internal const string Briefing03 =
             "За лесополосой в ~350 м к северу — огневые позиции: САУ и две буксируемые гаубицы. " +
             "Их прикрывает расчёт дронов-перехватчиков.\n\n" +
             "Расчёт замечает дрон над посадкой и выше ~5 м и через пару секунд поднимает перехватчик. " +
@@ -129,7 +129,7 @@ namespace ModernDrone.Editor
         const string Scene04Path = "Assets/_Project/Scenes/Mission_04.unity";
         const string Terrain04Path = "Assets/_Project/Scenes/Mission_04_Terrain.asset";
 
-        const string Briefing04 =
+        internal const string Briefing04 =
             "По грунтовке за лесополосой, в ~500 м к северу, с запада на восток идёт колонна: бронеавтомобиль «Тайфун», БТР, грузовик, РСЗО, пусковая С-400 на марше и танк.\n\n" +
             "Задача: вывести из строя 3 машины из 6, пока колонна не ушла. Подбитая машина встаёт и задерживает остальных; " +
             "после первого попадания колонна ускоряется и ставит дым.\n\n" +
@@ -178,7 +178,7 @@ namespace ModernDrone.Editor
         }
 
 
-        const string Briefing05 =
+        internal const string Briefing05 =
             "За второй лесополосой, в ~800 м к северу, развернута позиция ЗРК: РЛС, две пусковые и прикрывающий их ЗРПК.\n\n" +
             "Подход глушит станция РЭБ, над позицией дежурит расчёт дронов-перехватчиков. " +
             "Оптоволокно не глушится, но катушки хватит только на прямой маршрут.\n\n" +
@@ -206,7 +206,7 @@ namespace ModernDrone.Editor
             ProvingGroundBuilder.AddToBuildSettings("Assets/_Project/Scenes/Mission_05.unity", 5);
         }
 
-        const string Briefing06 =
+        internal const string Briefing06 =
             "Вдоль лесополосы в ~330 м к северу стоит техника: разведка насчитала восемь машин, но большинство — надувные макеты.\n\n" +
             "Настоящих три: САУ, РСЗО и грузовик. Макеты блестят, у них упрощённые формы и лёгкий крен; настоящая техника отстреливается вблизи.\n\n" +
             "Задача: вывести из строя все три настоящие машины. Каждый удар по макету — потерянный дрон.";
@@ -236,7 +236,7 @@ namespace ModernDrone.Editor
             ProvingGroundBuilder.AddToBuildSettings("Assets/_Project/Scenes/Mission_06.unity", 6);
         }
 
-        const string Briefing07 =
+        internal const string Briefing07 =
             "Ночь. Техника противника стоит у лесополосы в ~330 м к северу. Дроны оснащены тепловизорами " +
             "(384x288, узкий угол обзора, «белое — горячее»): тёплые моторы видны издалека, холодная земля почти чёрная.\n\n" +
             "Среди целей есть надувные макеты — они холодные и на тепловизоре не светятся.\n\n" +
@@ -274,7 +274,7 @@ namespace ModernDrone.Editor
             ProvingGroundBuilder.AddToBuildSettings("Assets/_Project/Scenes/Mission_07.unity", 7);
         }
 
-        const string Briefing08 =
+        internal const string Briefing08 =
             "Ударный вертолёт Ми-28НМ работает по нашим позициям: низко переходит между огневыми точками " +
             "в 0,8–1 км к северу и на каждой зависает на ~20 секунд, чтобы отстреляться.\n\n" +
             "Догнать его на переходе не выйдет — ловите на зависании. Уязвимые места: хвостовой винт и хвостовая балка, " +

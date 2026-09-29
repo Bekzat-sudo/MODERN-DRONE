@@ -10,13 +10,14 @@ using UnityEngine.InputSystem;
 namespace ModernDrone.Missions
 {
     /// <summary>
-    /// Drone customisation screen, shared by the main menu and the pre-sortie loadout: slots on the left, the drone on
-    /// a turntable in the middle (selected part pulled out and outlined), options of the selected slot on the right,
-    /// resulting drone below. The last build of each drone model is remembered (PlayerPrefs) and used by every mission.
+    /// Drone customisation screen ("tactical tablet" look), shared by the main menu and the pre-sortie loadout:
+    /// drone models as tabs, numbered slots on the left, the 3D drone on a turntable in the middle (selected part pulled
+    /// out and outlined), options of the selected slot on the right with the change each one makes, resulting drone
+    /// below. The last build of each drone model is remembered (PlayerPrefs) and used by every mission.
     /// </summary>
     public sealed class Hangar
     {
-        enum Row { Drone, Battery, Propellers, Camera, Link, Warhead }
+        enum Row { Battery, Propellers, Camera, Link, Warhead }
 
         static readonly (Row row, PartSlot slot)[] PartRows =
         {
@@ -26,7 +27,11 @@ namespace ModernDrone.Missions
             (Row.Link, PartSlot.VideoLink),
         };
 
-        static readonly Color Accent = new Color(0.95f, 0.62f, 0.15f);
+        struct Stats
+        {
+            public float mass, twr, minutes;
+            public string range;
+        }
 
         readonly DroneConfig[] _models;
         readonly DronePart[] _parts;
@@ -37,8 +42,14 @@ namespace ModernDrone.Missions
         readonly List<Row> _rows = new List<Row>();
         readonly List<DronePart> _options = new List<DronePart>();
         readonly DronePart[] _picked = new DronePart[4]; // by PartSlot
+        readonly List<Stats> _optionStats = new List<Stats>();
+        Stats _current, _stock;
+        bool _dirty = true;
         int _model = -1, _warhead, _row;
-        GUIStyle _title, _body, _caption, _value, _option, _optionSelected, _tag, _hint;
+        GUIStyle _title, _tab, _caption, _captionAccent, _value, _option, _optionSel, _tag, _body, _statLabel, _statValue, _prompt, _key, _back;
+
+        /// <summary>Called when the back button is clicked (keyboard / gamepad back is read by the owner).</summary>
+        public Action Back;
 
         /// <param name="mission">
         /// In a mission only the thermal cores are offered at night and only analog cameras by day; in the menu every
@@ -61,7 +72,7 @@ namespace ModernDrone.Missions
         public DronePart Picked(PartSlot slot) => _picked[(int)slot];
         public IReadOnlyList<DronePart> PickedParts => _picked;
         /// <summary>Anything to choose (a screen worth showing).</summary>
-        public bool HasChoices => _rows.Count > 0;
+        public bool HasChoices => _rows.Count > 0 || _models.Length > 1;
 
         /// <summary>Restores the last build and lists the slots with a choice.</summary>
         public void Open()
@@ -73,11 +84,11 @@ namespace ModernDrone.Missions
             }
             PickSaved();
             _rows.Clear();
-            if (_models.Length > 1) _rows.Add(Row.Drone);
             foreach (var (row, slot) in PartRows)
                 if (Options(slot).Count > 1) _rows.Add(row);
             if (_warheads.Length > 1) _rows.Add(Row.Warhead);
             _row = 0;
+            _dirty = true;
         }
 
         /// <summary>Saves the build and hides the turntable.</summary>
@@ -90,6 +101,15 @@ namespace ModernDrone.Missions
             PlayerPrefs.Save();
             if (_preview != null) _preview.Hide();
         }
+
+        /// <summary>Runtime config of the current build (models without stock parts fly as defined).</summary>
+        public DroneConfig Compose() => Compose(_picked);
+
+        DroneConfig Compose(IEnumerable<DronePart> parts) => Model.stockParts.Length > 0 ? DroneBuild.Compose(Model, parts) : Model;
+
+        public static string WarheadHint(WarheadData w) => w.kind == WarheadKind.Fragmentation
+            ? "против открытых целей: РЛС, орудия, грузовики"
+            : w.tandem ? "пробивает динамическую защиту" : "против брони: борт, корма, крыша";
 
         // ---- parts
 
@@ -141,7 +161,6 @@ namespace ModernDrone.Missions
 
         static string RowName(Row row) => row switch
         {
-            Row.Drone => "Дрон",
             Row.Battery => "Батарея",
             Row.Propellers => "Винты",
             Row.Camera => "Камера",
@@ -149,240 +168,311 @@ namespace ModernDrone.Missions
             _ => "Боевая часть"
         };
 
-        int OptionCount(Row row) => row switch
-        {
-            Row.Drone => _models.Length,
-            Row.Warhead => _warheads.Length,
-            _ => Options(SlotOf(row)).Count
-        };
+        int OptionCount(Row row) => row == Row.Warhead ? _warheads.Length : Options(SlotOf(row)).Count;
 
-        int OptionIndex(Row row) => row switch
-        {
-            Row.Drone => _model,
-            Row.Warhead => _warhead,
-            _ => Options(SlotOf(row)).IndexOf(_picked[(int)SlotOf(row)])
-        };
+        int OptionIndex(Row row) => row == Row.Warhead ? _warhead : Options(SlotOf(row)).IndexOf(_picked[(int)SlotOf(row)]);
 
         void SelectOption(Row row, int i)
         {
             int n = OptionCount(row);
             if (n == 0) return;
             i = (i % n + n) % n;
-            switch (row)
-            {
-                case Row.Drone: _model = i; PickSaved(); break;
-                case Row.Warhead: _warhead = i; break;
-                default: _picked[(int)SlotOf(row)] = Options(SlotOf(row))[i]; break;
-            }
+            if (row == Row.Warhead) _warhead = i;
+            else _picked[(int)SlotOf(row)] = Options(SlotOf(row))[i];
+            _dirty = true;
         }
 
-        string OptionName(Row row, int i) => row switch
+        void SelectModel(int i)
         {
-            Row.Drone => _models[i].displayName,
-            Row.Warhead => _warheads[i].displayName,
-            _ => Options(SlotOf(row))[i].displayName
-        };
+            if (_models.Length == 0) return;
+            _model = (i % _models.Length + _models.Length) % _models.Length;
+            PickSaved();
+            _dirty = true;
+        }
 
-        /// <summary>Short figure shown next to an option in the list.</summary>
+        string OptionName(Row row, int i) => row == Row.Warhead ? _warheads[i].displayName : Options(SlotOf(row))[i].displayName;
+
+        /// <summary>Mass (or thrust for props) of an option, as listed.</summary>
         string OptionTag(Row row, int i)
         {
-            if (row == Row.Drone) return $"{_models[i].frameMass:0.0} кг";
             if (row == Row.Warhead) return $"{_warheads[i].mass:0.0} кг";
             var p = Options(SlotOf(row))[i];
             return p.slot == PartSlot.Propellers ? $"тяга ×{p.thrustScale:0.00}" : $"{p.mass * 1000f:0} г";
         }
 
-        string OptionDetails(Row row)
+        string Specs(Row row)
         {
-            if (row == Row.Drone) return Model.summary;
-            if (row == Row.Warhead) return $"{Warhead.mass:0.0} кг · {WarheadHint(Warhead)}";
+            if (row == Row.Warhead) return $"{Warhead.mass:0.0} кг\n{WarheadHint(Warhead)}";
             var p = _picked[(int)SlotOf(row)];
             if (p == null) return "";
             string specs = p.slot switch
             {
-                PartSlot.Battery => $"{p.cells}S · {p.capacityMah:0} мА·ч · {p.internalResistance * 1000f:0} мОм · {p.mass:0.00} кг",
-                PartSlot.Camera => p.thermal ? $"{p.thermalResolution.x}×{p.thermalResolution.y} · поле {p.horizontalFov:0}° · {p.mass * 1000f:0} г" : $"{p.mass * 1000f:0} г",
+                PartSlot.Battery => $"{p.cells}S · {p.capacityMah:0} мА·ч · {p.internalResistance * 1000f:0} мОм",
+                PartSlot.Camera => p.thermal ? $"{p.thermalResolution.x}×{p.thermalResolution.y} · поле {p.horizontalFov:0}°" : "аналог · поле по настройке пилота",
                 PartSlot.Propellers => $"тяга ×{p.thrustScale:0.00} · ток ×{p.currentScale:0.00} · шаг ×{p.pitchSpeedScale:0.00}",
-                _ => p.fiber ? $"кабель {p.spoolLength / 1000f:0} км · {p.mass:0.00} кг"
-                             : $"видео до {RadioParams.Default.videoRangeEnd * p.videoRangeScale / 1000f:0.0} км · листва ×{p.foliageBlock:0.00} · {p.mass * 1000f:0} г"
+                _ => p.fiber ? $"кабель {p.spoolLength / 1000f:0} км"
+                             : $"видео до {RadioParams.Default.videoRangeEnd * p.videoRangeScale / 1000f:0.0} км · листва ×{p.foliageBlock:0.00}"
             };
             string note = p.slot == PartSlot.Camera && p.thermal && !_mission ? "\nставится в ночных задачах" : "";
             string stock = p.slot == PartSlot.VideoLink && _linkStock != null ? $"\nосталось дронов: {_linkStock(p.fiber)}" : "";
             return specs + "\n" + p.summary + note + stock;
         }
 
-        public static string WarheadHint(WarheadData w) => w.kind == WarheadKind.Fragmentation
-            ? "против открытых целей: РЛС, орудия, грузовики"
-            : w.tandem ? "пробивает динамическую защиту" : "против брони: борт, корма, крыша";
+        // ---- stats (computed in Update when the build changes, never per GUI event)
 
-        // ---- input
-
-        static Rect PreviewRect => new Rect(Screen.width * 0.27f, Screen.height * 0.1f, Screen.width * 0.44f, Screen.height * 0.66f);
-
-        /// <summary>Keyboard / gamepad navigation and the turntable (call from Update).</summary>
-        public void Update()
+        Stats Measure(IEnumerable<DronePart> parts, WarheadData warhead)
         {
-            if (_rows.Count == 0) return;
-            var kb = Keyboard.current;
-            var pad = Gamepad.current;
-            bool left = (kb != null && kb.leftArrowKey.wasPressedThisFrame) || (pad != null && pad.dpad.left.wasPressedThisFrame);
-            bool right = (kb != null && kb.rightArrowKey.wasPressedThisFrame) || (pad != null && pad.dpad.right.wasPressedThisFrame);
-            bool up = (kb != null && kb.upArrowKey.wasPressedThisFrame) || (pad != null && pad.dpad.up.wasPressedThisFrame);
-            bool down = (kb != null && kb.downArrowKey.wasPressedThisFrame) || (pad != null && pad.dpad.down.wasPressedThisFrame);
-            int n = _rows.Count;
-            if (up) _row = (_row + n - 1) % n;
-            if (down) _row = (_row + 1) % n;
-            if (left || right) SelectOption(_rows[_row], OptionIndex(_rows[_row]) + (right ? 1 : -1));
-
-            if (_preview != null)
-            {
-                var r = PreviewRect;
-                var sel = _rows[_row];
-                var highlight = sel == Row.Drone || sel == Row.Warhead ? null : _picked[(int)SlotOf(sel)];
-                _preview.Show(Model, _picked[(int)PartSlot.Propellers], highlight, new Vector2Int((int)r.width, (int)r.height));
-            }
-        }
-
-        // ---- drawing
-
-        /// <summary>Full-screen hangar (call from OnGUI).</summary>
-        public void Draw(string title, string hint)
-        {
-            EnsureStyles();
-            float w = Screen.width, h = Screen.height;
-            Fill(new Rect(0, 0, w, h), new Color(0.03f, 0.035f, 0.04f, 1f));
-            GUI.Label(new Rect(0, h * 0.02f, w, h * 0.06f), title, _title);
-            if (_rows.Count == 0) return;
-
-            var e = Event.current;
-            var preview = PreviewRect;
-            if (_preview != null && _preview.Texture != null)
-            {
-                GUI.DrawTexture(preview, _preview.Texture, ScaleMode.StretchToFill, false);
-                if (e.type == EventType.MouseDrag && e.button == 0 && preview.Contains(e.mousePosition))
-                {
-                    _preview.Orbit(e.delta);
-                    e.Use();
-                }
-            }
-
-            // Slots
-            float lh = h * 0.075f;
-            for (int i = 0; i < _rows.Count; i++)
-            {
-                var row = _rows[i];
-                var r = new Rect(w * 0.03f, h * 0.1f + i * lh, w * 0.22f, lh * 0.92f);
-                bool sel = i == _row;
-                Fill(r, sel ? new Color(1f, 1f, 1f, 0.1f) : new Color(1f, 1f, 1f, 0.03f));
-                if (sel) Fill(new Rect(r.x, r.y, 4f, r.height), Accent);
-                GUI.Label(new Rect(r.x + 14f, r.y + r.height * 0.08f, r.width - 20f, r.height * 0.4f), RowName(row).ToUpperInvariant(), _caption);
-                GUI.Label(new Rect(r.x + 14f, r.y + r.height * 0.42f, r.width - 20f, r.height * 0.5f), OptionName(row, OptionIndex(row)), _value);
-                if (e.type == EventType.MouseDown && e.button == 0 && r.Contains(e.mousePosition))
-                {
-                    _row = i;
-                    e.Use();
-                }
-            }
-
-            // Options of the selected slot
-            var selRow = _rows[_row];
-            var list = new Rect(w * 0.73f, h * 0.1f, w * 0.24f, h * 0.66f);
-            Fill(list, new Color(1f, 1f, 1f, 0.03f));
-            GUI.Label(new Rect(list.x + 12f, list.y + 6f, list.width, lh * 0.5f), RowName(selRow).ToUpperInvariant(), _caption);
-            float oh = h * 0.045f;
-            int count = OptionCount(selRow), current = OptionIndex(selRow);
-            for (int i = 0; i < count; i++)
-            {
-                var r = new Rect(list.x + 6f, list.y + lh * 0.55f + i * oh, list.width - 12f, oh * 0.92f);
-                bool sel = i == current;
-                if (sel) Fill(r, new Color(Accent.r, Accent.g, Accent.b, 0.22f));
-                GUI.Label(new Rect(r.x + 8f, r.y, r.width * 0.72f, r.height), OptionName(selRow, i), sel ? _optionSelected : _option);
-                GUI.Label(new Rect(r.x, r.y, r.width - 8f, r.height), OptionTag(selRow, i), _tag);
-                if (e.type == EventType.MouseDown && e.button == 0 && r.Contains(e.mousePosition))
-                {
-                    SelectOption(selRow, i);
-                    e.Use();
-                }
-            }
-            float detailsTop = list.y + lh * 0.55f + count * oh + h * 0.02f;
-            GUI.Label(new Rect(list.x + 12f, detailsTop, list.width - 24f, list.yMax - detailsTop), OptionDetails(selRow), _body);
-
-            // Resulting drone
-            var bar = new Rect(w * 0.03f, h * 0.8f, w * 0.94f, h * 0.1f);
-            Fill(bar, new Color(1f, 1f, 1f, 0.04f));
-            var s = Summary();
-            float q = bar.width / 4f;
-            Stat(new Rect(bar.x, bar.y, q, bar.height), "ВЗЛЁТНАЯ МАССА", $"{s.mass:0.00} кг", 0f);
-            Stat(new Rect(bar.x + q, bar.y, q, bar.height), "ТЯГА / ВЕС", $"{s.twr:0.0}", Mathf.InverseLerp(1.5f, 7f, s.twr));
-            Stat(new Rect(bar.x + 2 * q, bar.y, q, bar.height), "ВИСЕНИЕ", $"~{s.minutes:0} мин", Mathf.InverseLerp(0f, 40f, s.minutes));
-            Stat(new Rect(bar.x + 3 * q, bar.y, q, bar.height), "ДАЛЬНОСТЬ ВИДЕО", s.range, 0f);
-
-            GUI.Label(new Rect(0, h * 0.92f, w, h * 0.05f), hint, _hint);
-        }
-
-        void Stat(Rect r, string label, string value, float fill)
-        {
-            GUI.Label(new Rect(r.x + 16f, r.y + r.height * 0.1f, r.width, r.height * 0.35f), label, _caption);
-            GUI.Label(new Rect(r.x + 16f, r.y + r.height * 0.42f, r.width, r.height * 0.45f), value, _value);
-            if (fill <= 0f) return;
-            var b = new Rect(r.x + r.width * 0.45f, r.y + r.height * 0.62f, r.width * 0.45f, 4f);
-            Fill(b, new Color(1f, 1f, 1f, 0.12f));
-            Fill(new Rect(b.x, b.y, b.width * Mathf.Clamp01(fill), b.height), Accent);
-        }
-
-        struct BuildSummary
-        {
-            public float mass, twr, minutes;
-            public string range;
-        }
-
-        /// <summary>The drone this build makes: take-off mass, thrust-to-weight, hover endurance, video reach.</summary>
-        BuildSummary Summary()
-        {
-            var model = Model;
-            if (model == null) return new BuildSummary { range = "—" };
-            var cfg = Compose();
-            var link = _picked[(int)PartSlot.VideoLink];
-            float payload = (Warhead != null ? Warhead.mass : 0f) + (link != null && link.fiber ? link.mass : 0f);
-            var s = new BuildSummary
+            var cfg = Compose(parts);
+            DronePart link = null;
+            foreach (var p in parts) if (p != null && p.slot == PartSlot.VideoLink) link = p;
+            float payload = (warhead != null ? warhead.mass : 0f) + (link != null && link.fiber ? link.mass : 0f);
+            var s = new Stats
             {
                 mass = cfg.frameMass + payload,
                 minutes = DroneBuild.HoverMinutes(cfg, payload),
                 range = link == null ? "—" : link.fiber ? $"{link.spoolLength / 1000f:0} км кабель" : $"{RadioParams.Default.videoRangeEnd * link.videoRangeScale / 1000f:0.0} км"
             };
             s.twr = cfg.frameMass * cfg.thrustToWeight / s.mass;
-            if (cfg != model) UnityEngine.Object.Destroy(cfg);
+            if (cfg != Model) UnityEngine.Object.Destroy(cfg);
             return s;
         }
 
-        /// <summary>Runtime config of the current build (models without stock parts fly as defined).</summary>
-        public DroneConfig Compose() => Model.stockParts.Length > 0 ? DroneBuild.Compose(Model, _picked) : Model;
-
-        static void Fill(Rect r, Color c)
+        void Refresh()
         {
-            var prev = GUI.color;
-            GUI.color = c;
-            GUI.DrawTexture(r, Texture2D.whiteTexture);
-            GUI.color = prev;
+            _dirty = false;
+            _optionStats.Clear();
+            if (Model == null || _rows.Count == 0 && _models.Length == 0) return;
+            _current = Measure(_picked, Warhead);
+            var stock = new DronePart[_picked.Length];
+            foreach (var (_, slot) in PartRows) stock[(int)slot] = Stock(slot) ?? _picked[(int)slot];
+            _stock = Measure(stock, Warhead);
+            if (_rows.Count == 0) return;
+            var row = _rows[_row];
+            int n = OptionCount(row);
+            var trial = (DronePart[])_picked.Clone();
+            for (int i = 0; i < n; i++)
+            {
+                if (row == Row.Warhead)
+                {
+                    _optionStats.Add(Measure(_picked, _warheads[i]));
+                    continue;
+                }
+                trial[(int)SlotOf(row)] = Options(SlotOf(row))[i];
+                _optionStats.Add(Measure(trial, Warhead));
+            }
         }
+
+        static string Delta(float value, float reference, string unit, string format)
+        {
+            float d = value - reference;
+            if (Mathf.Abs(d) < 0.5f) return ""; // below the shown precision
+            return d > 0f
+                ? UiTheme.Colored($"▲ +{d.ToString(format)}{unit}", UiTheme.Better)
+                : UiTheme.Colored($"▼ −{(-d).ToString(format)}{unit}", UiTheme.Worse);
+        }
+
+        static string Change(float from, float to, string format, bool higherIsBetter = true)
+        {
+            string arrow = Mathf.Abs(to - from) < 0.05f ? "" : (to > from) == higherIsBetter ? UiTheme.Colored(" ▲", UiTheme.Better) : UiTheme.Colored(" ▼", UiTheme.Worse);
+            return $"{from.ToString(format)} → {to.ToString(format)}{arrow}";
+        }
+
+        // ---- input
+
+        /// <summary>Keyboard / gamepad navigation and the turntable (call from Update).</summary>
+        public void Update()
+        {
+            var kb = Keyboard.current;
+            var pad = Gamepad.current;
+            bool left = (kb != null && kb.leftArrowKey.wasPressedThisFrame) || (pad != null && pad.dpad.left.wasPressedThisFrame);
+            bool right = (kb != null && kb.rightArrowKey.wasPressedThisFrame) || (pad != null && pad.dpad.right.wasPressedThisFrame);
+            bool up = (kb != null && kb.upArrowKey.wasPressedThisFrame) || (pad != null && pad.dpad.up.wasPressedThisFrame);
+            bool down = (kb != null && kb.downArrowKey.wasPressedThisFrame) || (pad != null && pad.dpad.down.wasPressedThisFrame);
+            bool prevModel = (kb != null && kb.qKey.wasPressedThisFrame) || (pad != null && pad.leftShoulder.wasPressedThisFrame);
+            bool nextModel = (kb != null && kb.eKey.wasPressedThisFrame) || (pad != null && pad.rightShoulder.wasPressedThisFrame);
+            if (prevModel || nextModel) SelectModel(_model + (nextModel ? 1 : -1));
+            int n = _rows.Count;
+            if (n > 0)
+            {
+                if (up) { _row = (_row + n - 1) % n; _dirty = true; }
+                if (down) { _row = (_row + 1) % n; _dirty = true; }
+                if (left || right) SelectOption(_rows[_row], OptionIndex(_rows[_row]) + (right ? 1 : -1));
+            }
+            if (_dirty) Refresh();
+
+            if (_preview != null)
+            {
+                var r = Layout().preview;
+                var sel = n > 0 ? _rows[_row] : Row.Warhead;
+                var highlight = sel == Row.Warhead ? null : _picked[(int)SlotOf(sel)];
+                _preview.Show(Model, _picked[(int)PartSlot.Propellers], highlight, new Vector2Int((int)r.width, (int)r.height));
+            }
+        }
+
+        // ---- drawing
+
+        struct Areas
+        {
+            public Rect header, slots, preview, options, footer, prompts;
+        }
+
+        static Areas Layout()
+        {
+            float w = Screen.width, h = Screen.height, p = UiTheme.Px(56f), gap = UiTheme.Px(24f);
+            float top = UiTheme.Px(40f), headerH = UiTheme.Px(64f);
+            float bodyTop = top + headerH + UiTheme.Px(28f);
+            float footerH = UiTheme.Px(76f), promptsH = UiTheme.Px(40f);
+            float promptsTop = h - UiTheme.Px(28f) - promptsH;
+            float footerTop = promptsTop - UiTheme.Px(16f) - footerH;
+            float bodyH = footerTop - UiTheme.Px(20f) - bodyTop;
+            float slotsW = UiTheme.Px(440f), optionsW = UiTheme.Px(500f);
+            return new Areas
+            {
+                header = new Rect(p, top, w - 2 * p, headerH),
+                slots = new Rect(p, bodyTop, slotsW, bodyH),
+                preview = new Rect(p + slotsW + gap, bodyTop, w - 2 * p - slotsW - optionsW - 2 * gap, bodyH),
+                options = new Rect(w - p - optionsW, bodyTop, optionsW, bodyH),
+                footer = new Rect(p, footerTop, w - 2 * p, footerH),
+                prompts = new Rect(p, promptsTop, w - 2 * p, promptsH),
+            };
+        }
+
+        /// <summary>Full-screen hangar (call from OnGUI).</summary>
+        public void Draw(string title, string note, params (string key, string action)[] prompts)
+        {
+            EnsureStyles();
+            UiTheme.Background();
+            var a = Layout();
+            var e = Event.current;
+            bool click = e.type == EventType.MouseDown && e.button == 0;
+
+            // Header: back, title, drone tabs, note
+            float x = a.header.x;
+            if (Back != null)
+            {
+                var back = new Rect(x, a.header.y, a.header.height, a.header.height);
+                UiTheme.Box(back);
+                GUI.Label(back, "‹", _back);
+                if (click && back.Contains(e.mousePosition)) { Back(); e.Use(); }
+                x += back.width + UiTheme.Px(24f);
+            }
+            float tw = _title.CalcSize(new GUIContent(title)).x;
+            GUI.Label(new Rect(x, a.header.y, tw, a.header.height), title, _title);
+            x += tw + UiTheme.Px(32f);
+            for (int i = 0; i < _models.Length; i++)
+            {
+                string label = _models[i].displayName.ToUpperInvariant();
+                var r = new Rect(x, a.header.y + UiTheme.Px(6f), _tab.CalcSize(new GUIContent(label)).x + UiTheme.Px(40f), a.header.height - UiTheme.Px(12f));
+                bool sel = i == _model;
+                UiTheme.Box(r, sel);
+                _tab.normal.textColor = sel ? UiTheme.Text : UiTheme.Muted;
+                GUI.Label(r, label, _tab);
+                if (click && r.Contains(e.mousePosition)) { SelectModel(i); e.Use(); }
+                x += r.width + UiTheme.Px(6f);
+            }
+            GUI.Label(new Rect(x, a.header.y, a.header.xMax - x, a.header.height), note, _captionRight);
+
+            if (Model == null) return;
+
+            // Slots
+            GUI.Label(new Rect(a.slots.x, a.slots.y, a.slots.width, UiTheme.Px(30f)), "СЛОТЫ", _caption);
+            float sh = UiTheme.Px(92f), sy = a.slots.y + UiTheme.Px(40f);
+            for (int i = 0; i < _rows.Count; i++)
+            {
+                var row = _rows[i];
+                var r = new Rect(a.slots.x, sy + i * (sh + UiTheme.Px(8f)), a.slots.width, sh);
+                bool sel = i == _row;
+                UiTheme.Box(r, sel);
+                var inner = new Rect(r.x + UiTheme.Px(18f), r.y + UiTheme.Px(12f), r.width - UiTheme.Px(36f), r.height - UiTheme.Px(24f));
+                GUI.Label(new Rect(inner.x, inner.y, inner.width, inner.height * 0.42f), $"{i + 1:00} · {RowName(row).ToUpperInvariant()}", sel ? _captionAccent : _caption);
+                GUI.Label(new Rect(inner.x, inner.y + inner.height * 0.45f, inner.width, inner.height * 0.55f), OptionName(row, OptionIndex(row)), _value);
+                if (click && r.Contains(e.mousePosition)) { _row = i; _dirty = true; e.Use(); }
+            }
+
+            // 3D view
+            UiTheme.Box(a.preview, raised: true);
+            if (_preview != null && _preview.Texture != null)
+            {
+                GUI.DrawTexture(new Rect(a.preview.x + 1, a.preview.y + 1, a.preview.width - 2, a.preview.height - 2), _preview.Texture, ScaleMode.StretchToFill, false);
+                if (e.type == EventType.MouseDrag && e.button == 0 && a.preview.Contains(e.mousePosition))
+                {
+                    _preview.Orbit(e.delta);
+                    e.Use();
+                }
+            }
+            GUI.Label(new Rect(a.preview.x + UiTheme.Px(18f), a.preview.y + UiTheme.Px(12f), a.preview.width, UiTheme.Px(28f)), "ВИД 3D · ТЯНИТЕ ДЛЯ ПОВОРОТА", _caption);
+            GUI.Label(new Rect(a.preview.x + UiTheme.Px(18f), a.preview.yMax - UiTheme.Px(40f), a.preview.width - UiTheme.Px(36f), UiTheme.Px(28f)),
+                $"{Model.displayName.ToUpperInvariant()} · ДИАГОНАЛЬ {Model.motorDiagonal * 1000f:0} мм · РАМА {Model.airframeMass:0.00} кг", _caption);
+
+            // Options of the selected slot
+            UiTheme.Box(a.options);
+            if (_rows.Count > 0)
+            {
+                var selRow = _rows[_row];
+                int count = OptionCount(selRow), current = OptionIndex(selRow);
+                var o = new Rect(a.options.x + UiTheme.Px(18f), a.options.y + UiTheme.Px(16f), a.options.width - UiTheme.Px(36f), a.options.height - UiTheme.Px(32f));
+                GUI.Label(new Rect(o.x, o.y, o.width, UiTheme.Px(28f)), $"{RowName(selRow).ToUpperInvariant()} · {count} {Variants(count)}", _caption);
+                float oh = UiTheme.Px(66f), oy = o.y + UiTheme.Px(40f);
+                for (int i = 0; i < count; i++)
+                {
+                    var r = new Rect(o.x - UiTheme.Px(6f), oy + i * (oh + UiTheme.Px(4f)), o.width + UiTheme.Px(12f), oh);
+                    bool sel = i == current;
+                    if (sel) UiTheme.Box(r, true);
+                    string delta = i < _optionStats.Count && !sel ? Delta(_optionStats[i].minutes, _current.minutes, " мин", "0") : "";
+                    // Name on top, mass and the change it makes below (before/after comparison per option)
+                    GUI.Label(new Rect(r.x + UiTheme.Px(12f), r.y + UiTheme.Px(6f), r.width - UiTheme.Px(24f), r.height * 0.5f), OptionName(selRow, i), sel ? _optionSel : _option);
+                    GUI.Label(new Rect(r.x + UiTheme.Px(12f), r.y + r.height * 0.5f, r.width - UiTheme.Px(24f), r.height * 0.42f),
+                        $"{OptionTag(selRow, i)}{(delta.Length > 0 ? "  " + delta : sel ? "  " + UiTheme.Colored("установлено", UiTheme.Accent) : "")}", _tag);
+                    if (click && r.Contains(e.mousePosition)) { SelectOption(selRow, i); e.Use(); }
+                }
+                float dy = oy + count * (oh + UiTheme.Px(4f)) + UiTheme.Px(16f);
+                UiTheme.Fill(new Rect(o.x, dy, o.width, 1f), UiTheme.Line);
+                dy += UiTheme.Px(14f);
+                string compare = $"Висение к стандарту: {Change(_stock.minutes, _current.minutes, "0")} мин\nТяга / вес к стандарту: {Change(_stock.twr, _current.twr, "0.0")}";
+                GUI.Label(new Rect(o.x, dy, o.width, o.yMax - dy), Specs(selRow) + "\n\n" + compare, _body);
+            }
+
+            // Resulting drone
+            float cw = (a.footer.width - 3 * UiTheme.Px(12f)) / 4f;
+            Stat(new Rect(a.footer.x, a.footer.y, cw, a.footer.height), "ВЗЛЁТНАЯ МАССА", $"{_current.mass:0.00} кг");
+            Stat(new Rect(a.footer.x + (cw + UiTheme.Px(12f)), a.footer.y, cw, a.footer.height), "ТЯГА / ВЕС", $"{_current.twr:0.0}");
+            Stat(new Rect(a.footer.x + 2 * (cw + UiTheme.Px(12f)), a.footer.y, cw, a.footer.height), "ВИСЕНИЕ", $"~{_current.minutes:0} мин");
+            Stat(new Rect(a.footer.x + 3 * (cw + UiTheme.Px(12f)), a.footer.y, cw, a.footer.height), "ДАЛЬНОСТЬ ВИДЕО", _current.range);
+
+            UiTheme.Prompts(a.prompts, _prompt, _key, prompts);
+        }
+
+        static string Variants(int n) => n % 10 == 1 && n % 100 != 11 ? "ВАРИАНТ" : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? "ВАРИАНТА" : "ВАРИАНТОВ";
+
+        void Stat(Rect r, string label, string value)
+        {
+            UiTheme.Box(r);
+            GUI.Label(new Rect(r.x + UiTheme.Px(18f), r.y, r.width * 0.55f, r.height), label, _statLabel);
+            GUI.Label(new Rect(r.x, r.y, r.width - UiTheme.Px(18f), r.height), value, _statValue);
+        }
+
+        GUIStyle _captionRight;
 
         void EnsureStyles()
         {
-            int size = Mathf.Max(12, Mathf.RoundToInt(Screen.height * 0.024f));
-            if (_body != null && _body.fontSize == size) return;
-            _body = new GUIStyle(GUI.skin.label) { fontSize = size, wordWrap = true };
-            _body.normal.textColor = Color.white;
-            _title = new GUIStyle(_body) { fontSize = Mathf.RoundToInt(size * 1.6f), fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter, wordWrap = false };
-            _hint = new GUIStyle(_body) { fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter, wordWrap = false };
-            _caption = new GUIStyle(_body) { fontSize = Mathf.RoundToInt(size * 0.7f), fontStyle = FontStyle.Bold, wordWrap = false };
-            _caption.normal.textColor = new Color(0.6f, 0.65f, 0.62f);
-            _value = new GUIStyle(_body) { fontStyle = FontStyle.Bold, wordWrap = false, clipping = TextClipping.Clip };
-            _option = new GUIStyle(_body) { fontSize = Mathf.RoundToInt(size * 0.85f), wordWrap = false, clipping = TextClipping.Clip, alignment = TextAnchor.MiddleLeft };
-            _option.normal.textColor = new Color(0.82f, 0.84f, 0.82f);
-            _optionSelected = new GUIStyle(_option) { fontStyle = FontStyle.Bold };
-            _optionSelected.normal.textColor = Color.white;
-            _tag = new GUIStyle(_option) { alignment = TextAnchor.MiddleRight };
-            _tag.normal.textColor = Accent;
+            int size = UiTheme.FontPx(20f);
+            if (_value != null && _value.fontSize == size) return;
+            _title = UiTheme.Style(UiTheme.Display, 46f, UiTheme.Text);
+            _title.fontStyle = FontStyle.Bold;
+            _tab = UiTheme.Style(UiTheme.Display, 22f, UiTheme.Text, TextAnchor.MiddleCenter);
+            _back = UiTheme.Style(UiTheme.Display, 36f, UiTheme.Text, TextAnchor.MiddleCenter);
+            _caption = UiTheme.Style(UiTheme.Mono, 18f, UiTheme.Muted);
+            _captionAccent = UiTheme.Style(UiTheme.Mono, 18f, UiTheme.Accent);
+            _captionRight = UiTheme.Style(UiTheme.Mono, 18f, UiTheme.Muted, TextAnchor.MiddleRight);
+            _value = UiTheme.Style(UiTheme.Mono, 20f, UiTheme.Text);
+            _option = UiTheme.Style(UiTheme.Mono, 20f, UiTheme.Body);
+            _optionSel = UiTheme.Style(UiTheme.MonoBold, 20f, UiTheme.Text);
+            _tag = UiTheme.Style(UiTheme.Mono, 18f, UiTheme.Muted);
+            _body = UiTheme.Style(UiTheme.Mono, 19f, UiTheme.Body, TextAnchor.UpperLeft, true);
+            _statLabel = UiTheme.Style(UiTheme.Mono, 18f, UiTheme.Muted);
+            _statValue = UiTheme.Style(UiTheme.Display, 34f, UiTheme.Text, TextAnchor.MiddleRight);
+            _prompt = UiTheme.Style(UiTheme.Mono, 19f, UiTheme.Body);
+            _key = UiTheme.Style(UiTheme.MonoBold, 17f, UiTheme.Ground, TextAnchor.MiddleCenter);
         }
     }
 }

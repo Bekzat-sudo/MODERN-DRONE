@@ -60,7 +60,7 @@ namespace ModernDrone.Missions
         string _lostMessage = "ДРОН ПОТЕРЯН";
         float _missionTime;
         MissionOutcome _outcome;
-        GUIStyle _title, _body, _small;
+        GUIStyle _title, _body, _small, _kicker;
 
         public MissionPhase Phase { get; private set; }
         public bool FreeFlight => _targets.Count == 0;
@@ -339,24 +339,32 @@ namespace ModernDrone.Missions
             switch (Phase)
             {
                 case MissionPhase.Briefing:
-                    Panel(new Rect(w * 0.2f, h * 0.15f, w * 0.6f, h * 0.7f), missionName, BriefingText(), "SPACE / A — начать");
+                    Panel(new Rect(w * 0.18f, h * 0.08f, w * 0.64f, h * 0.84f), "БРИФИНГ", missionName, BriefingText(), "SPACE / A — начать");
                     break;
                 case MissionPhase.Flying:
                     int done = 0;
                     foreach (var t in _targets) if (t.Neutralized && !IsEscaped(t)) done++;
                     string kind = _link != null && _link.Type == LinkType.Fiber ? "ОПТОВОЛОКНО" : "РАДИО";
-                    GUI.Label(new Rect(0, h * 0.09f, w, _small.fontSize * 1.5f),
-                        $"ДРОН {_sortiesFlown + 1}/{Sorties} · {kind}   ЦЕЛИ {done}/{Required}", _small);
+                    // Over live video: a dark plate keeps the text readable on any background (XAG 101).
+                    string status = $"ДРОН {_sortiesFlown + 1}/{Sorties} · {kind}   ЦЕЛИ {done}/{Required}";
+                    float sw = _small.CalcSize(new GUIContent(status)).x + UiTheme.Px(32f);
+                    UiTheme.Fill(new Rect((w - sw) * 0.5f, h * 0.09f, sw, _small.fontSize * 1.6f), new Color(0f, 0f, 0f, 0.55f));
+                    GUI.Label(new Rect(0, h * 0.09f, w, _small.fontSize * 1.6f), status, _small);
                     break;
                 case MissionPhase.DroneLost:
-                    GUI.Label(new Rect(0, h * 0.4f, w, _title.fontSize * 1.5f), _lostMessage, _title);
+                    UiTheme.Fill(new Rect(0, h * 0.4f, w, _title.fontSize * 1.6f), new Color(0f, 0f, 0f, 0.6f));
+                    _title.alignment = TextAnchor.MiddleCenter;
+                    _title.normal.textColor = UiTheme.Hostile;
+                    GUI.Label(new Rect(0, h * 0.4f, w, _title.fontSize * 1.6f), _lostMessage, _title);
+                    _title.alignment = TextAnchor.MiddleLeft;
+                    _title.normal.textColor = UiTheme.Text;
                     break;
                 case MissionPhase.Loadout:
                     DrawLoadout();
                     break;
                 case MissionPhase.Debrief:
                     string header = _outcome == MissionOutcome.Success ? "ЗАДАЧА ВЫПОЛНЕНА" : "ЗАДАЧА НЕ ВЫПОЛНЕНА";
-                    Panel(new Rect(w * 0.2f, h * 0.15f, w * 0.6f, h * 0.7f), header, DebriefText(),
+                    Panel(new Rect(w * 0.2f, h * 0.12f, w * 0.6f, h * 0.76f), missionName.ToUpperInvariant(), header, DebriefText(),
                         $"{ControlInput.HintFor(PilotAction.Restart, _input != null ? _input.ActiveSource : InputSource.KeyboardMouse)} — повторить");
                     break;
             }
@@ -397,27 +405,30 @@ namespace ModernDrone.Missions
             return sb.ToString();
         }
 
-        void Panel(Rect r, string header, string text, string footer)
+        void Panel(Rect r, string kicker, string header, string text, string footer)
         {
-            var prev = GUI.color;
-            GUI.color = new Color(0.02f, 0.03f, 0.03f, 0.93f);
-            GUI.DrawTexture(r, Texture2D.whiteTexture);
-            GUI.color = prev;
-            float pad = r.height * 0.05f;
-            GUI.Label(new Rect(r.x, r.y + pad, r.width, _title.fontSize * 1.5f), header, _title);
-            float bodyTop = r.y + pad + _title.fontSize * 2f;
-            GUI.Label(new Rect(r.x + pad, bodyTop, r.width - pad * 2, r.yMax - bodyTop - pad * 2f), text, _body);
-            GUI.Label(new Rect(r.x, r.yMax - pad * 1.5f, r.width, _small.fontSize * 1.5f), footer, _small);
+            UiTheme.Fill(r, UiTheme.Panel);
+            UiTheme.Frame(r, UiTheme.Line);
+            float pad = UiTheme.Px(40f);
+            GUI.Label(new Rect(r.x + pad, r.y + pad * 0.8f, r.width - pad * 2, UiTheme.Px(28f)), $"// {kicker}", _kicker);
+            GUI.Label(new Rect(r.x + pad, r.y + pad * 0.8f + UiTheme.Px(30f), r.width - pad * 2, _title.fontSize * 1.4f), header, _title);
+            float bodyTop = r.y + pad * 0.8f + UiTheme.Px(30f) + _title.fontSize * 1.7f;
+            GUI.Label(new Rect(r.x + pad, bodyTop, r.width - pad * 2, r.yMax - bodyTop - UiTheme.Px(80f)), text, _body);
+            var bar = new Rect(r.x + pad, r.yMax - UiTheme.Px(64f), r.width - pad * 2, UiTheme.Px(40f));
+            UiTheme.Fill(new Rect(bar.x, bar.y - UiTheme.Px(10f), bar.width, 1f), UiTheme.Line);
+            GUI.Label(bar, footer, _small);
         }
 
         void EnsureStyles()
         {
-            int size = Mathf.Max(12, Mathf.RoundToInt(Screen.height * 0.024f));
+            int size = UiTheme.FontPx(19f);
             if (_body != null && _body.fontSize == size) return;
-            _body = new GUIStyle(GUI.skin.label) { fontSize = size, wordWrap = true };
-            _body.normal.textColor = Color.white;
-            _title = new GUIStyle(_body) { fontSize = Mathf.RoundToInt(size * 1.6f), fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter, wordWrap = false };
-            _small = new GUIStyle(_body) { fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter, wordWrap = false };
+            _body = UiTheme.Style(UiTheme.Mono, 19f, UiTheme.Body, TextAnchor.UpperLeft, true);
+            _title = UiTheme.Style(UiTheme.Display, 46f, UiTheme.Text);
+            _kicker = UiTheme.Style(UiTheme.Mono, 18f, UiTheme.Accent);
+            _small = UiTheme.Style(UiTheme.MonoBold, 20f, UiTheme.Text, TextAnchor.MiddleCenter);
+            _small.normal.textColor = UiTheme.Text;
+            _small.fontStyle = FontStyle.Normal;
         }
     }
 }

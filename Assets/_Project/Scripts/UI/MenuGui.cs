@@ -70,33 +70,34 @@ namespace ModernDrone.UI
         static Texture2D _white;
         static Texture2D White => _white != null ? _white : _white = Texture2D.whiteTexture;
 
-        public static readonly Color PanelColor = new Color(0.03f, 0.04f, 0.04f, 0.92f);
-        public static readonly Color Accent = new Color(0.95f, 0.62f, 0.15f);
+        public static readonly Color PanelColor = new Color(ModernDrone.Core.UiTheme.Panel.r, ModernDrone.Core.UiTheme.Panel.g, ModernDrone.Core.UiTheme.Panel.b, 0.96f);
+        public static readonly Color Accent = ModernDrone.Core.UiTheme.Accent;
 
         public void EnsureStyles()
         {
             if (title != null && _styleHeight == Screen.height) return;
             _styleHeight = Screen.height;
-            int size = Mathf.Max(12, Mathf.RoundToInt(Screen.height * 0.024f));
+            // "Tactical tablet" theme: data in IBM Plex Mono, headings in Oswald (ModernDrone.Core.UiTheme).
+            int size = ModernDrone.Core.UiTheme.FontPx(22f);
 
-            row = new GUIStyle(GUI.skin.label) { fontSize = size, alignment = TextAnchor.MiddleLeft, clipping = TextClipping.Clip };
-            row.normal.textColor = new Color(0.85f, 0.87f, 0.85f);
-            rowSelected = new GUIStyle(row) { fontStyle = FontStyle.Bold };
-            rowSelected.normal.textColor = Color.white;
+            row = new GUIStyle(GUI.skin.label) { font = ModernDrone.Core.UiTheme.Mono, fontSize = size, alignment = TextAnchor.MiddleLeft, clipping = TextClipping.Clip };
+            row.normal.textColor = ModernDrone.Core.UiTheme.Body;
+            rowSelected = new GUIStyle(row) { font = ModernDrone.Core.UiTheme.MonoBold };
+            rowSelected.normal.textColor = ModernDrone.Core.UiTheme.Text;
             value = new GUIStyle(row) { alignment = TextAnchor.MiddleRight };
             value.normal.textColor = Accent;
             header = new GUIStyle(row) { fontStyle = FontStyle.Bold, fontSize = Mathf.RoundToInt(size * 0.8f) };
-            header.normal.textColor = new Color(0.55f, 0.6f, 0.55f);
+            header.normal.textColor = ModernDrone.Core.UiTheme.Muted;
             hint = new GUIStyle(row) { fontSize = Mathf.RoundToInt(size * 0.75f), alignment = TextAnchor.MiddleCenter, wordWrap = true };
-            hint.normal.textColor = new Color(1f, 1f, 1f, 0.55f);
-            title = new GUIStyle(row) { fontSize = Mathf.RoundToInt(size * 2.2f), fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
-            title.normal.textColor = Color.white;
+            hint.normal.textColor = ModernDrone.Core.UiTheme.Muted;
+            title = new GUIStyle(row) { font = ModernDrone.Core.UiTheme.Display, fontSize = Mathf.RoundToInt(size * 2.2f), alignment = TextAnchor.MiddleCenter };
+            title.normal.textColor = ModernDrone.Core.UiTheme.Text;
             subtitle = new GUIStyle(row) { fontSize = Mathf.RoundToInt(size * 0.9f), alignment = TextAnchor.MiddleCenter, wordWrap = true };
-            subtitle.normal.textColor = new Color(1f, 1f, 1f, 0.7f);
-            tab = new GUIStyle(row) { alignment = TextAnchor.MiddleCenter, fontSize = Mathf.RoundToInt(size * 0.8f) };
-            tab.normal.textColor = new Color(0.7f, 0.72f, 0.7f);
-            tabSelected = new GUIStyle(tab) { fontStyle = FontStyle.Bold };
-            tabSelected.normal.textColor = Color.white;
+            subtitle.normal.textColor = ModernDrone.Core.UiTheme.Body;
+            tab = new GUIStyle(row) { font = ModernDrone.Core.UiTheme.Display, alignment = TextAnchor.MiddleCenter, fontSize = Mathf.RoundToInt(size * 0.95f) };
+            tab.normal.textColor = ModernDrone.Core.UiTheme.Muted;
+            tabSelected = new GUIStyle(tab);
+            tabSelected.normal.textColor = ModernDrone.Core.UiTheme.Text;
         }
 
         public float RowHeight => row.fontSize * 1.9f;
@@ -212,7 +213,7 @@ namespace ModernDrone.UI
                 }
 
                 bool isSel = i == selected;
-                if (isSel) Fill(rect, new Color(1f, 1f, 1f, 0.08f));
+                if (isSel) Fill(rect, ModernDrone.Core.UiTheme.AccentFill);
                 if (isSel) Fill(new Rect(rect.x, rect.y, 3f, rect.height), Accent);
 
                 float valueWidth = rect.width * 0.45f;

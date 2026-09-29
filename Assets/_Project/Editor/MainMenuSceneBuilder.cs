@@ -49,6 +49,11 @@ namespace ModernDrone.Editor
             var preview = menu.gameObject.AddComponent<ModernDrone.Missions.HangarPreview>();
             preview.SetOutline(ProvingGroundBuilder.OutlineMaterial());
             menu.SetHangar(DroneModels.LoadAll(), DroneParts.LoadAll(), ProvingGroundBuilder.Warheads(), preview);
+            menu.SetMissions(
+                new[] { "Стоянка у посадки", "Прикрытие РЭБ", "Огневые позиции", "Колонна", "Позиция ЗРК", "Ложные цели", "Ночная охота", "Охота на вертолёт" },
+                new[] { GameScenes.Mission01, GameScenes.Mission02, GameScenes.Mission03, GameScenes.Mission04, GameScenes.Mission05, GameScenes.Mission06, GameScenes.Mission07, GameScenes.Mission08 },
+                new[] { MissionSceneBuilder.Briefing, MissionSceneBuilder.Briefing02, MissionSceneBuilder.Briefing03, MissionSceneBuilder.Briefing04,
+                        MissionSceneBuilder.Briefing05, MissionSceneBuilder.Briefing06, MissionSceneBuilder.Briefing07, MissionSceneBuilder.Briefing08 });
 
             EditorSceneManager.SaveScene(scene, ScenePath);
             ProvingGroundBuilder.AddToBuildSettings(ScenePath, 0);

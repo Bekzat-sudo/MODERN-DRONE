@@ -84,7 +84,7 @@ namespace ModernDrone.Missions
             floor.transform.SetParent(_stage, false);
             floor.transform.localPosition = new Vector3(0f, -0.16f, 0f);
             floor.transform.localScale = new Vector3(0.9f, 0.005f, 0.9f);
-            floor.GetComponent<Renderer>().material.color = new Color(0.09f, 0.1f, 0.1f);
+            floor.GetComponent<Renderer>().material.color = new Color(0.16f, 0.18f, 0.13f);
 
             // Own lights: the stage is lit the same in day and night missions.
             Light(new Vector3(0.6f, 0.9f, -0.7f), 3f, new Color(1f, 0.95f, 0.88f));
@@ -94,7 +94,7 @@ namespace ModernDrone.Missions
             _camera = new GameObject("HangarCamera").AddComponent<Camera>();
             _camera.transform.SetParent(_stage, false);
             _camera.clearFlags = CameraClearFlags.SolidColor;
-            _camera.backgroundColor = new Color(0.05f, 0.055f, 0.06f);
+            _camera.backgroundColor = ModernDrone.Core.UiTheme.PanelRaised;
             _camera.nearClipPlane = 0.02f;
             _camera.farClipPlane = 8f; // the map is 3 km below
             _camera.fieldOfView = 30f;
@@ -115,7 +115,10 @@ namespace ModernDrone.Missions
         void SetModel(DroneConfig model)
         {
             _shownModel = model;
+            // Swapped props and the pulled-out part hang on the turntable, not on the drone: remove them too.
             if (_drone != null) Destroy(_drone);
+            foreach (var p in _props) Destroy(p);
+            if (_exploded != null) Destroy(_exploded);
             _modelProps.Clear();
             _props.Clear();
             _shownProps = null;

@@ -52,3 +52,8 @@
   (kloofendal_48d_partly_cloudy_puresky), bushes (shrub_02) and grass (grass_bermuda_01) from
   [Poly Haven](https://polyhaven.com), licensed under [CC0](https://polyhaven.com/license).
   `Assets/_Project/Art/Environment/`; bushes decimated, grass rendered to a billboard sprite.
+
+## Fonts
+
+- **Oswald** by Vernon Adams, Kalapi Gajjar, Cyreal — [SIL Open Font License 1.1](https://openfontlicense.org), from [Google Fonts](https://github.com/google/fonts/tree/main/ofl/oswald).
+- **IBM Plex Mono** by IBM — [SIL Open Font License 1.1](https://openfontlicense.org), from [Google Fonts](https://github.com/google/fonts/tree/main/ofl/ibmplexmono).
