@@ -68,6 +68,8 @@ namespace ModernDrone.UI
             }
 
             var nav = _gui.ReadNav();
+            // While a text field is being typed into, keys belong to the field (Esc only ends the edit).
+            if (MenuRow.Editing != null) return;
             if (nav.back)
             {
                 ControlSettings.Save();
@@ -299,6 +301,12 @@ namespace ModernDrone.UI
             (OsdItem.VerticalSpeed, "Вертикальная скорость"), (OsdItem.HomeDistance, "До точки взлёта"), (OsdItem.CraftName, "Позывной"),
         };
 
+        static char CraftNameChar(char c)
+        {
+            c = char.ToUpperInvariant(c);
+            return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || " -_.!".IndexOf(c) >= 0 ? c : '\0';
+        }
+
         /// <summary>OSD layout: a preset, then a slot for every element and the graphic overlays.</summary>
         void OsdRows()
         {
@@ -312,9 +320,13 @@ namespace ModernDrone.UI
                 var it = item;
                 _rows.Add(MenuRow.Choice(label, SlotNames, () => (int)osd.SlotOf(it), v => osd.SetSlot(it, (OsdSlot)v)));
             }
+            // Betaflight craft name: up to 16 characters, shown upper case; analog OSD fonts hold only Latin letters,
+            // digits and a few signs (MAX7456 character set).
+            _rows.Add(MenuRow.Text("Текст позывного (латиница, до 16)", () => osd.craftName, v => osd.craftName = v, 16, CraftNameChar));
             _rows.Add(MenuRow.Header("Графика"));
             _rows.Add(MenuRow.Toggle("Прицельный крест", () => osd.crosshair, v => osd.crosshair = v));
             _rows.Add(MenuRow.Toggle("Искусственный горизонт", () => osd.horizon, v => osd.horizon = v));
+            _rows.Add(MenuRow.Toggle("Боковые шкалы горизонта", () => osd.sidebars, v => osd.sidebars = v));
             _rows.Add(MenuRow.Toggle("Ось заряда", () => osd.chargeAxis, v => osd.chargeAxis = v));
             _rows.Add(MenuRow.Toggle("Предупреждения (батарея, связь)", () => osd.warnings, v => osd.warnings = v));
         }

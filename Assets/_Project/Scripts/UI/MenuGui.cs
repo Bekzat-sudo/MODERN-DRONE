@@ -13,8 +13,35 @@ namespace ModernDrone.UI
         public Action<int> Adjust;
         public Action Activate;
         public bool IsHeader;
+        /// <summary>Editable text: typed while the row is in edit mode (Enter / click to start, Enter / Esc to finish).</summary>
+        public Action<char> Type;
+        public Action Erase;
 
         public MenuRow(string label) => Label = label;
+
+        /// <summary>The row whose text is being typed; menus skip their navigation while it is set.</summary>
+        public static MenuRow Editing;
+        static int _editingSince;
+
+        /// <summary>
+        /// Text field limited to <paramref name="maxLength"/> characters that <paramref name="accept"/> maps to a
+        /// stored character (or '\0' to reject).
+        /// </summary>
+        public static int EditingSince => _editingSince;
+
+        public static MenuRow Text(string label, Func<string> get, Action<string> set, int maxLength, Func<char, char> accept)
+        {
+            var row = new MenuRow(label);
+            row.Value = () => Editing == row ? get() + (Mathf.Repeat(Time.unscaledTime, 1f) < 0.5f ? "_" : " ") : get();
+            row.Activate = () => { Editing = Editing == row ? null : row; _editingSince = Time.frameCount; };
+            row.Type = ch =>
+            {
+                char c = accept(ch);
+                if (c != '\0' && get().Length < maxLength) set(get() + c);
+            };
+            row.Erase = () => { var v = get(); if (v.Length > 0) set(v.Substring(0, v.Length - 1)); };
+            return row;
+        }
 
         public static MenuRow Button(string label, Action activate, Func<string> value = null) =>
             new MenuRow(label) { Activate = activate, Value = value };
@@ -199,6 +226,19 @@ namespace ModernDrone.UI
             if (e.type == EventType.ScrollWheel && area.Contains(e.mousePosition) && rows.Count > 0)
             {
                 selected = Step(rows, ClampToSelectable(rows, selected, 1), e.delta.y > 0f ? 1 : -1);
+                e.Use();
+            }
+
+            // Typing into a text row: characters, Backspace; Enter / Esc finish.
+            if (MenuRow.Editing != null && e.type == EventType.KeyDown)
+            {
+                var ed = MenuRow.Editing;
+                // The Enter that opened the field arrives in the same frame: do not let it close it again.
+                bool finish = e.keyCode == KeyCode.Escape || ((e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter) && Time.frameCount != MenuRow.EditingSince);
+                if (finish) MenuRow.Editing = null;
+                else if (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter) { }
+                else if (e.keyCode == KeyCode.Backspace) ed.Erase?.Invoke();
+                else if (e.character != '\0' && !char.IsControl(e.character)) ed.Type?.Invoke(e.character);
                 e.Use();
             }
 

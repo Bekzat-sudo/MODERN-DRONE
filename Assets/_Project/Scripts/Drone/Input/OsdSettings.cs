@@ -56,6 +56,8 @@ namespace ModernDrone.Drone
         public List<OsdEntry> entries = Minimal();
         public bool crosshair = true;
         public bool horizon = true;
+        [UnityEngine.Tooltip("Betaflight horizon sidebars: short vertical scales left and right of the centre.")]
+        public bool sidebars;
         public bool chargeAxis = true;
         public bool warnings = true;
         public string craftName = "MODERN DRONE";
