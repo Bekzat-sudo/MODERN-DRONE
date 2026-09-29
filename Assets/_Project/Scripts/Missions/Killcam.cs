@@ -50,6 +50,8 @@ namespace ModernDrone.Missions
         bool _static, _recon, _showSummary, _replay, _replayPaused, _frozen;
         float _reconStart, _reconZoom, _replayTime, _replayRate, _baseFov;
         float _userZoom = 1f;
+        // Pilot-steered recon camera: orbit around the target (deg), range factor, gimbal pan (deg).
+        float _orbit, _range = 1f, _panYaw, _panPitch;
         // Narrowest view: about 55x on the 55 deg base, in line with the Mavic 3T's 56x hybrid zoom
         // (dji.com/mavic-3-enterprise/specs).
         const float MinFov = 1f;
@@ -150,7 +152,7 @@ namespace ModernDrone.Missions
         public IEnumerator Play(StrikeReport report, Action onDone)
         {
             Running = true;
-            _userZoom = 1f;
+            ResetCameraControl();
             _report = report;
             // Strikes land in FixedUpdate, whose clock can trail the last frame's sample.
             float impact = Mathf.Max(report.time, _track.EndTime + 0.001f);
@@ -198,16 +200,18 @@ namespace ModernDrone.Missions
             _recon = true;
             _reconStart = Time.unscaledTime;
             float duration = hitVehicle ? reconPhase : reconMissPhase;
-            float distance = Vector3.Distance(reconPos, focus);
             t = 0f;
             while (t < duration && !SkipPressed())
             {
+                if (!ModernDrone.Core.GamePause.IsPaused) CameraInput();
+                Vector3 camPos = MovedRecon(focus, reconPos);
+                float distance = Vector3.Distance(camPos, focus);
                 float k = Mathf.SmoothStep(0f, 1f, t / duration);
                 float frame = Mathf.Lerp(reconFrameStart, reconFrameEnd, k) / _userZoom;
                 _camera.fieldOfView = Mathf.Clamp(2f * Mathf.Atan(frame * 0.5f / _camera.aspect / distance) * Mathf.Rad2Deg, MinFov, 60f);
                 _reconZoom = fov / _camera.fieldOfView;
-                transform.position = reconPos;
-                transform.rotation = Quaternion.LookRotation(focus - reconPos) * Wander();
+                transform.position = camPos;
+                transform.rotation = Quaternion.LookRotation(focus - camPos) * Pan() * Wander();
                 t += Time.deltaTime;
                 yield return null;
             }
@@ -278,7 +282,7 @@ namespace ModernDrone.Missions
                     if ((kb != null && kb.rKey.wasPressedThisFrame) || (pad != null && pad.buttonNorth.wasPressedThisFrame))
                         _replayTime = start;
                     _replayRate = back ? -scrubSpeed : fwd ? scrubSpeed : _replayPaused ? 0f : 1f;
-                    _userZoom = Mathf.Clamp(_userZoom * ZoomStep(), minUserZoom, maxUserZoom);
+                    CameraInput();
                     _replayTime = Mathf.Clamp(_replayTime + _replayRate * Time.unscaledDeltaTime, start, end);
                     if (_replayTime >= end && _replayRate > 0f) break;
                 }
@@ -287,15 +291,16 @@ namespace ModernDrone.Missions
                 _ghost.transform.SetPositionAndRotation(pose.position, pose.rotation);
                 PoseVehicles(_replayTime);
                 Vector3 aim = Vector3.Lerp(focus, pose.position, 0.5f);
+                Vector3 camPos = MovedRecon(focus, reconPos);
                 float frame = Mathf.Min(Vector3.Distance(focus, pose.position) + reconFrameStart, 900f) / _userZoom;
-                float distance = Mathf.Max(1f, Vector3.Distance(reconPos, aim));
+                float distance = Mathf.Max(1f, Vector3.Distance(camPos, aim));
                 _camera.fieldOfView = Mathf.Clamp(2f * Mathf.Atan(frame * 0.5f / _camera.aspect / distance) * Mathf.Rad2Deg, MinFov, 60f);
                 _reconZoom = _baseFov / _camera.fieldOfView;
                 // A few pixels wide at any zoom, like a route drawn over the video.
                 if (path != null) path.widthMultiplier = frame / Mathf.Max(1, Screen.width) * 3f;
                 // The operator's tracking lags a little behind the drone.
-                var look = Quaternion.LookRotation(aim - reconPos) * Wander();
-                transform.position = reconPos;
+                var look = Quaternion.LookRotation(aim - camPos) * Pan() * Wander();
+                transform.position = camPos;
                 transform.rotation = first ? look : Quaternion.Slerp(transform.rotation, look, 1f - Mathf.Exp(-6f * Time.unscaledDeltaTime));
                 first = false;
                 yield return null;
@@ -381,6 +386,60 @@ namespace ModernDrone.Missions
             lr.receiveShadows = false;
             return lr;
         }
+
+        void ResetCameraControl()
+        {
+            _userZoom = 1f;
+            _orbit = _panYaw = _panPitch = 0f;
+            _range = 1f;
+        }
+
+        /// <summary>
+        /// Recon camera steering: WASD / left stick fly the recon drone around the target and in or out, right mouse
+        /// drag / right stick pan the gimbal (finer when zoomed in), C / right stick click resets, plus zoom.
+        /// </summary>
+        void CameraInput()
+        {
+            float dt = Time.unscaledDeltaTime;
+            var kb = Keyboard.current;
+            var pad = Gamepad.current;
+            var mouse = Mouse.current;
+            if ((kb != null && kb.cKey.wasPressedThisFrame) || (pad != null && pad.rightStickButton.wasPressedThisFrame))
+            {
+                ResetCameraControl();
+                return;
+            }
+            _userZoom = Mathf.Clamp(_userZoom * ZoomStep(), minUserZoom, maxUserZoom);
+
+            Vector2 move = pad != null ? pad.leftStick.ReadValue() : Vector2.zero;
+            if (kb != null)
+            {
+                if (kb.aKey.isPressed) move.x -= 1f;
+                if (kb.dKey.isPressed) move.x += 1f;
+                if (kb.wKey.isPressed) move.y += 1f;
+                if (kb.sKey.isPressed) move.y -= 1f;
+            }
+            _orbit += Mathf.Clamp(move.x, -1f, 1f) * 35f * dt;
+            _range = Mathf.Clamp(_range * Mathf.Exp(-Mathf.Clamp(move.y, -1f, 1f) * 0.8f * dt), 0.3f, 2.5f);
+
+            Vector2 look = Vector2.zero;
+            if (mouse != null && mouse.rightButton.isPressed) look += mouse.delta.ReadValue() * 0.15f;
+            if (pad != null) look += pad.rightStick.ReadValue() * 90f * dt;
+            float fine = _camera.fieldOfView / 60f;
+            _panYaw = Mathf.Clamp(_panYaw + look.x * fine, -60f, 60f);
+            _panPitch = Mathf.Clamp(_panPitch - look.y * fine, -40f, 40f);
+        }
+
+        /// <summary>Recon position after the pilot's orbit / range input, kept clear of the ground below it.</summary>
+        Vector3 MovedRecon(Vector3 focus, Vector3 reconPos)
+        {
+            Vector3 p = focus + Quaternion.Euler(0f, _orbit, 0f) * (reconPos - focus) * _range;
+            if (Physics.Raycast(p + Vector3.up * 1000f, Vector3.down, out var ground, 3000f, ModernDrone.Core.GameLayers.TerrainMask))
+                p.y = Mathf.Max(p.y, ground.point.y + 15f);
+            return p;
+        }
+
+        Quaternion Pan() => Quaternion.Euler(_panPitch, _panYaw, 0f);
 
         /// <summary>Manual zoom factor for this frame: mouse wheel notches, held + / − keys or the gamepad triggers.</summary>
         static float ZoomStep()
@@ -507,8 +566,11 @@ namespace ModernDrone.Missions
             }
 
             GUI.Label(new Rect(0, h * 0.92f, w, _body.fontSize * 1.5f), _replay
-                ? "← → / LB RB — перемотка     колесо, + − / LT RT — зум     ↓ / X — пауза     R / Y — с начала     SPACE / A — дальше"
+                ? "← → / LB RB — перемотка     ↓ / X — пауза     R / Y — с начала     SPACE / A — дальше"
                 : "SPACE / A — продолжить", _legendCentered);
+            if (_replay || _recon)
+                GUI.Label(new Rect(0, h * 0.955f, w, _body.fontSize * 1.5f),
+                    "WASD / левый стик — облёт     ПКМ + мышь / правый стик — поворот     колесо, + − / LT RT — зум     C / R3 — сброс камеры", _legendCentered);
         }
 
         /// <summary>Analog static with a bright vertical band, the last frames of an FPV feed at impact.</summary>
