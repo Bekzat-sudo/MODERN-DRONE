@@ -243,8 +243,16 @@ namespace ModernDrone.Editor
         }
 
         /// <summary>Killcam camera plus mission controller. Zero sorties = free flight.</summary>
+        /// <summary>Warheads offered in the loadout.</summary>
+        internal static ModernDrone.Damage.WarheadData[] Warheads() => new[]
+            {
+                WarheadAssets.Load(WarheadAssets.ShapedChargePath),
+                WarheadAssets.Load(WarheadAssets.TandemPath),
+                WarheadAssets.Load(WarheadAssets.FragmentationPath)
+            };
+
         /// <summary>Accent outline for the hangar (inverted hull).</summary>
-        static Material OutlineMaterial()
+        internal static Material OutlineMaterial()
         {
             const string path = "Assets/_Project/Art/Materials/HangarOutline.mat";
             var m = AssetDatabase.LoadAssetAtPath<Material>(path);
@@ -267,12 +275,7 @@ namespace ModernDrone.Editor
 
             var mission = new GameObject("Mission").AddComponent<MissionController>();
             mission.Configure(name, briefing, sorties, fiberSorties);
-            mission.SetWarheads(new[]
-            {
-                WarheadAssets.Load(WarheadAssets.ShapedChargePath),
-                WarheadAssets.Load(WarheadAssets.TandemPath),
-                WarheadAssets.Load(WarheadAssets.FragmentationPath)
-            });
+            mission.SetWarheads(Warheads());
             mission.SetDroneModels(DroneModels.LoadAll());
             mission.SetParts(DroneParts.LoadAll());
             mission.gameObject.AddComponent<HangarPreview>().SetOutline(OutlineMaterial());

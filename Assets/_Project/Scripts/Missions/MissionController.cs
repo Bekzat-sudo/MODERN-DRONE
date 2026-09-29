@@ -52,7 +52,6 @@ namespace ModernDrone.Missions
         DroneInput _input;
         int _sortiesFlown;
         int _radioLeft, _fiberLeft;
-        int _warheadChoice;
         int _decoyStrikes;
         readonly List<ModernDrone.Vehicles.Convoy> _convoys = new List<ModernDrone.Vehicles.Convoy>();
         bool _convoysStarted;
@@ -194,9 +193,9 @@ namespace ModernDrone.Missions
 
         void LaunchSortie()
         {
-            SaveLoadout();
-            if (_hangar != null) _hangar.Hide();
-            var link = _picked[(int)PartSlot.VideoLink];
+            var hangar = HangarScreen;
+            hangar.Close();
+            var link = hangar.Picked(PartSlot.VideoLink);
             bool fiber = link != null ? link.fiber : !FreeFlight && _radioLeft <= 0;
             if (!FreeFlight)
             {
@@ -205,13 +204,12 @@ namespace ModernDrone.Missions
             if (droneModels.Length > 0)
             {
                 // Models without stock parts (older assets, tests) fly as defined.
-                var model = Model;
                 var old = drone.Config;
-                drone.Initialize(model.stockParts.Length > 0 ? DroneBuild.Compose(model, _picked) : model);
+                drone.Initialize(hangar.Compose());
                 if (old != null && old != drone.Config && old.name.EndsWith("(Runtime)")) Destroy(old);
                 ControlSettings.NotifyChanged(); // re-apply pilot rates / camera to the new runtime config
             }
-            var cam = _picked[(int)PartSlot.Camera];
+            var cam = hangar.Picked(PartSlot.Camera);
             if (NightMode.Night && cam != null)
             {
                 NightMode.Thermal = cam.thermal;
@@ -229,7 +227,7 @@ namespace ModernDrone.Missions
                 _convoysStarted = true;
                 foreach (var c in _convoys) c.Begin();
             }
-            if (warheads.Length > 0 && _warhead != null) _warhead.SetWarhead(warheads[Mathf.Clamp(_warheadChoice, 0, warheads.Length - 1)]);
+            if (hangar.Warhead != null && _warhead != null) _warhead.SetWarhead(hangar.Warhead);
             _lostMessage = "ДРОН ПОТЕРЯН";
             BeginFlying();
         }
@@ -354,7 +352,7 @@ namespace ModernDrone.Missions
                     GUI.Label(new Rect(0, h * 0.4f, w, _title.fontSize * 1.5f), _lostMessage, _title);
                     break;
                 case MissionPhase.Loadout:
-                    DrawLoadout(w, h);
+                    DrawLoadout();
                     break;
                 case MissionPhase.Debrief:
                     string header = _outcome == MissionOutcome.Success ? "ЗАДАЧА ВЫПОЛНЕНА" : "ЗАДАЧА НЕ ВЫПОЛНЕНА";
@@ -398,10 +396,6 @@ namespace ModernDrone.Missions
             sb.AppendLine().Append($"ОЧКИ: {MissionRules.TotalScore(states, _sortiesFlown, Sorties, _outcome)}");
             return sb.ToString();
         }
-
-        static string WarheadHint(WarheadData w) => w.kind == WarheadKind.Fragmentation
-            ? "против открытых целей: РЛС, орудия, грузовики"
-            : w.tandem ? "пробивает динамическую защиту" : "против брони: борт, корма, крыша";
 
         void Panel(Rect r, string header, string text, string footer)
         {

@@ -46,6 +46,9 @@ namespace ModernDrone.Editor
             var so = new SerializedObject(menu);
             so.FindProperty("orbitTarget").objectReferenceValue = tank.transform;
             so.ApplyModifiedPropertiesWithoutUndo();
+            var preview = menu.gameObject.AddComponent<ModernDrone.Missions.HangarPreview>();
+            preview.SetOutline(ProvingGroundBuilder.OutlineMaterial());
+            menu.SetHangar(DroneModels.LoadAll(), DroneParts.LoadAll(), ProvingGroundBuilder.Warheads(), preview);
 
             EditorSceneManager.SaveScene(scene, ScenePath);
             ProvingGroundBuilder.AddToBuildSettings(ScenePath, 0);

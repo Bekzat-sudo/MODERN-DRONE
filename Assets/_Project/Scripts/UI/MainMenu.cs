@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using ModernDrone.Core;
+using ModernDrone.Damage;
 using ModernDrone.Drone;
+using ModernDrone.Missions;
 using UnityEngine;
 
 namespace ModernDrone.UI
@@ -12,11 +14,18 @@ namespace ModernDrone.UI
         [SerializeField] float orbitRadius = 12f;
         [SerializeField] float orbitHeight = 3.5f;
         [SerializeField] float orbitSpeed = 6f;
+        [Header("Hangar")]
+        [SerializeField] DroneConfig[] droneModels = new DroneConfig[0];
+        [SerializeField] DronePart[] parts = new DronePart[0];
+        [SerializeField] WarheadData[] warheads = new WarheadData[0];
+        [SerializeField] HangarPreview preview;
 
         readonly MenuGui _gui = new MenuGui();
         readonly List<MenuRow> _rows = new List<MenuRow>();
         SettingsMenu _settings;
         bool _inSettings;
+        Hangar _hangar;
+        bool _inHangar;
         int _selected;
         float _angle = 200f;
 
@@ -36,9 +45,33 @@ namespace ModernDrone.UI
             AddMission("Задача 7: Ночная охота", GameScenes.Mission07);
             AddMission("Задача 8: Охота на вертолёт", GameScenes.Mission08);
             _rows.Add(MenuRow.Button("Полигон — свободный полёт", () => GameScenes.Load(GameScenes.ProvingGround)));
+            _rows.Add(MenuRow.Button("Ангар — сборка дрона", OpenHangar, HangarSummary));
             _rows.Add(MenuRow.Button("Настройки управления", () => { _settings.Open(); _inSettings = true; }));
             _rows.Add(MenuRow.Header(""));
             _rows.Add(MenuRow.Button("Выход", GameScenes.Quit));
+        }
+
+        public void SetHangar(DroneConfig[] models, DronePart[] options, WarheadData[] warheadOptions, HangarPreview turntable)
+        {
+            droneModels = models;
+            parts = options;
+            warheads = warheadOptions;
+            preview = turntable;
+        }
+
+        void OpenHangar()
+        {
+            _hangar ??= new Hangar(droneModels, parts, warheads, preview, false);
+            _hangar.Open();
+            _inHangar = true;
+        }
+
+        /// <summary>The saved build's drone, shown next to the menu row.</summary>
+        string HangarSummary()
+        {
+            string saved = PlayerPrefs.GetString("loadout/drone", "");
+            var model = System.Array.Find(droneModels, m => m.name == saved) ?? (droneModels.Length > 0 ? droneModels[0] : null);
+            return model != null ? model.displayName : "";
         }
 
         void AddMission(string label, string scene) =>
@@ -65,6 +98,16 @@ namespace ModernDrone.UI
                 }
             }
 
+            if (_inHangar)
+            {
+                _hangar.Update();
+                if (_gui.ReadNav().back)
+                {
+                    _hangar.Close();
+                    _inHangar = false;
+                }
+                return;
+            }
             if (_inSettings)
             {
                 _settings.Update();
@@ -79,6 +122,11 @@ namespace ModernDrone.UI
             _gui.EnsureStyles();
             float w = Screen.width, h = Screen.height;
 
+            if (_inHangar)
+            {
+                _hangar.Draw("АНГАР", "↑↓ — слот,  ← → — вариант,  тянуть мышью — повернуть дрон,  ESC / B — назад (сборка сохраняется)");
+                return;
+            }
             if (_inSettings)
             {
                 _settings.Draw(new Rect(w * 0.12f, h * 0.06f, w * 0.76f, h * 0.88f));
