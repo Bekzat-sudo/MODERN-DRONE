@@ -402,7 +402,7 @@ namespace ModernDrone.Editor
             k.Visual("Bed", v(0, 1.45f, -1.8f), v(2.4f, 0.6f, 4.1f), k.Hull);
             k.AttachModel(ModelDir + "Ural4320/ural4320_open.glb");
             k.SliceHull();
-            MountGun(k, WeaponDir + "zu23_2.glb", v(0f, 0f, -1.9f), v(1.4f, 1.3f, 1.6f),
+            MountGun(k, WeaponDir + "zu23_2.glb", v(0f, 0f, -1.9f), v(1.4f, 1.3f, 1.6f), 23f,
                 2000f, 970f, 0.6f, 1.2f, 0.02f, 1200f, 250f);
             k.Finish("МОГ: Урал + ЗУ-23-2").SetAmmoConfinement(0.05f);
             k.Save(MogUral);
@@ -427,7 +427,7 @@ namespace ModernDrone.Editor
             k.Visual("Bed", v(0, 1.3f, -1.2f), v(2.3f, 0.5f, 3.6f), k.Hull);
             k.AttachModel(ModelDir + "ZIL157/zil157.glb");
             k.SliceHull();
-            MountGun(k, WeaponDir + "dshk.glb", v(0f, 0f, -1.3f), v(0.9f, 1.6f, 0.9f),
+            MountGun(k, WeaponDir + "dshk.glb", v(0f, 0f, -1.3f), v(0.9f, 1.6f, 0.9f), 12.7f,
                 600f, 850f, 1.0f, 1.5f, 0.02f, 800f, 150f);
             k.Finish("МОГ: ЗИЛ-157 + ДШК").SetAmmoConfinement(0.05f);
             k.Save(MogZil);
@@ -437,7 +437,7 @@ namespace ModernDrone.Editor
         /// Stands a weapon model on the cargo bed (floor found by a raycast on the visual model), adds its gun/crew
         /// module and an AntiDroneGun driving the model's Traverse and Elevation joints.
         /// </summary>
-        static void MountGun(VehicleKit k, string modelPath, Vector3 bedXZ, Vector3 moduleSize, float rpm, float velocity,
+        static void MountGun(VehicleKit k, string modelPath, Vector3 bedXZ, Vector3 moduleSize, float caliber, float rpm, float velocity,
             float burst, float pause, float perRound, float range, float optimal)
         {
             float floor = BedHeight(k.Root, bedXZ);
@@ -450,7 +450,7 @@ namespace ModernDrone.Editor
             var traverse = FindDeep(gun.transform, "Traverse");
             var elevation = FindDeep(gun.transform, "Elevation");
             k.Module("Module_Gun", ModuleType.Launcher, 50f, 5f, new Vector3(bedXZ.x, floor + moduleSize.y * 0.5f, bedXZ.z), moduleSize);
-            k.Root.AddComponent<AntiDroneGun>().Configure(traverse, elevation, elevation, rpm, velocity, burst, pause, perRound, range, optimal);
+            k.Root.AddComponent<AntiDroneGun>().Configure(traverse, elevation, elevation, caliber, rpm, velocity, burst, pause, perRound, range, optimal);
         }
 
         /// <summary>

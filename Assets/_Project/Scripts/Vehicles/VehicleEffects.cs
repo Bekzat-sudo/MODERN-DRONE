@@ -92,6 +92,8 @@ namespace ModernDrone.Vehicles
             if (!_fires.TryGetValue(fire, out var go) || go == null) return;
             var flames = go.transform.Find("Flames");
             if (flames != null) flames.GetComponent<ParticleSystem>().Stop();
+            var roar = go.GetComponent<AudioSource>();
+            if (roar != null) roar.Stop();
         }
 
         void OnFlash(VehicleDamageModel model, Vector3 at, float size) => SimpleVfx.Explosion(at, size * 0.6f);
@@ -147,6 +149,8 @@ namespace ModernDrone.Vehicles
                 {
                     var flames = go != null ? go.transform.Find("Flames") : null;
                     if (flames != null) flames.GetComponent<ParticleSystem>().Stop();
+                    var roar = go != null ? go.GetComponent<AudioSource>() : null;
+                    if (roar != null) roar.Stop();
                 }
             }
         }

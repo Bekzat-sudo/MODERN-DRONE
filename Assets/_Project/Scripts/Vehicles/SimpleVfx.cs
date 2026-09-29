@@ -120,6 +120,7 @@ namespace ModernDrone.Vehicles
             vel.z = new ParticleSystem.MinMaxCurve(0f, 0f);
 
             PlayAll(root);
+            SimpleAudio.FireLoop(root.transform, size);
             return root;
         }
 

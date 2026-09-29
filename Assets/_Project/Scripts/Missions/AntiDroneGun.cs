@@ -20,6 +20,7 @@ namespace ModernDrone.Missions
         [SerializeField] Transform elevation;
         [SerializeField] Transform muzzle;
         [Header("Weapon")]
+        [SerializeField] float caliberMm = 23f;
         [SerializeField] float roundsPerMinute = 2000f;
         [SerializeField] float muzzleVelocity = 970f;
         [SerializeField] float burstSeconds = 0.6f;
@@ -42,9 +43,10 @@ namespace ModernDrone.Missions
         float _spotted, _burstEnd, _nextBurst, _nextRound;
         static Material _tracerMat;
 
-        public void Configure(Transform traverseJoint, Transform elevationJoint, Transform muzzlePoint, float rpm, float velocity,
+        public void Configure(Transform traverseJoint, Transform elevationJoint, Transform muzzlePoint, float caliber, float rpm, float velocity,
             float burst, float pause, float perRound, float rangeMeters, float optimal)
         {
+            caliberMm = caliber;
             traverse = traverseJoint;
             elevation = elevationJoint;
             muzzle = muzzlePoint;
@@ -119,7 +121,7 @@ namespace ModernDrone.Missions
             // Rounds are resolved in small groups (one tracer per group) to keep the frame cost flat.
             const int group = 4;
             _nextRound = Time.time + group * 60f / roundsPerMinute;
-            ModernDrone.Vehicles.SimpleAudio.Shot(from);
+            ModernDrone.Vehicles.SimpleAudio.GunShot(from, caliberMm);
             Tracer(from, aimPoint);
             float p = RoundKillChance(hitChancePerRound, dist, optimalRange, range, vel.magnitude) * Mathf.InverseLerp(fireCone, 0f, error);
             if (Random.value < 1f - Mathf.Pow(1f - p, group))
@@ -164,30 +166,48 @@ namespace ModernDrone.Missions
             lr.endWidth = 0.02f;
             lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             lr.positionCount = 2;
-            go.AddComponent<TracerMotion>().Launch(lr, from, dir * muzzleVelocity, Mathf.Min(range, 1500f) / muzzleVelocity);
+            go.AddComponent<TracerMotion>().Launch(lr, from, dir * muzzleVelocity, Mathf.Min(range, 1500f) / muzzleVelocity, _drone.transform);
         }
 
         /// <summary>A short glowing streak flying along the round's path.</summary>
         sealed class TracerMotion : MonoBehaviour
         {
+            const float CrackRadius = 25f;
             LineRenderer _lr;
             Vector3 _pos, _vel;
             float _dieAt;
+            Transform _listener;
+            bool _cracked;
 
-            public void Launch(LineRenderer lr, Vector3 pos, Vector3 vel, float life)
+            public void Launch(LineRenderer lr, Vector3 pos, Vector3 vel, float life, Transform listener)
             {
                 _lr = lr;
                 _pos = pos;
                 _vel = vel;
                 _dieAt = Time.time + life;
+                _listener = listener;
                 Step();
             }
 
             void Update()
             {
                 if (Time.time >= _dieAt) { Destroy(gameObject); return; }
+                Vector3 before = _pos;
                 _vel += Physics.gravity * Time.deltaTime;
                 _pos += _vel * Time.deltaTime;
+                // Supersonic round passing the drone: its shock wave cracks there, ahead of the muzzle report.
+                if (!_cracked && _listener != null)
+                {
+                    Vector3 seg = _pos - before, rel = _listener.position - before;
+                    float t = Mathf.Clamp01(Vector3.Dot(rel, seg) / Mathf.Max(1e-4f, seg.sqrMagnitude));
+                    Vector3 closest = before + seg * t;
+                    float miss = Vector3.Distance(closest, _listener.position);
+                    if (t < 1f && miss < CrackRadius)
+                    {
+                        _cracked = true;
+                        ModernDrone.Vehicles.SimpleAudio.Crack(closest, miss);
+                    }
+                }
                 Step();
             }
 

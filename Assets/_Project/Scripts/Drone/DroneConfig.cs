@@ -49,6 +49,10 @@ namespace ModernDrone.Drone
         public float motorTauDown = 0.045f;
         [Tooltip("Reaction torque per newton of thrust (yaw authority), m.")]
         public float yawTorqueCoefficient = 0.016f;
+        [Tooltip("Motor velocity constant, rpm per volt (sound: blade-pass frequency).")]
+        public float motorKv = 1300f;
+        [Tooltip("Blades per propeller.")]
+        [Range(2, 6)] public int propBlades = 3;
         [Tooltip("Axial airspeed at which propeller thrust drops to zero, m/s.")]
         public float propPitchSpeed = 40f;
 
