@@ -87,7 +87,6 @@ namespace ModernDrone.Editor
             terrain.basemapDistance = 2500f;
             go.AddComponent<TerrainTreeInstancer>();
             WorldBuilder.Vegetate(terrain, 11);
-            WorldBuilder.Scar(terrain, 23);
             AssetDatabase.SaveAssets();
             return terrain;
         }
@@ -99,9 +98,14 @@ namespace ModernDrone.Editor
         }
 
         /// <summary>Windbreak tree lines along field edges: the main cover in steppe terrain.</summary>
-        /// <summary>Windbreak belts of procedural trees along the tree rows (see TreeBuilder).</summary>
-        internal static void CreateTreeLines(Terrain terrain) =>
+        /// <summary>Windbreak belts of procedural trees along the tree rows (see TreeBuilder), then the war-torn
+        /// landscape around them: positions, craters, obstacles, power lines, wrecks (see PropsBuilder).</summary>
+        internal static void CreateTreeLines(Terrain terrain)
+        {
+            PropsBuilder.AddShrubVariety(terrain);
             TreeBuilder.PlantBelts(terrain, WorldBuilder.TreeRows, 100f, Size - 100f, 42);
+            PropsBuilder.Populate(terrain, 23);
+        }
 
         static void CreateFlightGates(Terrain terrain)
         {

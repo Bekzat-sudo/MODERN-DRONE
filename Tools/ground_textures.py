@@ -6,7 +6,9 @@ maps in Assets/_Project/Art/Environment/Ground/<name>/ with the same naming as t
   field_wheat    young winter wheat in 0.15 m drill rows over soil         (terrain tile 4 m)
   field_burnt    burnt stubble: ash, char and surviving straw rows         (terrain tile 10 m)
 and a shell-crater decal (Art/Decals/Crater.png + Crater_nor.png): a dark bowl of churned soil, a raised rim of
-thrown-out earth and radial ejecta fading into the ground.
+thrown-out earth and radial ejecta fading into the ground; a trench strip decal (Trench.png: dark floor between
+spoil berms, tileable along its length), a camouflage net (CamoNet.png: leaf-strip garnish with holes) and burnt
+vehicle metal (Charred.png: soot, ash and rust).
 Rows run along the texture's U axis, i.e. along the long side of the fields. Row spacings follow common practice
 (cereal drills ~15 cm, mouldboard plough furrow ~35 cm); colours are art direction. Usage: python Tools/ground_textures.py
 """
@@ -142,6 +144,61 @@ def crater():
     Image.fromarray(((nm * 0.5 + 0.5) * 255).astype(np.uint8), "RGB").save(os.path.join(d, "Crater_nor.png"))
 
 
+def pnoise(w, h, fx, fy, seed):
+    """Tileable noise of any size."""
+    r = np.random.default_rng(seed)
+    f = np.fft.fft2(r.standard_normal((h, w)))
+    ky, kx = np.meshgrid(np.fft.fftfreq(h), np.fft.fftfreq(w), indexing="ij")
+    f *= np.exp(-((kx / fx) ** 2 + (ky / fy) ** 2))
+    x = np.real(np.fft.ifft2(f))
+    return (x - x.min()) / (x.max() - x.min())
+
+
+def decals_dir():
+    return os.path.join(OUT, "..", "..", "Decals")
+
+
+def trench():
+    w, h = 1024, 256                                   # U along the trench (tileable), V across it
+    v = (np.arange(h)[:, None] + 0.5) / h * 2 - 1      # -1..1 across
+    wob = (pnoise(w, 1, 0.01, 1, 61)[0][None, :] - 0.5) * 0.12
+    a = np.abs(v + wob)
+    clods = pnoise(w, h, 0.08, 0.2, 62)
+    fine = pnoise(w, h, 0.4, 0.4, 63)
+    floor = np.clip((0.28 - a) / 0.06, 0, 1)                         # trench floor
+    berm = np.exp(-((a - 0.55) / 0.2) ** 2) * (0.6 + 0.6 * clods)     # spoil heaps either side
+    t = np.clip(0.35 + 0.5 * berm + 0.2 * (fine - 0.5) - 0.3 * floor, 0, 1)
+    col = np.array([34, 27, 21]) + (np.array([128, 108, 82]) - np.array([34, 27, 21])) * t[..., None]
+    col = col * (1 - floor[..., None] * 0.55)
+    alpha = np.clip((0.98 - a) / 0.25, 0, 1) * np.clip(0.5 + berm + floor, 0, 1)
+    Image.fromarray(np.dstack([np.clip(col, 0, 255), np.clip(alpha, 0, 1) * 255]).astype(np.uint8), "RGBA").save(os.path.join(decals_dir(), "Trench.png"))
+
+
+def camo_net():
+    n = 512
+    patches = pnoise(n, n, 0.02, 0.02, 71)
+    strips = pnoise(n, n, 0.25, 0.06, 72)              # hanging garnish strips
+    holes = pnoise(n, n, 0.12, 0.12, 73)
+    palette = np.array([[52, 64, 32], [74, 72, 42], [40, 48, 26], [92, 86, 54]])
+    idx = np.clip((patches * 4).astype(int), 0, 3)
+    col = palette[idx] * (0.8 + 0.4 * strips[..., None])
+    alpha = ((strips > 0.42) | (holes > 0.62)).astype(float)
+    Image.fromarray(np.dstack([np.clip(col, 0, 255), alpha * 255]).astype(np.uint8), "RGBA").save(os.path.join(OUT, "..", "Props", "CamoNet.png"))
+
+
+def charred():
+    n = 1024
+    soot = pnoise(n, n, 0.02, 0.02, 81)
+    ash = pnoise(n, n, 0.05, 0.05, 82)
+    rust = pnoise(n, n, 0.015, 0.015, 83)
+    streak = pnoise(n, n, 0.3, 0.01, 84)               # vertical run-off streaks
+    col = np.array([22, 20, 19]) + np.array([70, 68, 64]) * np.clip((ash - 0.62) * 3, 0, 1)[..., None]
+    r = np.clip((rust - 0.66) * 4, 0, 1)[..., None] * (0.6 + 0.4 * streak[..., None])
+    col = col * (1 - r) + np.array([104, 56, 30]) * r
+    col *= (0.8 + 0.4 * soot)[..., None]
+    Image.fromarray(np.clip(col, 0, 255).astype(np.uint8), "RGB").save(os.path.join(OUT, "..", "Props", "Charred.png"))
+
+
 if __name__ == "__main__":
-    plowed(); stubble(); wheat(); burnt(); crater()
+    plowed(); stubble(); wheat(); burnt(); crater(); trench(); camo_net(); charred()
     print("written to", os.path.normpath(OUT))

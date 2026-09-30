@@ -29,6 +29,8 @@
 - **ZU-23-2** and **DShK** pedestal mounts: modelled procedurally for this project (`Art/Models/Weapons`).
 - **Windbreak trees** (poplar, black locust, Siberian elm, oak): generated procedurally for this project -
   leaf and bark textures by `Tools/foliage_textures.py`, meshes by `Editor/TreeBuilder.cs`.
+- **Fields, craters, trenches, camouflage nets, charred metal, dragon's teeth, hedgehogs, sandbags, power-line wires**:
+  procedural for this project (`Tools/ground_textures.py`, `Editor/PropsBuilder.cs`).
 - **BMP-3M** and **BMP-3M ERA** by [42manako](https://sketchfab.com/42manako) on Sketchfab
   ([1](https://sketchfab.com/3d-models/bmp-3m-97ffd025f0534432854a66b18039729f), [2](https://sketchfab.com/3d-models/bmp-3m-era-f1188395505e47bda8c0f8423e80ff0b)),
   licensed under [CC BY-NC 4.0](http://creativecommons.org/licenses/by-nc/4.0/) — non-commercial use only.
@@ -57,6 +59,10 @@
 - Ground textures (aerial_grass_rock, brown_mud_02, forrest_ground_01, rocky_trail), sky HDRIs
   (kloofendal_48d_partly_cloudy_puresky, kloofendal_overcast_puresky), bushes (shrub_02) and grass (grass_bermuda_01) from
   [Poly Haven](https://polyhaven.com), licensed under [CC0](https://polyhaven.com/license).
+- Props from [Poly Haven](https://polyhaven.com) (CC0): modular_electricity_poles, concrete_road_barrier_02,
+  old_military_crate, ammo_box, metal_jerrycan_green, barrel_03, old_tyre, trashbag, covered_car, tree_stump_01/02,
+  dead_tree_trunk/_02, dry_branches_medium_01, shrub_03, nettle_plant (`Art/Environment/Props`; the heavy scans
+  decimated in Blender as `*_low.glb`). 
   `Assets/_Project/Art/Environment/`; bushes decimated, grass rendered to a billboard sprite.
 
 ## Fonts

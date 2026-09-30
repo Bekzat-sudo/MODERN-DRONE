@@ -297,11 +297,11 @@ namespace ModernDrone.Editor
         }
 
         /// <summary>
-        /// Shell craters as decals: clusters beside the tree belts (positions there get shelled) and single craters
-        /// scattered over the fields, older ones fainter. Mortar (rim about 1.5-3 m) to artillery (4-7 m) sizes are
-        /// illustrative. The launch field around the centre is left clean.
+        /// Shell craters as decals: clusters at the given hotspots (positions beside the belts) and at random spots
+        /// beside the tree belts, single craters scattered over the fields, older ones fainter. Mortar (rim about
+        /// 1.5-3 m) to artillery (4-7 m) sizes are illustrative. The launch field around the centre is left clean.
         /// </summary>
-        public static void Scar(Terrain terrain, int seed)
+        public static void Scar(Terrain terrain, int seed, Vector2[] hotspots = null)
         {
             var data = terrain.terrainData;
             var rng = new System.Random(seed);
@@ -327,7 +327,14 @@ namespace ModernDrone.Editor
                 dp.drawDistance = 900f;
             }
             float Diameter() => R() < 0.8f ? 1.5f + R() * 1.5f : 4f + R() * 3f;
-            for (int c = 0; c < 18; c++)
+            if (hotspots != null)
+                foreach (var h in hotspots)
+                {
+                    int n = 6 + rng.Next(10);
+                    for (int i = 0; i < n; i++)
+                        Crater(h.x + (R() - 0.5f) * 70f, h.y + (R() - 0.5f) * 40f, Diameter(), 0.6f + 0.4f * R());
+                }
+            for (int c = 0; c < 12; c++)
             {
                 float row = TreeRows[rng.Next(TreeRows.Length)];
                 float cx = 150f + R() * (size - 300f), cz = row + (R() < 0.5f ? -1f : 1f) * (20f + R() * 50f);
@@ -384,6 +391,9 @@ namespace ModernDrone.Editor
         /// <summary>Removes bushes and grass around a point (a vehicle or position placed on the terrain).</summary>
         public static void ClearAround(Terrain terrain, Vector3 world, float radius) => ClearVegetation(terrain, new[] { world, world }, radius);
 
+        /// <summary>Removes bushes, trees and grass along a polyline (under power lines).</summary>
+        public static void ClearVegetationAlong(Terrain terrain, Vector3[] path, float radius) => ClearVegetation(terrain, path, radius);
+
         static void ClearVegetation(Terrain terrain, Vector3[] path, float radius)
         {
             var data = terrain.terrainData;
@@ -428,12 +438,19 @@ namespace ModernDrone.Editor
         }
 
         /// <summary>One bush from the combined glTF as its own prefab (terrain trees need one prefab per prototype).</summary>
-        static GameObject ShrubPrefab(string node, bool collider)
+        static GameObject ShrubPrefab(string node, bool collider) =>
+            NodePrefab(Dir + "Plants/shrubs.glb", node, Dir + "Plants/", collider, collider ? "" : "_canopy");
+
+        /// <summary>
+        /// One node of a model as its own prefab with the mesh baked into the root (terrain trees need one prefab per
+        /// prototype with the renderer on the root), centred on the ground at the origin; optional capsule collider.
+        /// </summary>
+        internal static GameObject NodePrefab(string modelPath, string node, string outDir, bool collider, string suffix = "")
         {
-            string path = Dir + $"Plants/{node}{(collider ? "" : "_canopy")}.prefab";
+            string path = outDir + $"{node}{suffix}.prefab";
             var existing = AssetDatabase.LoadAssetAtPath<GameObject>(path);
             if (existing != null) return existing;
-            var model = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(Dir + "Plants/shrubs.glb"));
+            var model = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(modelPath));
             Transform part = null;
             foreach (var t in model.GetComponentsInChildren<Transform>()) if (t.name == node) part = t;
             // Terrain trees draw only the prefab root's renderer: bake the node (with its import rotation) into a root mesh,
@@ -447,7 +464,7 @@ namespace ModernDrone.Editor
             for (int i = 0; i < verts.Length; i++) verts[i] -= new Vector3(mb.center.x, mb.min.y, mb.center.z);
             mesh.vertices = verts;
             mesh.RecalculateBounds();
-            string meshPath = Dir + $"Plants/{node}.mesh";
+            string meshPath = outDir + $"{node}.mesh";
             var existingMesh = AssetDatabase.LoadAssetAtPath<Mesh>(meshPath);
             if (existingMesh != null) { EditorUtility.CopySerialized(mesh, existingMesh); mesh = existingMesh; }
             else AssetDatabase.CreateAsset(mesh, meshPath);

@@ -47,6 +47,7 @@ namespace ModernDrone.Editor
         };
 
         static bool _built;
+        static GameObject[] _snags;
         static readonly Dictionary<Kind, GameObject[]> Prefabs = new Dictionary<Kind, GameObject[]>();
 
         /// <summary>Prefab variants of a species; generated once per editor session (assets are overwritten in place).</summary>
@@ -266,11 +267,90 @@ namespace ModernDrone.Editor
             return mesh;
         }
 
+        /// <summary>
+        /// Shell-damaged trees ("snags"): the trunk snapped off at 35-75 % of its height with a splinter on top, a few
+        /// bare, broken branches, charred bark. Generated once per session like the living trees.
+        /// </summary>
+        public static GameObject[] Snags()
+        {
+            if (_snags != null && _snags[0] != null) return _snags;
+            var bark = CharredBarkMaterial();
+            var leaves = LeafMaterial();
+            _snags = new GameObject[Variants];
+            for (int v = 0; v < Variants; v++)
+            {
+                var sp = All[1 + v % 3]; // locust, elm, oak
+                var rng = new System.Random(500 + v * 31);
+                float R() => (float)rng.NextDouble();
+                float height = Mathf.Lerp(sp.heightMin, sp.heightMax, R());
+                float cut = height * Mathf.Lerp(0.35f, 0.75f, R());
+                float trunkR = height * 0.0125f;
+                var lean = new Vector3(R() - 0.5f, 0f, R() - 0.5f) * 0.06f;
+                var trunk = new List<Vector3>();
+                var radii = new List<float>();
+                for (int i = 0; i <= 6; i++)
+                {
+                    float t = i / 6f, y = t * cut;
+                    trunk.Add(new Vector3(lean.x * y, y, lean.z * y));
+                    radii.Add(Mathf.Lerp(trunkR, trunkR * 0.6f, t) * (i == 0 ? 1.3f : 1f));
+                }
+                // Splinter where it snapped.
+                trunk.Add(trunk[6] + new Vector3(R() - 0.5f, 0f, R() - 0.5f) * 0.3f + Vector3.up * Mathf.Lerp(0.5f, 1.2f, R()));
+                radii.Add(trunkR * 0.12f);
+                var branches = new List<Vector3[]>();
+                var branchR = new List<float>();
+                int nb = 3 + rng.Next(4);
+                for (int i = 0; i < nb; i++)
+                {
+                    float y = Mathf.Lerp(cut * 0.4f, cut * 0.95f, R());
+                    float az = R() * Mathf.PI * 2f, ang = Mathf.Lerp(40f, 80f, R()) * Mathf.Deg2Rad;
+                    var dir = new Vector3(Mathf.Sin(ang) * Mathf.Cos(az), Mathf.Cos(ang), Mathf.Sin(ang) * Mathf.Sin(az));
+                    float len = Mathf.Lerp(0.8f, 3f, R());
+                    var p0 = new Vector3(lean.x * y, y, lean.z * y);
+                    branches.Add(new[] { p0, p0 + dir * len * 0.5f, p0 + (dir + Vector3.down * 0.1f).normalized * len });
+                    branchR.Add(trunkR * Mathf.Lerp(0.25f, 0.45f, R()));
+                }
+                var lods = new Mesh[3];
+                for (int lod = 0; lod < 3; lod++)
+                {
+                    var b = new Builder();
+                    b.Tube(trunk, radii, lod == 0 ? 7 : lod == 1 ? 5 : 3);
+                    if (lod < 2)
+                        for (int i = 0; i < branches.Count; i += lod == 0 ? 1 : 2)
+                            b.Tube(branches[i], new[] { branchR[i], branchR[i] * 0.6f, branchR[i] * 0.3f }, lod == 0 ? 4 : 3);
+                    lods[lod] = b.Into(MeshAsset($"Snag_{v}_LOD{lod}"));
+                }
+                _snags[v] = SaveLodPrefab($"Snag_{v}", lods, bark, leaves, trunkR * 1.6f);
+            }
+            AssetDatabase.SaveAssets();
+            return _snags;
+        }
+
+        static Material CharredBarkMaterial()
+        {
+            var mat = Lit(Dir + "BarkCharred.mat");
+            mat.SetTexture("_BaseMap", Texture(Dir + "Bark.png", false));
+            mat.SetTexture("_BumpMap", Texture(Dir + "Bark_nor.png", true));
+            mat.EnableKeyword("_NORMALMAP");
+            mat.SetColor("_BaseColor", new Color(0.32f, 0.3f, 0.28f));
+            mat.SetFloat("_Smoothness", 0.05f);
+            mat.enableInstancing = true;
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
         static GameObject BuildPrefab(Species sp, int variant, Material bark, Material leaves)
         {
             var lods = Generate(sp, variant);
+            var b0 = lods[0].bounds;
+            return SaveLodPrefab($"{sp.kind}_{variant}", lods, bark, leaves, Mathf.Min(b0.extents.x, b0.extents.z) * 0.6f);
+        }
+
+        /// <summary>Prefab with a cross-fading LOD group over three meshes and a capsule collider on the root.</summary>
+        static GameObject SaveLodPrefab(string name, Mesh[] lods, Material bark, Material leaves, float colliderRadius)
+        {
             foreach (var m in lods) EditorUtility.SetDirty(m);
-            var root = new GameObject($"{sp.kind}_{variant}");
+            var root = new GameObject(name);
             var renderers = new Renderer[3];
             for (int i = 0; i < 3; i++)
             {
@@ -289,10 +369,10 @@ namespace ModernDrone.Editor
             group.SetLODs(new[] { new LOD(0.25f, new[] { renderers[0] }), new LOD(0.08f, new[] { renderers[1] }), new LOD(0.004f, new[] { renderers[2] }) });
             group.RecalculateBounds();
 
-            // Drone-stopping crown (terrain tree colliders must be one capsule on the root).
+            // Drone-stopping crown or trunk (terrain tree colliders must be one capsule on the root).
             var b = lods[0].bounds;
             var col = root.AddComponent<CapsuleCollider>();
-            col.radius = Mathf.Min(b.extents.x, b.extents.z) * 0.6f;
+            col.radius = colliderRadius;
             col.height = b.size.y;
             col.center = new Vector3(0f, b.center.y, 0f);
 
