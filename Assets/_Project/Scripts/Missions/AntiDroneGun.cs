@@ -10,8 +10,12 @@ namespace ModernDrone.Missions
     /// The crew spots the drone in line of sight, lays the mount at the traverse / elevation rates of a manually
     /// laid gun with lead for the drone's velocity, and fires bursts with tracers only when on target.
     /// Weapon figures: ZU-23-2 2 x 1000 rpm cyclic, 970 m/s, air targets to 2.5 km; DShK 600 rpm, 850 m/s
-    /// (en.wikipedia.org/wiki/ZU-23-2, /DShK). A small FPV drone is a far harder target than a Shahed or a Lancet,
-    /// so the hit chance per round and the effective range against it are abstract gameplay values.
+    /// (en.wikipedia.org/wiki/ZU-23-2, /DShK). A small FPV drone is a far harder target than a Shahed or a Lancet:
+    /// mobile fire groups are built around Shahed-type drones (mvs.gov.ua, "Mobile fire groups"), and against FPVs
+    /// front-line troops rate shotguns at 80-120 m above automatic weapons (news.liga.net, SBS soldier, 2025).
+    /// So the hit chance per round, the effective range and the spotting delay are abstract gameplay values, tuned
+    /// so a drone crossing at 20 m/s about 200 m from a ZU-23-2 survives 10 s of fire about 4 times in 5, a
+    /// loitering one far less often (see ExposureKillChance and its test).
     /// </summary>
     [RequireComponent(typeof(VehicleDamageModel))]
     public sealed class AntiDroneGun : MonoBehaviour
@@ -30,7 +34,9 @@ namespace ModernDrone.Missions
         [SerializeField] float range = 1200f;
         [SerializeField] float optimalRange = 250f;
         [Header("Crew")]
-        [SerializeField] float reactionTime = 3f;
+        [Tooltip("Time to spot and engage a drone, s, plus reactionPerKm for every km of distance (a 25 cm drone is hard to find).")]
+        [SerializeField] float reactionTime = 2f;
+        [SerializeField] float reactionPerKm = 6f;
         [SerializeField] float traverseSpeed = 60f;
         [SerializeField] float elevationSpeed = 40f;
         [SerializeField] float minElevation = -5f;
@@ -81,8 +87,19 @@ namespace ModernDrone.Missions
         {
             if (distance > range) return 0f;
             float falloff = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(optimal, range, distance));
-            float speedFactor = Mathf.Lerp(1.5f, 0.3f, Mathf.InverseLerp(3f, 30f, speed));
+            float speedFactor = Mathf.Lerp(1.5f, 0.15f, Mathf.InverseLerp(3f, 35f, speed));
             return Mathf.Clamp01(perRound * falloff * speedFactor);
+        }
+
+        /// <summary>
+        /// Chance the drone is shot down during <paramref name="seconds"/> of continuous, well-laid fire at a fixed
+        /// distance and speed (bursts of <paramref name="burst"/> s every burst + pause s). For balancing and tests.
+        /// </summary>
+        public static float ExposureKillChance(float perRound, float rpm, float burst, float pause, float distance, float optimal, float range, float speed, float seconds)
+        {
+            float p = RoundKillChance(perRound, distance, optimal, range, speed);
+            float rounds = rpm / 60f * burst * (seconds / (burst + pause));
+            return 1f - Mathf.Pow(1f - p, rounds);
         }
 
         void Update()
@@ -109,7 +126,7 @@ namespace ModernDrone.Missions
             Vector3 vel = _drone.Body.linearVelocity;
             Vector3 aimPoint = target + vel * (dist / muzzleVelocity);
             float error = Lay(aimPoint);
-            if (_spotted < reactionTime) return;
+            if (_spotted < reactionTime + reactionPerKm * dist / 1000f) return;
 
             if (Time.time >= _nextBurst && error < fireCone)
             {

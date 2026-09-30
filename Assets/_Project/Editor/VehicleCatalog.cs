@@ -403,7 +403,7 @@ namespace ModernDrone.Editor
             k.AttachModel(ModelDir + "Ural4320/ural4320_open.glb");
             k.SliceHull();
             MountGun(k, WeaponDir + "zu23_2.glb", v(0f, 0f, -1.9f), v(1.4f, 1.3f, 1.6f), 23f,
-                2000f, 970f, 0.6f, 1.2f, 0.02f, 1200f, 250f);
+                2000f, 970f, 0.6f, 1.2f, 0.003f, 700f, 150f);
             k.Finish("МОГ: Урал + ЗУ-23-2").SetAmmoConfinement(0.05f);
             k.Save(MogUral);
         }
@@ -428,7 +428,7 @@ namespace ModernDrone.Editor
             k.AttachModel(ModelDir + "ZIL157/zil157.glb");
             k.SliceHull();
             MountGun(k, WeaponDir + "dshk.glb", v(0f, 0f, -1.3f), v(0.9f, 1.6f, 0.9f), 12.7f,
-                600f, 850f, 1.0f, 1.5f, 0.02f, 800f, 150f);
+                600f, 850f, 1.0f, 1.5f, 0.004f, 500f, 120f);
             k.Finish("МОГ: ЗИЛ-157 + ДШК").SetAmmoConfinement(0.05f);
             k.Save(MogZil);
         }
