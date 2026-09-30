@@ -8,13 +8,13 @@ using UnityEngine.InputSystem.Controls;
 namespace ModernDrone.UI
 {
     /// <summary>
-    /// Control settings screen (tabs: device, keyboard+mouse, gamepad, RC/joystick, buttons, flight).
+    /// Settings screen (tabs: device, keyboard+mouse, gamepad, RC/joystick, buttons, flight, display and audio, OSD, graphics).
     /// Plain class hosted by the main menu and the pause menu. Call <see cref="Update"/> from Update
     /// and <see cref="Draw"/> from OnGUI.
     /// </summary>
     public sealed class SettingsMenu
     {
-        static readonly string[] Tabs = { "Устройство", "Клавиатура+мышь", "Геймпад", "Аппаратура / джойстик", "Кнопки", "Полёт", "Экран и звук", "OSD" };
+        static readonly string[] Tabs = { "Устройство", "Клавиатура+мышь", "Геймпад", "Аппаратура / джойстик", "Кнопки", "Полёт", "Экран и звук", "OSD", "Графика" };
 
         readonly MenuGui _gui;
         readonly List<MenuRow> _rows = new List<MenuRow>();
@@ -103,6 +103,7 @@ namespace ModernDrone.UI
                 case 5: FlightRows(); break;
                 case 6: DisplayAudioRows(); break;
                 case 7: OsdRows(); break;
+                case 8: GraphicsRows(); break;
             }
             _rows.Add(MenuRow.Header(""));
             _rows.Add(MenuRow.Button("← Назад (сохранить)", () => { ControlSettings.Save(); Closed = true; }));
@@ -275,6 +276,44 @@ namespace ModernDrone.UI
             _rows.Add(MenuRow.Slider("Моторы дрона", () => S.motorVolume, v => S.motorVolume = v, 0f, 1f, 0.05f));
         }
 
+        // Quick presets: anti-aliasing, render scale, shadows, vegetation, grass. STP at a reduced render scale keeps a
+        // cleaner image than a spatial filter at full scale on weaker GPUs.
+        static readonly (int aa, float scale, int shadows, int veg, int grass)[] Presets =
+        {
+            (3, 0.67f, 1, 1, 1), (3, 0.8f, 2, 2, 2), (3, 1f, 3, 3, 3),
+        };
+
+        void GraphicsRows()
+        {
+            _rows.Add(MenuRow.Choice("Готовый набор", new[] { "свой", "низкое", "среднее", "высокое" }, () =>
+            {
+                for (int i = 0; i < Presets.Length; i++)
+                {
+                    var p = Presets[i];
+                    if (S.antiAliasing == p.aa && Mathf.Abs(S.renderScale - p.scale) < 0.01f && S.shadowQuality == p.shadows && S.vegetationDetail == p.veg && S.grassQuality == p.grass)
+                        return i + 1;
+                }
+                return 0;
+            }, v =>
+            {
+                if (v == 0) return;
+                var p = Presets[v - 1];
+                S.antiAliasing = p.aa; S.renderScale = p.scale; S.shadowQuality = p.shadows; S.vegetationDetail = p.veg; S.grassQuality = p.grass;
+                ControlSettings.NotifyChanged();
+            }));
+            _rows.Add(MenuRow.Header("Изображение"));
+            _rows.Add(MenuRow.Choice("Сглаживание", ModernDrone.Video.GraphicsQuality.AntiAliasingNames, () => S.antiAliasing, v => { S.antiAliasing = v; ControlSettings.NotifyChanged(); }));
+            _rows.Add(MenuRow.Slider("Разрешение рендера (STP или FSR 1.0 дотягивают до экрана)", () => S.renderScale, v => { S.renderScale = v; ControlSettings.NotifyChanged(); }, 0.5f, 1f, 0.05f, "0%"));
+            _rows.Add(MenuRow.Header("Детализация"));
+            _rows.Add(MenuRow.Choice("Тени", ModernDrone.Video.GraphicsQuality.LevelNames, () => S.shadowQuality, v => { S.shadowQuality = v; ControlSettings.NotifyChanged(); }));
+            _rows.Add(MenuRow.Choice("Деревья и кусты", new[] { "низкая", "средняя", "высокая" }, () => S.vegetationDetail - 1, v => { S.vegetationDetail = v + 1; ControlSettings.NotifyChanged(); }));
+            _rows.Add(MenuRow.Choice("Трава", ModernDrone.Video.GraphicsQuality.LevelNames, () => S.grassQuality, v => { S.grassQuality = v; ControlSettings.NotifyChanged(); }));
+            _rows.Add(MenuRow.Header("Кадры"));
+            _rows.Add(MenuRow.Choice("Ограничение FPS (без вертикальной синхронизации)", Array.ConvertAll(ModernDrone.Video.GraphicsQuality.FrameLimits, f => f == 0 ? "нет" : f.ToString()),
+                () => S.frameRateLimit, v => { S.frameRateLimit = v; ControlSettings.NotifyChanged(); }));
+            _rows.Add(MenuRow.Toggle("Счётчик FPS", () => S.showFps, v => S.showFps = v));
+        }
+
         void FlightRows()
         {
             _rows.Add(MenuRow.Header("Плавность"));
@@ -375,7 +414,7 @@ namespace ModernDrone.UI
             MenuGui.Fill(r, MenuGui.PanelColor);
             float pad = r.height * 0.03f;
             float tabH = _gui.RowHeight * 1.2f;
-            GUI.Label(new Rect(r.x, r.y + pad, r.width, _gui.title.fontSize * 1.2f), "УПРАВЛЕНИЕ", _gui.title);
+            GUI.Label(new Rect(r.x, r.y + pad, r.width, _gui.title.fontSize * 1.2f), "НАСТРОЙКИ", _gui.title);
 
             var tabs = new Rect(r.x + pad, r.y + pad + _gui.title.fontSize * 1.5f, r.width - pad * 2, tabH);
             var body = new Rect(r.x + pad, tabs.yMax + pad, r.width - pad * 2, r.yMax - tabs.yMax - pad * 3 - _gui.hint.fontSize * 2f);

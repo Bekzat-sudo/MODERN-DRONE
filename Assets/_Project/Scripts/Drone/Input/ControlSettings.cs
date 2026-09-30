@@ -194,6 +194,20 @@ namespace ModernDrone.Drone
         [Range(0f, 1f)] public float masterVolume = 1f;
         [Range(0f, 1f)] public float motorVolume = 1f;
 
+        [Header("Graphics (applied by ModernDrone.Video.GraphicsQuality)")]
+        [Tooltip("0 off, 1 FXAA, 2 SMAA, 3 STP (temporal upscaler / anti-aliasing).")]
+        public int antiAliasing = 3;
+        [Range(0.5f, 1f)] public float renderScale = 1f;
+        [Tooltip("0 off, 1 low, 2 medium, 3 high.")]
+        public int shadowQuality = 3;
+        [Tooltip("Tree and bush LOD bias: 1 low, 2 medium, 3 high.")]
+        public int vegetationDetail = 3;
+        [Tooltip("Grass draw distance: 0 off, 1 low, 2 medium, 3 high.")]
+        public int grassQuality = 3;
+        [Tooltip("Index into GraphicsQuality.FrameLimits (0 = no cap); ignored with vertical sync.")]
+        public int frameRateLimit;
+        public bool showFps;
+
         public ActionBinding[] bindings = DefaultBindings();
 
         static ControlSettings _current;

@@ -19,7 +19,7 @@ namespace ModernDrone.UI
         {
             _settings = new SettingsMenu(_gui);
             _rows.Add(MenuRow.Button("Продолжить", Resume));
-            _rows.Add(MenuRow.Button("Настройки управления", () => { _settings.Open(); _inSettings = true; }));
+            _rows.Add(MenuRow.Button("Настройки", () => { _settings.Open(); _inSettings = true; }));
             _rows.Add(MenuRow.Button("Перезапустить", GameScenes.Reload));
             _rows.Add(MenuRow.Header(""));
             _rows.Add(MenuRow.Button("Главное меню", () => GameScenes.Load(GameScenes.MainMenu)));
