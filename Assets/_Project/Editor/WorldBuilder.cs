@@ -21,7 +21,14 @@ namespace ModernDrone.Editor
         // Sun position measured on the HDRI (brightest texel, u 0.595 / v 0.766 in the equirectangular map):
         // 47.9 deg elevation; the Unity panoramic skybox maps it to this light direction.
         static readonly Quaternion SunRotation = Quaternion.Euler(47.9f, -55.8f, 0f);
-        static readonly Color Horizon = new Color(0.62f, 0.66f, 0.72f);
+        // Sky colour at the horizon, averaged over the HDRI's horizon rows: linear (0.43, 0.46, 0.56), i.e. this in sRGB,
+        // so far terrain fades into the sky behind it.
+        static readonly Color Horizon = new Color(0.69f, 0.71f, 0.78f);
+
+        // Haze as Beer-Lambert extinction from a meteorological visibility V (Koschmieder: sigma = 3.912 / V, contrast
+        // threshold 2 %). 8 km is a hazy summer day over dusty steppe - a scene choice, not a measurement:
+        // 84 % contrast left at 350 m (recon drone range), 61 % at 1 km, 38 % at 2 km.
+        const float VisibilityMetres = 8000f;
 
         public const int Grass = 0, DryGrass = 1, Mud = 2, ForestFloor = 3, Rock = 4, GrassWide = 5;
         const int LayerCount = 6;
@@ -331,9 +338,9 @@ namespace ModernDrone.Editor
             RenderSettings.reflectionIntensity = 1f;
 
             RenderSettings.fog = true;
-            RenderSettings.fogMode = FogMode.ExponentialSquared;
+            RenderSettings.fogMode = FogMode.Exponential;
             RenderSettings.fogColor = Horizon;
-            RenderSettings.fogDensity = 0.0008f; // haze: ~50% contrast loss at ~1 km
+            RenderSettings.fogDensity = 3.912f / VisibilityMetres;
             DynamicGI.UpdateEnvironment();
 
             var volume = new GameObject("PostProcessing").AddComponent<Volume>();
@@ -365,28 +372,52 @@ namespace ModernDrone.Editor
             return mat;
         }
 
+        /// <summary>
+        /// Grade after war footage of the steppe: Neutral tonemapping (range only, no ACES hue shift or extra contrast)
+        /// as the base, then desaturated olive and ochre, firmer contrast and a slightly cool balance; warm, saturated
+        /// colour is left to fire. Values are art direction. Updated in place on every rebuild.
+        /// </summary>
         static VolumeProfile PostProfile()
         {
             const string path = Dir + "PostProfile.asset";
             var profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(path);
-            if (profile != null) return profile;
-            profile = ScriptableObject.CreateInstance<VolumeProfile>();
-            var tone = profile.Add<Tonemapping>(true);
-            tone.mode.Override(TonemappingMode.ACES);
-            var bloom = profile.Add<Bloom>(true);
+            if (profile == null)
+            {
+                profile = ScriptableObject.CreateInstance<VolumeProfile>();
+                AssetDatabase.CreateAsset(profile, path);
+            }
+            T Get<T>() where T : VolumeComponent
+            {
+                if (profile.TryGet<T>(out var c)) return c;
+                c = profile.Add<T>(true);
+                AssetDatabase.AddObjectToAsset(c, profile);
+                return c;
+            }
+            Get<Tonemapping>().mode.Override(TonemappingMode.Neutral);
+            var bloom = Get<Bloom>();
             bloom.threshold.Override(1.1f);
             bloom.intensity.Override(0.25f);
-            var color = profile.Add<ColorAdjustments>(true);
-            color.postExposure.Override(0.3f);
-            color.contrast.Override(8f);
-            color.saturation.Override(-8f);
-            AssetDatabase.CreateAsset(profile, path);
-            foreach (var c in profile.components) AssetDatabase.AddObjectToAsset(c, profile);
+            var color = Get<ColorAdjustments>();
+            color.postExposure.Override(0.3f); // cameras with AutoExposure override this
+            color.contrast.Override(20f);      // Neutral is flatter than ACES
+            color.saturation.Override(-16f);
+            var balance = Get<WhiteBalance>();
+            balance.temperature.Override(-6f);
+            balance.tint.Override(2f);
+            var lgg = Get<LiftGammaGain>();
+            lgg.lift.Override(new Vector4(1f, 1f, 1.02f, 0f)); // cool shadows
+            lgg.gamma.Override(new Vector4(1f, 1f, 1f, -0.04f)); // slightly deeper midtones
+            foreach (var c in profile.components) EditorUtility.SetDirty(c);
+            EditorUtility.SetDirty(profile);
             AssetDatabase.SaveAssets();
             return profile;
         }
 
-        /// <summary>Shadows far enough for an FPV view from 30-100 m up (URP default is 50 m).</summary>
+        /// <summary>
+        /// Shadows far enough for an FPV view from 30-100 m up (URP default is 50 m), with a 4096 map so 350 m over four
+        /// cascades stays crisp; STP (Unity 6 temporal upscaler, anti-aliasing at render scale 1); GPU occlusion culling
+        /// for the GPU Resident Drawer (behind tree lines and terrain).
+        /// </summary>
         public static void ConfigurePipeline()
         {
             if (!(GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset urp)) return;
@@ -394,8 +425,11 @@ namespace ModernDrone.Editor
             {
                 urp.shadowDistance = 350f;
                 urp.shadowCascadeCount = 4;
-                EditorUtility.SetDirty(urp);
             }
+            urp.mainLightShadowmapResolution = 4096;
+            urp.upscalingFilter = UpscalingFilterSelection.STP;
+            urp.gpuResidentDrawerEnableOcclusionCullingInCameras = true;
+            EditorUtility.SetDirty(urp);
         }
     }
 }

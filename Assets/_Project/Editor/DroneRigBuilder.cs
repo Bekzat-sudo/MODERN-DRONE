@@ -44,6 +44,7 @@ namespace ModernDrone.Editor
             cam.nearClipPlane = 0.03f;
             cam.farClipPlane = 3000f;
             camGo.AddComponent<AudioListener>();
+            camGo.AddComponent<ModernDrone.Video.AutoExposure>(); // fast, overshooting CMOS-camera defaults
             var droneCam = camGo.AddComponent<DroneCamera>();
             SetRef(droneCam, "drone", controller);
 

@@ -4,7 +4,7 @@ using UnityEngine.Rendering.Universal;
 
 namespace ModernDrone.Editor
 {
-    /// <summary>Installs the analog-video full-screen pass on the PC URP renderer (idempotent).</summary>
+    /// <summary>Installs the analog-video full-screen pass and the auto-exposure meter on the PC URP renderer (idempotent).</summary>
     public static class VideoFeedSetup
     {
         const string RendererPath = "Assets/Settings/PC_Renderer.asset";
@@ -23,6 +23,16 @@ namespace ModernDrone.Editor
             }
 
             var data = AssetDatabase.LoadAssetAtPath<UniversalRendererData>(RendererPath);
+            bool hasMeter = false;
+            foreach (var f in data.rendererFeatures)
+                hasMeter |= f is ModernDrone.Video.AutoExposureFeature;
+            if (!hasMeter)
+            {
+                var meter = ScriptableObject.CreateInstance<ModernDrone.Video.AutoExposureFeature>();
+                meter.name = "AutoExposure";
+                AddFeature(data, meter);
+            }
+
             foreach (var f in data.rendererFeatures)
             {
                 if (f is FullScreenPassRendererFeature existing && f.name == FeatureName)
@@ -39,6 +49,12 @@ namespace ModernDrone.Editor
             feature.injectionPoint = FullScreenPassRendererFeature.InjectionPoint.AfterRenderingPostProcessing;
             feature.fetchColorBuffer = true;
             feature.passMaterial = material;
+            AddFeature(data, feature);
+            Debug.Log("[ModernDrone] Analog video full-screen pass installed on " + RendererPath);
+        }
+
+        static void AddFeature(UniversalRendererData data, ScriptableRendererFeature feature)
+        {
             AssetDatabase.AddObjectToAsset(feature, data);
 
             // Keep the feature list and its local-id map in sync, as the renderer inspector does.
@@ -54,7 +70,6 @@ namespace ModernDrone.Editor
 
             EditorUtility.SetDirty(data);
             AssetDatabase.SaveAssets();
-            Debug.Log("[ModernDrone] Analog video full-screen pass installed on " + RendererPath);
         }
     }
 }
