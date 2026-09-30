@@ -62,6 +62,7 @@ namespace ModernDrone.Missions
         readonly System.Collections.Generic.List<Rigidbody> _unInterpolated = new System.Collections.Generic.List<Rigidbody>();
         readonly System.Collections.Generic.List<(Vector3, Quaternion)> _impactPoses = new System.Collections.Generic.List<(Vector3, Quaternion)>();
         Transform _tracked;
+        ModernDrone.Drone.DroneController _trackedDrone;
         GameObject _ghost;
         Transform[] _ghostProps = new Transform[0];
         float _ghostPropSpin;
@@ -80,6 +81,7 @@ namespace ModernDrone.Missions
         {
             _track.Clear();
             _tracked = drone;
+            _trackedDrone = drone != null ? drone.GetComponent<ModernDrone.Drone.DroneController>() : null;
             _vehicles.Clear();
             foreach (var v in FindObjectsByType<VehicleDamageModel>(FindObjectsSortMode.None))
                 _vehicles.Add((v.transform, new FlightTrack(VehicleInterval)));
@@ -88,8 +90,16 @@ namespace ModernDrone.Missions
         void LateUpdate()
         {
             if (Running || _tracked == null) return;
-            _track.Add(Time.time, _tracked.position, _tracked.rotation);
+            _track.Add(Time.time, _tracked.position, _tracked.rotation, false, Motors());
             RecordVehicles(Time.time, false);
+        }
+
+        /// <summary>The tracked drone's motor speeds for the replay's propellers.</summary>
+        Vector4 Motors()
+        {
+            if (_trackedDrone == null) return Vector4.zero;
+            var s = _trackedDrone.MotorSpin;
+            return s.Length >= 4 ? new Vector4(s[0], s[1], s[2], s[3]) : Vector4.zero;
         }
 
         void RecordVehicles(float time, bool force)
@@ -158,7 +168,7 @@ namespace ModernDrone.Missions
             _report = report;
             // Strikes land in FixedUpdate, whose clock can trail the last frame's sample.
             float impact = Mathf.Max(report.time, _track.EndTime + 0.001f);
-            if (_tracked != null) _track.Add(impact, _tracked.position, _tracked.rotation, force: true);
+            if (_tracked != null) _track.Add(impact, _tracked.position, _tracked.rotation, true, Motors());
             RecordVehicles(impact, true);
             _impactPoses.Clear();
             foreach (var (vt, _) in _vehicles)
@@ -291,11 +301,11 @@ namespace ModernDrone.Missions
 
                 var pose = _track.Sample(_replayTime);
                 _ghost.transform.SetPositionAndRotation(pose.position, pose.rotation);
-                // Motor speed is not recorded: props spin at a cruise rate that follows the replay (stopped when
-                // paused, backwards when scrubbing back, like rewound video).
-                for (int i = 0; i < _ghostProps.Length && i < ModernDrone.Drone.QuadMixer.Spin.Length; i++)
+                // Props spin at the recorded motor speeds, following the replay (stopped when paused, backwards when
+                // scrubbing back, like rewound video).
+                for (int i = 0; i < _ghostProps.Length && i < 4; i++)
                     if (_ghostProps[i] != null)
-                        _ghostProps[i].Rotate(0f, ModernDrone.Drone.QuadMixer.Spin[i] * _ghostPropSpin * _replayRate * Time.unscaledDeltaTime, 0f, Space.Self);
+                        _ghostProps[i].Rotate(0f, ModernDrone.Drone.QuadMixer.Spin[i] * pose.motors[i] * _ghostPropSpin * _replayRate * Time.unscaledDeltaTime, 0f, Space.Self);
                 PoseVehicles(_replayTime);
                 Vector3 aim = Vector3.Lerp(focus, pose.position, 0.5f);
                 Vector3 camPos = MovedRecon(focus, reconPos);
@@ -354,7 +364,7 @@ namespace ModernDrone.Missions
 
         /// <summary>
         /// Render-only copy of the drone's meshes (the drone's own scripts must not run on it). Propeller meshes hang
-        /// under their own pivots, copied from PropVisuals, so the replay can spin them.
+        /// under their own pivots, copied from PropVisuals, so the replay can spin them at the recorded motor speeds.
         /// </summary>
         GameObject BuildGhost()
         {
@@ -364,7 +374,7 @@ namespace ModernDrone.Missions
             root.transform.SetPositionAndRotation(_tracked.position, _tracked.rotation);
             var visuals = _tracked.GetComponentInChildren<ModernDrone.Drone.PropVisuals>(true);
             var props = visuals != null ? visuals.Props : new Transform[0];
-            _ghostPropSpin = visuals != null ? visuals.MaxVisualSpin * 0.6f : 0f;
+            _ghostPropSpin = visuals != null ? visuals.MaxVisualSpin : 0f;
             _ghostProps = new Transform[props.Length];
             for (int i = 0; i < props.Length; i++)
             {

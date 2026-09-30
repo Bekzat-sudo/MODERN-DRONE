@@ -5,7 +5,7 @@ namespace ModernDrone.Missions
 {
     /// <summary>
     /// Recorded poses of one object (the drone, a vehicle) for the post-strike replay: sampled at a fixed minimum
-    /// interval, interpolated on playback.
+    /// interval, interpolated on playback. The drone's samples also carry its four normalised motor speeds.
     /// </summary>
     public sealed class FlightTrack
     {
@@ -14,6 +14,8 @@ namespace ModernDrone.Missions
             public float time;
             public Vector3 position;
             public Quaternion rotation;
+            /// <summary>Motor speeds 0..1, front-right, front-left, rear-right, rear-left (zero for vehicles).</summary>
+            public Vector4 motors;
         }
 
         readonly List<Pose> _poses = new List<Pose>();
@@ -30,7 +32,7 @@ namespace ModernDrone.Missions
         public void Clear() => _poses.Clear();
 
         /// <summary>Adds a sample unless it is closer than the interval to the last one; <paramref name="force"/> always adds.</summary>
-        public void Add(float time, Vector3 position, Quaternion rotation, bool force = false)
+        public void Add(float time, Vector3 position, Quaternion rotation, bool force = false, Vector4 motors = default)
         {
             if (_poses.Count > 0)
             {
@@ -38,7 +40,8 @@ namespace ModernDrone.Missions
                 if (dt <= 0f || (!force && dt < _interval)) return;
                 // Standing still: stretch the last sample instead of adding one, so a parked vehicle stays two samples.
                 int n = _poses.Count;
-                if (n >= 2 && Same(_poses[n - 2], _poses[n - 1]) && _poses[n - 1].position == position && _poses[n - 1].rotation == rotation)
+                if (n >= 2 && Same(_poses[n - 2], _poses[n - 1]) && _poses[n - 1].position == position && _poses[n - 1].rotation == rotation
+                    && _poses[n - 1].motors == motors)
                 {
                     var last = _poses[n - 1];
                     last.time = time;
@@ -46,10 +49,10 @@ namespace ModernDrone.Missions
                     return;
                 }
             }
-            _poses.Add(new Pose { time = time, position = position, rotation = rotation });
+            _poses.Add(new Pose { time = time, position = position, rotation = rotation, motors = motors });
         }
 
-        static bool Same(in Pose a, in Pose b) => a.position == b.position && a.rotation == b.rotation;
+        static bool Same(in Pose a, in Pose b) => a.position == b.position && a.rotation == b.rotation && a.motors == b.motors;
 
         /// <summary>Pose at <paramref name="time"/>, clamped to the recorded span.</summary>
         public Pose Sample(float time)
@@ -70,7 +73,8 @@ namespace ModernDrone.Missions
             {
                 time = time,
                 position = Vector3.Lerp(a.position, b.position, k),
-                rotation = Quaternion.Slerp(a.rotation, b.rotation, k)
+                rotation = Quaternion.Slerp(a.rotation, b.rotation, k),
+                motors = Vector4.Lerp(a.motors, b.motors, k)
             };
         }
     }

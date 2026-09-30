@@ -33,6 +33,19 @@ namespace ModernDrone.Tests
         }
 
         [Test]
+        public void Motors_AreInterpolated_AndKeepAHoverFromCollapsing()
+        {
+            var track = new FlightTrack(0.1f);
+            track.Add(0f, Vector3.zero, Quaternion.identity, false, new Vector4(0.2f, 0.2f, 0.2f, 0.2f));
+            track.Add(1f, Vector3.zero, Quaternion.identity, false, new Vector4(0.2f, 0.2f, 0.2f, 0.2f));
+            // Hovering in place while the throttle changes is not "standing still".
+            track.Add(2f, Vector3.zero, Quaternion.identity, false, new Vector4(0.8f, 0.6f, 0.6f, 0.8f));
+            Assert.AreEqual(3, track.Count);
+            Assert.AreEqual(0.5f, track.Sample(1.5f).motors.x, 1e-4f);
+            Assert.AreEqual(0.4f, track.Sample(1.5f).motors.y, 1e-4f);
+        }
+
+        [Test]
         public void Sample_InterpolatesAndClamps()
         {
             var track = new FlightTrack(0.1f);
