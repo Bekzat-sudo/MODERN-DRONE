@@ -26,7 +26,9 @@ namespace ModernDrone.Editor
             }
             finally
             {
+                // The build serialises project settings with the flag on; write them back as they were.
                 PlayerSettings.enableFrameTimingStats = timing;
+                AssetDatabase.SaveAssets();
             }
         }
     }
