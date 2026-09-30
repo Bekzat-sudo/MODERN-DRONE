@@ -359,14 +359,27 @@ namespace ModernDrone.Editor
                 go.AddComponent<MeshFilter>().sharedMesh = lods[i];
                 var mr = go.AddComponent<MeshRenderer>();
                 mr.sharedMaterials = new[] { bark, leaves };
-                mr.shadowCastingMode = i == 2 ? ShadowCastingMode.Off : ShadowCastingMode.On;
+                mr.shadowCastingMode = ShadowCastingMode.Off;
                 renderers[i] = mr;
+            }
+            // Shadow proxies: each LOD casts its shadow from the next, coarser mesh (LOD 0 from LOD 1's, LOD 1 from
+            // LOD 2's); the last LOD casts none. Tree shadows were 1.24 M of 2.3 M shadow triangles on the heaviest view.
+            var proxies = new Renderer[2];
+            for (int i = 0; i < 2; i++)
+            {
+                var go = new GameObject("ShadowLOD" + i);
+                go.transform.SetParent(root.transform, false);
+                go.AddComponent<MeshFilter>().sharedMesh = lods[i + 1];
+                var mr = go.AddComponent<MeshRenderer>();
+                mr.sharedMaterials = new[] { bark, leaves };
+                mr.shadowCastingMode = ShadowCastingMode.ShadowsOnly;
+                proxies[i] = mr;
             }
             var group = root.AddComponent<LODGroup>();
             group.fadeMode = LODFadeMode.CrossFade;
             group.animateCrossFading = true;
             // Screen-relative heights: the recon camera's zoom keeps full detail on what it looks at.
-            group.SetLODs(new[] { new LOD(0.25f, new[] { renderers[0] }), new LOD(0.08f, new[] { renderers[1] }), new LOD(0.004f, new[] { renderers[2] }) });
+            group.SetLODs(new[] { new LOD(0.25f, new[] { renderers[0], proxies[0] }), new LOD(0.08f, new[] { renderers[1], proxies[1] }), new LOD(0.004f, new[] { renderers[2] }) });
             group.RecalculateBounds();
 
             // Drone-stopping crown or trunk (terrain tree colliders must be one capsule on the root).

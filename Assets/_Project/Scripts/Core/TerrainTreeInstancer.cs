@@ -102,7 +102,7 @@ namespace ModernDrone.Core
             foreach (var r in last.renderers)
             {
                 if (r == null) continue;
-                if (merge && r.TryGetComponent<MeshFilter>(out var mf) && mf.sharedMesh != null)
+                if (merge && r.shadowCastingMode != UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly && r.TryGetComponent<MeshFilter>(out var mf) && mf.sharedMesh != null)
                 {
                     var key = new Vector2Int(Mathf.FloorToInt(tree.transform.position.x / cellSize), Mathf.FloorToInt(tree.transform.position.z / cellSize));
                     if (!cells.TryGetValue(key, out var cell)) cells[key] = cell = new Cell { bounds = r.bounds };

@@ -178,14 +178,73 @@ namespace ModernDrone.Editor
             if (asset == null) return;
             foreach (var r in root.GetComponentsInChildren<Renderer>(true)) r.enabled = false;
 
+            var lod0 = Place(root, asset, "Visual", offset, moving, movingName);
+            var lod1Asset = AssetDatabase.LoadAssetAtPath<GameObject>(path.Replace(".glb", "_lod1.glb"));
+            var lod2Asset = AssetDatabase.LoadAssetAtPath<GameObject>(path.Replace(".glb", "_lod2.glb"));
+            if (lod1Asset == null || lod2Asset == null) return;
+
+            // Decimated copies (Blender, 25 % / 6 %, materials without images) take the full model's materials by
+            // material name. The near LOD casts its shadow from LOD 1's mesh: a T-72 was 247 k triangles in every cascade.
+            var materials = FullMaterials(lod0);
+            Renderer[] Copy(string name, UnityEngine.Rendering.ShadowCastingMode cast)
+            {
+                var rs = Place(root, name == "Visual_Shadow" ? lod1Asset : name == "Visual_LOD1" ? lod1Asset : lod2Asset, name, offset, moving, movingName);
+                foreach (var r in rs)
+                {
+                    UseFullMaterials(r, materials);
+                    r.shadowCastingMode = cast;
+                }
+                return rs;
+            }
+            var lod1 = Copy("Visual_LOD1", UnityEngine.Rendering.ShadowCastingMode.On);
+            var lod2 = Copy("Visual_LOD2", UnityEngine.Rendering.ShadowCastingMode.On);
+            var shadow = Copy("Visual_Shadow", UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly);
+            foreach (var r in lod0) r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            var near = new Renderer[lod0.Length + shadow.Length];
+            lod0.CopyTo(near, 0);
+            shadow.CopyTo(near, lod0.Length);
+
+            var group = root.GetComponent<LODGroup>();
+            if (group == null) group = root.gameObject.AddComponent<LODGroup>();
+            group.fadeMode = LODFadeMode.CrossFade;
+            // Screen-relative: the recon zoom keeps full detail; the last LOD is never culled (targets stay visible).
+            group.SetLODs(new[] { new LOD(0.15f, near), new LOD(0.04f, lod1), new LOD(0f, lod2) });
+            group.RecalculateBounds();
+        }
+
+        /// <summary>The full model's materials by name (the decimated LODs carry the same names, no textures).</summary>
+        public static System.Collections.Generic.Dictionary<string, Material> FullMaterials(System.Collections.Generic.IEnumerable<Renderer> renderers)
+        {
+            var map = new System.Collections.Generic.Dictionary<string, Material>();
+            foreach (var r in renderers)
+                foreach (var m in r.sharedMaterials)
+                    if (m != null && !map.ContainsKey(m.name)) map[m.name] = m;
+            return map;
+        }
+
+        public static void UseFullMaterials(Renderer r, System.Collections.Generic.Dictionary<string, Material> full)
+        {
+            var mats = r.sharedMaterials;
+            for (int i = 0; i < mats.Length; i++)
+                if (mats[i] != null && full.TryGetValue(mats[i].name, out var m)) mats[i] = m;
+            r.sharedMaterials = mats;
+        }
+
+        /// <summary>Instantiates a model under the root, strips colliders, moves its moving part; returns its renderers.</summary>
+        static Renderer[] Place(Transform root, GameObject asset, string name, Vector3 offset, Transform moving, string movingName)
+        {
             var visual = Object.Instantiate(asset, root);
-            visual.name = "Visual";
+            visual.name = name;
             visual.transform.localPosition = offset;
             visual.transform.localRotation = Quaternion.identity;
             foreach (var c in visual.GetComponentsInChildren<Collider>(true)) Object.DestroyImmediate(c);
-            if (moving == null || movingName == null) return;
-            var part = System.Array.Find(visual.GetComponentsInChildren<Transform>(true), t => t.name == movingName);
-            if (part != null) part.SetParent(moving, true);
+            var renderers = visual.GetComponentsInChildren<Renderer>(true);
+            if (moving != null && movingName != null)
+            {
+                var part = System.Array.Find(visual.GetComponentsInChildren<Transform>(true), t => t.name == movingName);
+                if (part != null) part.SetParent(moving, true);
+            }
+            return renderers;
         }
 
         public void AttachModel(string path, Vector3 offset = default, Transform moving = null, string movingName = null) =>

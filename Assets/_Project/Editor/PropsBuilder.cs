@@ -732,10 +732,18 @@ namespace ModernDrone.Editor
                 string path = WreckModels[_rng.Next(WreckModels.Length)];
                 var model = AssetDatabase.LoadAssetAtPath<GameObject>(path);
                 if (model == null) continue;
+                // A static hulk does not need 247 k triangles: use the decimated LOD 1 where there is one, with
+                // the full model's materials.
+                var lowModel = AssetDatabase.LoadAssetAtPath<GameObject>(path.Replace(".glb", "_lod1.glb"));
                 WorldBuilder.ClearAround(t, p, 8f);
-                var go = (GameObject)PrefabUtility.InstantiatePrefab(model, group);
+                var go = (GameObject)PrefabUtility.InstantiatePrefab(lowModel != null ? lowModel : model, group);
                 PrefabUtility.UnpackPrefabInstance(go, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
                 go.name = "Wreck_" + model.name;
+                if (lowModel != null)
+                {
+                    var full = VehicleKit.FullMaterials(model.GetComponentsInChildren<Renderer>(true));
+                    foreach (var r in go.GetComponentsInChildren<Renderer>()) VehicleKit.UseFullMaterials(r, full);
+                }
                 foreach (var r in go.GetComponentsInChildren<Renderer>())
                 {
                     var mats = r.sharedMaterials;

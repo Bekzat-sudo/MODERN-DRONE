@@ -33,15 +33,18 @@ namespace ModernDrone.Missions
 
         static readonly string[] Parts = { "", "trees", "props", "village", "grass", "decals", "shadows", "post" };
 
-        static Case[] PartCases()
+        // Shadow variants (-benchmarkShadows): cascade count, distance, which trees / plants cast.
+        static readonly string[] ShadowVariants = { "", "shadows", "small cull", "small cull strong", "cascades 3", "small cull + cascades 3", "cascades 3 + res 2048" };
+
+        static Case[] PartCases(string[] parts)
         {
             var list = new System.Collections.Generic.List<Case>();
             foreach (var pose in new[] { Cases[0], Cases[2], Cases[4] })
-                foreach (var part in Parts)
+                foreach (var part in parts)
                 {
                     var c = pose;
                     c.off = part;
-                    c.name = pose.name + (part == "" ? "" : ", no " + part);
+                    c.name = pose.name + (part == "" ? "" : parts == Parts || part == "shadows" ? ", no " + part : ", " + part);
                     list.Add(c);
                 }
             return list.ToArray();
@@ -72,12 +75,62 @@ namespace ModernDrone.Missions
             var volumes = FindObjectsByType<UnityEngine.Rendering.Volume>(FindObjectsSortMode.None);
             var props = GameObject.Find("Props");
             bool parts = Array.IndexOf(Environment.GetCommandLineArgs(), "-benchmarkParts") >= 0;
+            bool shadows = Array.IndexOf(Environment.GetCommandLineArgs(), "-benchmarkShadows") >= 0;
+            var urp = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline as UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset;
+            int cascades0 = urp != null ? urp.shadowCascadeCount : 4;
+            float distance0 = urp != null ? urp.shadowDistance : 350f;
+            int res0 = urp != null ? urp.mainLightShadowmapResolution : 4096;
+            var small0 = urp != null ? urp.shadowSmallMeshScreenPercentages : Vector4.zero;
+            var proxies = new System.Collections.Generic.List<GameObject>();
+            var castModes = new System.Collections.Generic.Dictionary<Renderer, UnityEngine.Rendering.ShadowCastingMode>();
+            if (trees != null) foreach (var r in trees.GetComponentsInChildren<Renderer>(true)) castModes[r] = r.shadowCastingMode;
             var sb = new StringBuilder();
             sb.AppendLine($"{DateTime.Now:yyyy-MM-dd HH:mm}  {SystemInfo.graphicsDeviceName}  {SystemInfo.processorType}  {Screen.width}x{Screen.height}  {Application.unityVersion}");
             sb.AppendLine("case | frame ms | CPU main ms | CPU render ms | GPU ms | fps");
             var timings = new FrameTiming[1];
-            foreach (var c in parts ? PartCases() : Cases)
+            foreach (var c0 in parts ? PartCases(Parts) : shadows ? PartCases(ShadowVariants) : Cases)
             {
+                var c = c0;
+                c.off ??= "";
+                if (urp != null)
+                {
+                    urp.shadowCascadeCount = c.off.StartsWith("cascades 3") ? 3 : c.off == "cascades 2" ? 2 : cascades0;
+                    urp.mainLightShadowmapResolution = c.off.EndsWith("res 2048") ? 2048 : res0;
+                    urp.shadowCascadeCount = c.off.Contains("cascades 3") ? 3 : urp.shadowCascadeCount;
+                    urp.shadowSmallMeshScreenPercentages = c.off.StartsWith("small cull strong") ? new Vector4(0f, 1f, 2f, 4f)
+                        : c.off.StartsWith("small cull") ? new Vector4(0f, 0.5f, 1f, 2f) : small0;
+                    urp.shadowDistance = c.off == "distance 250" ? 250f : c.off == "distance 200" ? 200f : distance0;
+                }
+                foreach (var kv in castModes) if (kv.Key != null) kv.Key.shadowCastingMode = kv.Value;
+                foreach (var pr in proxies) if (pr != null) Destroy(pr);
+                proxies.Clear();
+                if (c.off.EndsWith("proxy") && trees != null)
+                    foreach (var g in trees.GetComponentsInChildren<LODGroup>(true))
+                    {
+                        var lods = g.GetLODs();
+                        if (lods.Length < 2 || lods[0].renderers.Length == 0 || lods[1].renderers.Length == 0) continue;
+                        var r0 = lods[0].renderers[0]; var r1 = lods[1].renderers[0];
+                        if (r0 == null || r1 == null) continue;
+                        r0.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                        var pgo = new GameObject("ShadowProxy");
+                        pgo.transform.SetParent(r0.transform, false);
+                        pgo.AddComponent<MeshFilter>().sharedMesh = r1.GetComponent<MeshFilter>().sharedMesh;
+                        var pmr = pgo.AddComponent<MeshRenderer>();
+                        pmr.sharedMaterials = r1.sharedMaterials;
+                        pmr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly;
+                        var nl = lods[0].renderers; System.Array.Resize(ref nl, nl.Length + 1); nl[nl.Length - 1] = pmr; lods[0].renderers = nl;
+                        g.SetLODs(lods);
+                        proxies.Add(pgo);
+                    }
+                if ((c.off == "tree lod1 no cast" || c.off == "plants no cast") && trees != null)
+                    foreach (var g in trees.GetComponentsInChildren<LODGroup>(true))
+                    {
+                        var lods = g.GetLODs();
+                        if (c.off == "tree lod1 no cast" && lods.Length >= 2)
+                            foreach (var r in lods[1].renderers) if (r != null) r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                        if (c.off == "plants no cast" && lods.Length == 1)
+                            foreach (var r in lods[0].renderers) if (r != null) r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                    }
                 // "props" = everything under Props except the village, which is its own part.
                 if (props != null) foreach (Transform ch in props.transform) ch.gameObject.SetActive(c.off != "props" || ch.gameObject == village);
                 if (village != null) village.SetActive(c.off != "village");
@@ -107,6 +160,7 @@ namespace ModernDrone.Missions
                 sb.AppendLine($"{c.name} | {frame / n:F2} | {main / n:F2} | {render / n:F2} | {gpu / n:F2} | {n / dt:F0}");
             }
 
+            if (urp != null) { urp.shadowCascadeCount = cascades0; urp.shadowDistance = distance0; urp.mainLightShadowmapResolution = res0; urp.shadowSmallMeshScreenPercentages = small0; }
             string path = Arg("-benchmarkOut") ?? System.IO.Path.Combine(Application.persistentDataPath, "benchmark.txt");
             System.IO.File.WriteAllText(path, sb.ToString());
             Debug.Log("[Benchmark]\n" + sb);
