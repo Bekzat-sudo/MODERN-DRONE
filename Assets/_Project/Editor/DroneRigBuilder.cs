@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using ModernDrone.Core;
 using ModernDrone.Drone;
 using ModernDrone.Missions;
@@ -103,20 +104,87 @@ namespace ModernDrone.Editor
             var inst = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(glb), root.transform);
             inst.name = "Model";
             inst.transform.localScale = Vector3.one * scale;
-            // Contact fuze wire ahead of the warhead nose, as seen at the bottom of strike feeds. Mounts are drone
-            // space, measured from each model's camera (just below it) so the loop shows in the lower picture.
-            var fuze = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Art/Models/Weapons/fuze_wire.glb");
-            if (fuze != null)
+            // Improvised contact fuze taped to the PG-7VL's nose cap (tip found on the 7" mesh). The NonStop model
+            // comes with its own fuze probe ahead of its charge.
+            if (model == Model.Fpv7)
             {
-                var wire = Object.Instantiate(fuze, root.transform);
-                wire.name = "FuzeWire";
-                wire.transform.localPosition = model == Model.NonStop ? new Vector3(0f, -0.075f, 0.2f) : new Vector3(0f, -0.085f, 0.13f);
+                var fuze = new GameObject("FuzeWhiskers");
+                fuze.transform.SetParent(root.transform, false);
+                fuze.AddComponent<MeshFilter>().sharedMesh = FuzeMesh("FPV7", new Vector3(0f, -0.053f, 0.169f), 0.011f);
+                fuze.AddComponent<MeshRenderer>().sharedMaterials = new[]
+                {
+                    GetMaterial("FuzeSteel", new Color(0.72f, 0.73f, 0.75f)), GetMaterial("FuzeTape", new Color(0.04f, 0.04f, 0.045f)),
+                };
             }
             foreach (var c in root.GetComponentsInChildren<Collider>()) Object.DestroyImmediate(c);
             foreach (var t in root.GetComponentsInChildren<Transform>()) t.gameObject.layer = GameLayers.Drone;
             var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
             Object.DestroyImmediate(root);
             return prefab;
+        }
+
+        /// <summary>
+        /// Improvised electronic contact fuze as fitted to strike FPVs: two spring-steel "whisker" wires (1.8 mm)
+        /// taped to the warhead's nose, reaching 10-12 cm ahead and slightly apart, that are crushed together at
+        /// impact and close the detonator circuit; a thin lead runs back along the warhead to the fuze board on the
+        /// frame, which the flight controller arms remotely (x.com/GrandpaRoy2, recovered Ukrainian FPV fuze, 2024;
+        /// docs.obriy.airforce: contact fuzes fire on impact above ~7 m/s). Dimensions are illustrative.
+        /// Submesh 0 steel, 1 tape and lead.
+        /// </summary>
+        static Mesh FuzeMesh(string name, Vector3 nose, float noseRadius)
+        {
+            var v = new List<Vector3>(); var n = new List<Vector3>();
+            var steel = new List<int>(); var tape = new List<int>();
+            void Tube(IList<Vector3> pts, float r, int sides, List<int> tri)
+            {
+                int start = v.Count;
+                for (int i = 0; i < pts.Count; i++)
+                {
+                    var d = (pts[Mathf.Min(i + 1, pts.Count - 1)] - pts[Mathf.Max(i - 1, 0)]).normalized;
+                    var s1 = Vector3.Cross(d, Mathf.Abs(d.y) > 0.9f ? Vector3.right : Vector3.up).normalized;
+                    var s2 = Vector3.Cross(s1, d);
+                    for (int k = 0; k < sides; k++)
+                    {
+                        float a = k / (float)sides * Mathf.PI * 2f;
+                        var nrm = s1 * Mathf.Cos(a) + s2 * Mathf.Sin(a);
+                        v.Add(pts[i] + nrm * r); n.Add(nrm);
+                    }
+                }
+                for (int i = 0; i < pts.Count - 1; i++)
+                    for (int k = 0; k < sides; k++)
+                    {
+                        int a0 = start + i * sides + k, a1 = start + i * sides + (k + 1) % sides;
+                        tri.AddRange(new[] { a0, a0 + sides, a1, a1, a0 + sides, a1 + sides });
+                    }
+            }
+            // Tape band round the nose cap.
+            Tube(new[] { nose + new Vector3(0f, 0f, -0.035f), nose + new Vector3(0f, 0f, -0.012f) }, noseRadius + 0.0025f, 10, tape);
+            // Two whiskers: along the cap under the tape, out past the tip, spreading, a small inward hook at the end.
+            foreach (float side in new[] { -1f, 1f })
+            {
+                var pts = new[]
+                {
+                    nose + new Vector3(side * (noseRadius + 0.002f), 0f, -0.03f),
+                    nose + new Vector3(side * (noseRadius * 0.7f), -0.001f, 0.004f),
+                    nose + new Vector3(side * 0.02f, -0.004f, 0.055f),
+                    nose + new Vector3(side * 0.032f, -0.009f, 0.105f),
+                    nose + new Vector3(side * 0.026f, -0.011f, 0.117f),
+                };
+                Tube(pts, 0.0009f, 5, steel);
+            }
+            // Lead back along the top of the warhead to the fuze board under the frame.
+            Tube(new[] { nose + new Vector3(0f, noseRadius + 0.003f, -0.025f), nose + new Vector3(0f, noseRadius + 0.012f, -0.07f),
+                         new Vector3(0f, nose.y + 0.04f, nose.z - 0.14f), new Vector3(0f, -0.012f, nose.z - 0.19f) }, 0.0008f, 4, tape);
+            var mesh = new Mesh { name = "FuzeWhiskers_" + name };
+            mesh.SetVertices(v); mesh.SetNormals(n);
+            mesh.subMeshCount = 2;
+            mesh.SetTriangles(steel, 0); mesh.SetTriangles(tape, 1);
+            mesh.RecalculateBounds();
+            string path = $"Assets/_Project/Art/Models/Weapons/FuzeWhiskers_{name}.asset";
+            var existing = AssetDatabase.LoadAssetAtPath<Mesh>(path);
+            if (existing != null) { EditorUtility.CopySerialized(mesh, existing); return existing; }
+            AssetDatabase.CreateAsset(mesh, path);
+            return mesh;
         }
 
         static Transform[] BuildVisual(Transform root, DroneConfig config)

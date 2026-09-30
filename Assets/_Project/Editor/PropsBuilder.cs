@@ -238,11 +238,11 @@ namespace ModernDrone.Editor
                 var across = Vector3.Cross(Vector3.up, dir.normalized);
                 var go = new GameObject("Trench");
                 go.transform.SetParent(parent, false);
-                go.transform.SetPositionAndRotation((a + b) * 0.5f + Vector3.up * 1.5f, Quaternion.LookRotation(Vector3.down, across));
+                go.transform.SetPositionAndRotation((a + b) * 0.5f + Vector3.up * 0.6f, Quaternion.LookRotation(Vector3.down, across));
                 var dp = go.AddComponent<DecalProjector>();
                 dp.material = _trenchMat;
-                dp.size = new Vector3(len, 3.6f, 3f);
-                dp.pivot = new Vector3(0f, 0f, 1.5f);
+                dp.size = new Vector3(len, 3.6f, 1.2f);
+                dp.pivot = new Vector3(0f, 0f, 0.6f);
                 dp.uvScale = new Vector2(len / 14f, 1f);
                 dp.drawDistance = 900f;
                 WorldBuilder.ClearAround(t, (a + b) * 0.5f, len * 0.5f);
@@ -576,7 +576,12 @@ namespace ModernDrone.Editor
 
         static Material _charred;
 
-        /// <summary>Burnt-out hulks: at half the positions, out on the field, plus a few on their own.</summary>
+        /// <summary>
+        /// Burnt-out hulks at half the positions, out on the field, plus a few on their own. Tracked vehicles lose
+        /// their turret - blown off by the ammunition cooking off, it lies upside down, on its side or askew several
+        /// metres away (a T-72's furthest) - and their hull settles; trucks sit low on burnt-out wheels at a list.
+        /// Scorched ground and charred debris around each. Distances and angles are illustrative.
+        /// </summary>
         static void Wrecks(Terrain t, Transform root, List<Site> sites)
         {
             _charred ??= Lit("Charred", Color.white, AssetDatabase.LoadAssetAtPath<Texture2D>(Dir + "Charred.png"), 0.15f);
@@ -591,28 +596,124 @@ namespace ModernDrone.Editor
                 var p = new Vector3(Range(150f, size - 150f), 0f, Range(150f, size - 150f));
                 if (Vector2.Distance(new Vector2(p.x, p.z), new Vector2(size, size) * 0.5f) > 400f) spots.Add(p);
             }
+            var scorch = AssetDatabase.LoadAssetAtPath<Material>("Assets/_Project/Art/Decals/Crater.mat");
+            var tyre = Model("old_tyre");
+            var debrisMesh = Resources.GetBuiltinResource<Mesh>("Cube.fbx");
             foreach (var p in spots)
             {
-                var model = AssetDatabase.LoadAssetAtPath<GameObject>(WreckModels[_rng.Next(WreckModels.Length)]);
+                string path = WreckModels[_rng.Next(WreckModels.Length)];
+                var model = AssetDatabase.LoadAssetAtPath<GameObject>(path);
                 if (model == null) continue;
-                WorldBuilder.ClearAround(t, p, 6f);
+                WorldBuilder.ClearAround(t, p, 8f);
                 var go = (GameObject)PrefabUtility.InstantiatePrefab(model, group);
+                PrefabUtility.UnpackPrefabInstance(go, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
                 go.name = "Wreck_" + model.name;
-                var g = Ground(t, p);
-                go.transform.SetPositionAndRotation(g, OnGround(t, g, R() * 360f) * Quaternion.Euler(Range(-4f, 4f), 0f, Range(-4f, 4f)));
                 foreach (var r in go.GetComponentsInChildren<Renderer>())
                 {
                     var mats = r.sharedMaterials;
-                    for (int k = 0; k < mats.Length; k++) mats[k] = _charred;
+                    for (int k = 0; k < mats.Length; k++) mats[k] = Charred(mats[k]);
                     r.sharedMaterials = mats;
                 }
-                // Sit on the ground: models' pivots differ.
-                var rs = go.GetComponentsInChildren<Renderer>();
-                var b = rs[0].bounds;
-                foreach (var r in rs) b.Encapsulate(r.bounds);
-                go.transform.position += Vector3.up * (g.y - b.min.y - 0.15f);
+                var turret = System.Array.Find(go.GetComponentsInChildren<Transform>(), x => x.name == "Turret");
+                bool truck = turret == null;
+                var g = Ground(t, p);
+                float yaw = R() * 360f;
+                go.transform.SetPositionAndRotation(g, OnGround(t, g, yaw) * Quaternion.Euler(Range(-4f, 4f), 0f, truck ? Range(5f, 9f) * (R() < 0.5f ? -1f : 1f) : Range(-4f, 4f)));
+                // Sit on the ground (pivots differ), lower for settled suspension or burnt tyres.
+                SitOnGround(t, go, truck ? 0.35f : 0.15f);
+
+                if (turret != null)
+                {
+                    turret.SetParent(group, true);
+                    turret.name = go.name + "_Turret";
+                    bool t72 = model.name.Contains("t72");
+                    float dist = t72 ? Range(6f, 15f) : Range(3f, 8f);
+                    float dir = R() * Mathf.PI * 2f;
+                    var tp = Ground(t, g + new Vector3(Mathf.Cos(dir), 0f, Mathf.Sin(dir)) * dist);
+                    float roll = R() < 0.5f ? 180f + Range(-12f, 12f) : Range(-25f, 25f); // upside down or askew
+                    turret.SetPositionAndRotation(tp, OnGround(t, tp, R() * 360f) * Quaternion.Euler(Range(-15f, 15f), 0f, roll));
+                    SitOnGround(t, turret.gameObject, 0.05f);
+                    AddBoxCollider(turret.gameObject);
+                    WorldBuilder.ClearAround(t, tp, 3f);
+                }
                 AddBoxCollider(go);
+
+                // Scorched ground under the hulk.
+                if (scorch != null)
+                {
+                    var sc = new GameObject("Scorch");
+                    sc.transform.SetParent(group, false);
+                    // Shallow box: a deeper one smears the texture down the hulk's sides.
+                    sc.transform.SetPositionAndRotation(g + Vector3.up * 0.4f, Quaternion.Euler(90f, R() * 360f, 0f));
+                    var dp = sc.AddComponent<DecalProjector>();
+                    dp.material = scorch;
+                    dp.size = new Vector3(14f, 14f, 0.8f);
+                    dp.pivot = new Vector3(0f, 0f, 0.4f);
+                    dp.fadeFactor = 0.9f;
+                    dp.drawDistance = 900f;
+                }
+                // Charred debris: tyres and plates thrown around.
+                int n = 4 + _rng.Next(6);
+                for (int i = 0; i < n; i++)
+                {
+                    float a = R() * Mathf.PI * 2f, d = Range(3f, 12f);
+                    var dpos = g + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * d;
+                    if (R() < 0.35f && tyre != null)
+                    {
+                        var ty = Place(t, group, tyre, dpos, R() * 360f, Range(1.4f, 1.9f));
+                        ty.transform.rotation *= Quaternion.Euler(90f, 0f, 0f);
+                        foreach (var r in ty.GetComponentsInChildren<Renderer>()) r.sharedMaterial = _charred;
+                    }
+                    else
+                    {
+                        var plate = MeshObject("Debris", group, debrisMesh, _charred);
+                        var dg = Ground(t, dpos);
+                        plate.transform.SetPositionAndRotation(dg + Vector3.up * 0.05f, Quaternion.Euler(Range(-20f, 20f), R() * 360f, Range(-20f, 20f)));
+                        plate.transform.localScale = new Vector3(Range(0.4f, 1.4f), Range(0.03f, 0.08f), Range(0.3f, 1f));
+                    }
+                }
             }
+        }
+
+        static readonly Dictionary<Material, Material> CharredCopies = new Dictionary<Material, Material>();
+
+        /// <summary>
+        /// Burnt version of a model's own material: blackened and matt, keeping its texture detail (panel lines,
+        /// rivets) so nothing stretches the way a shared soot texture does over the models' UVs.
+        /// </summary>
+        static Material Charred(Material original)
+        {
+            if (original == null) return _charred;
+            if (CharredCopies.TryGetValue(original, out var copy) && copy != null) return copy;
+            string path = Dir + "Charred/" + original.name.Replace("/", "_") + "_charred.mat";
+            copy = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (copy == null)
+            {
+                System.IO.Directory.CreateDirectory(Dir + "Charred");
+                copy = new Material(original);
+                AssetDatabase.CreateAsset(copy, path);
+            }
+            else copy.CopyPropertiesFromMaterial(original);
+            var soot = new Color(0.24f, 0.19f, 0.16f); // soot with a rust-brown cast
+            foreach (var prop in new[] { "baseColorFactor", "_BaseColor", "_Color" })
+                if (copy.HasProperty(prop)) copy.SetColor(prop, copy.GetColor(prop) * soot);
+            foreach (var prop in new[] { "roughnessFactor" }) if (copy.HasProperty(prop)) copy.SetFloat(prop, 1f);
+            foreach (var prop in new[] { "_Smoothness", "_Glossiness" }) if (copy.HasProperty(prop)) copy.SetFloat(prop, 0.05f);
+            foreach (var prop in new[] { "emissiveFactor", "_EmissionColor" }) if (copy.HasProperty(prop)) copy.SetColor(prop, Color.black);
+            EditorUtility.SetDirty(copy);
+            CharredCopies[original] = copy;
+            return copy;
+        }
+
+        /// <summary>Moves an object so its lowest point is <paramref name="sink"/> below the ground under it.</summary>
+        static void SitOnGround(Terrain t, GameObject go, float sink)
+        {
+            var rs = go.GetComponentsInChildren<Renderer>();
+            if (rs.Length == 0) return;
+            var b = rs[0].bounds;
+            foreach (var r in rs) b.Encapsulate(r.bounds);
+            float ground = Ground(t, b.center).y;
+            go.transform.position += Vector3.up * (ground - b.min.y - sink);
         }
 
         /// <summary>Trees around the positions are broken and charred.</summary>

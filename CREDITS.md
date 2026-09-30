@@ -29,7 +29,8 @@
 - **ZU-23-2** and **DShK** pedestal mounts: modelled procedurally for this project (`Art/Models/Weapons`).
 - **Windbreak trees** (poplar, black locust, Siberian elm, oak): generated procedurally for this project -
   leaf and bark textures by `Tools/foliage_textures.py`, meshes by `Editor/TreeBuilder.cs`.
-- **Fields, craters, trenches, camouflage nets, charred metal, dragon's teeth, hedgehogs, sandbags, power-line wires**:
+- **Fields, craters, trenches, camouflage nets, charred metal, dragon's teeth, hedgehogs, sandbags, power-line wires,
+  contact-fuze whiskers**:
   procedural for this project (`Tools/ground_textures.py`, `Editor/PropsBuilder.cs`).
 - **BMP-3M** and **BMP-3M ERA** by [42manako](https://sketchfab.com/42manako) on Sketchfab
   ([1](https://sketchfab.com/3d-models/bmp-3m-97ffd025f0534432854a66b18039729f), [2](https://sketchfab.com/3d-models/bmp-3m-era-f1188395505e47bda8c0f8423e80ff0b)),

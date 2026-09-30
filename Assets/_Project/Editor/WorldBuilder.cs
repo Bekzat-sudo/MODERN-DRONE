@@ -317,12 +317,13 @@ namespace ModernDrone.Editor
                 p.y = terrain.SampleHeight(p) + terrain.transform.position.y;
                 var go = new GameObject("Crater");
                 go.transform.SetParent(root, false);
-                go.transform.SetPositionAndRotation(p + Vector3.up * 1.5f, Quaternion.Euler(90f, R() * 360f, 0f));
+                // Shallow box (+-0.6 m) so trees, vehicles and props beside a crater are not smeared.
+                go.transform.SetPositionAndRotation(p + Vector3.up * 0.6f, Quaternion.Euler(90f, R() * 360f, 0f));
                 var dp = go.AddComponent<DecalProjector>();
                 dp.material = mat;
                 float s = diameter / 0.42f; // the texture's rim sits at 0.42 of its half-width
-                dp.size = new Vector3(s, s, 3f);
-                dp.pivot = new Vector3(0f, 0f, 1.5f);
+                dp.size = new Vector3(s, s, 1.2f);
+                dp.pivot = new Vector3(0f, 0f, 0.6f);
                 dp.fadeFactor = fade;
                 dp.drawDistance = 900f;
             }
