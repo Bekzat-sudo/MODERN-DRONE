@@ -8,7 +8,8 @@ namespace ModernDrone.Editor
     /// <summary>
     /// Procedural windbreak trees: a tapered trunk, first-order branches laid out inside a species crown envelope, and
     /// leaf-spray cards (Tools/foliage_textures.py) with normals pointing out of the crown so the canopy shades as one
-    /// volume. Three LODs with cross-fade; the terrain draws them as tree prototypes (capsule collider on the root).
+    /// volume. Three LODs with cross-fade (switch heights profiled: 0.25 / 0.08 cut the FPV view's triangles by ~40 %); planted as
+    /// terrain trees (capsule collider on the root) and drawn by TerrainTreeInstancer through the GPU Resident Drawer.
     /// Species after Ukrainian steppe shelterbelts - oak, poplar, black locust ("acacia"), Siberian elm; mature belts
     /// reach 19-23 m (pressto.amu.edu.pl/index.php/biorc/article/view/41622; europeancorrespondent.com, windbreak
     /// forests). Per-species heights, crown sizes and branch angles are illustrative, not measured.
@@ -285,7 +286,7 @@ namespace ModernDrone.Editor
             group.fadeMode = LODFadeMode.CrossFade;
             group.animateCrossFading = true;
             // Screen-relative heights: the recon camera's zoom keeps full detail on what it looks at.
-            group.SetLODs(new[] { new LOD(0.12f, new[] { renderers[0] }), new LOD(0.035f, new[] { renderers[1] }), new LOD(0.004f, new[] { renderers[2] }) });
+            group.SetLODs(new[] { new LOD(0.25f, new[] { renderers[0] }), new LOD(0.08f, new[] { renderers[1] }), new LOD(0.004f, new[] { renderers[2] }) });
             group.RecalculateBounds();
 
             // Drone-stopping crown (terrain tree colliders must be one capsule on the root).

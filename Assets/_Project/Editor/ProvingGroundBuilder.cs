@@ -84,6 +84,7 @@ namespace ModernDrone.Editor
             var terrain = go.GetComponent<Terrain>();
             if (GraphicsSettings.currentRenderPipeline != null)
                 terrain.materialTemplate = GraphicsSettings.currentRenderPipeline.defaultTerrainMaterial;
+            go.AddComponent<TerrainTreeInstancer>();
             WorldBuilder.Vegetate(terrain, 11);
             AssetDatabase.SaveAssets();
             return terrain;
