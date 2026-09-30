@@ -15,7 +15,8 @@ namespace ModernDrone.Editor
     /// - anti-tank lines of dragon's teeth and Czech hedgehogs across fields;
     /// - rural power lines on wooden poles with sagging wires, trees cleared under them;
     /// - burnt-out vehicle hulks from the vehicle models with a charred material;
-    /// - deadwood (stumps, fallen trunks, branches) and nettles along the belts.
+    /// - deadwood (stumps, fallen trunks, branches) and nettles along the belts;
+    /// - a front-line village on the east side (Sketchfab CC BY models, Art/Environment/Village).
     /// Props are Poly Haven CC0 models (Art/Environment/Props, see CREDITS.md); fortifications, wires and
     /// textures are procedural. Layouts, counts and sizes are illustrative.
     /// </summary>
@@ -50,13 +51,16 @@ namespace ModernDrone.Editor
             _rng = new System.Random(seed);
             var root = new GameObject("Props").transform;
             var sites = Sites(terrain);
-            WorldBuilder.Scar(terrain, seed, sites.ConvertAll(s => new Vector2(s.pos.x, s.pos.z)).ToArray());
+            var village = Village(terrain, root);
+            var hotspots = sites.ConvertAll(s => new Vector2(s.pos.x, s.pos.z));
+            hotspots.Add(new Vector2(village.center.x, village.center.z));
+            WorldBuilder.Scar(terrain, seed, hotspots.ToArray());
             PowerLine(terrain, root, new Vector3(60f, 0f, WorldBuilder.TreeRows[0] + 26f), new Vector3(1940f, 0f, WorldBuilder.TreeRows[0] + 26f));
             PowerLine(terrain, root, new Vector3(1520f, 0f, 40f), new Vector3(1520f, 0f, 1960f));
             BeltEdges(terrain, root);
             foreach (var s in sites) Position(terrain, root, s);
             AntiTankLines(terrain, root);
-            Wrecks(terrain, root, sites);
+            Wrecks(terrain, root, sites, village);
             Snags(terrain, sites);
         }
 
@@ -572,6 +576,130 @@ namespace ModernDrone.Editor
             data.SetTreeInstances(trees.ToArray(), true);
         }
 
+        // ------------------------------------------------------------------ village
+
+        const string VillageDir = "Assets/_Project/Art/Environment/Village/";
+
+        static GameObject VillageModel(string name) => AssetDatabase.LoadAssetAtPath<GameObject>(VillageDir + name + "_game.glb");
+
+        /// <summary>
+        /// A front-line village on the east edge between two belts: a dirt street with houses on both sides - intact
+        /// khatas and log houses, shelled shells and a scanned war-damaged house - barns behind the yards, garages and
+        /// a water tower at the far end, a grain elevator and a bus stop at the entrance, burnt-out cars in the street.
+        /// Buildings stand upright, slightly sunk into slopes, with mesh colliders (they stop drones and block the
+        /// radio link like the tree belts). Returns the village's footprint. Layout illustrative.
+        /// </summary>
+        static Bounds Village(Terrain t, Transform root)
+        {
+            var group = new GameObject("Village").transform;
+            group.SetParent(root, false);
+            Vector3 a = new Vector3(1600f, 0f, 1000f), b = new Vector3(1950f, 0f, 1045f);
+            var street = new[] { a, Vector3.Lerp(a, b, 0.5f) + new Vector3(0f, 0f, 6f), b };
+            // Yards and gardens: a grass band over the fields, then the dirt street through it.
+            WorldBuilder.PaintMeadow(t, new[] { a - (b - a).normalized * 60f, street[1], b + (b - a).normalized * 45f }, 70f);
+            WorldBuilder.PaintRoad(t, street, 6f);
+            var dir = (b - a).normalized;
+            var across = Vector3.Cross(Vector3.up, dir);
+            float streetYaw = Quaternion.LookRotation(dir).eulerAngles.y;
+            float length = Vector3.Distance(a, b);
+
+            GameObject Building(string name, Vector3 at, float yaw, float clear)
+            {
+                var model = VillageModel(name);
+                if (model == null) return null;
+                WorldBuilder.ClearAround(t, at, clear);
+                var go = (GameObject)PrefabUtility.InstantiatePrefab(model, group);
+                var g = Ground(t, at);
+                go.transform.SetPositionAndRotation(g - Vector3.up * 0.3f, Quaternion.Euler(0f, yaw, 0f));
+                go.isStatic = true;
+                foreach (var mf in go.GetComponentsInChildren<MeshFilter>())
+                {
+                    mf.gameObject.AddComponent<MeshCollider>().sharedMesh = mf.sharedMesh;
+                    mf.gameObject.layer = GameLayers.Environment;
+                    mf.gameObject.isStatic = true;
+                }
+                return go;
+            }
+
+            var gardens = new List<Vector3>();
+            string[] houses = { "house_khata", "house_wooden", "house_khata", "ruin_shell", "house_wooden", "ruin_lypivka", "ruin_shell", "house_khata" };
+            int h = 0;
+            for (float s = 45f; s < length - 50f; s += Range(30f, 38f))
+                foreach (float side in new[] { -1f, 1f })
+                {
+                    if (R() < 0.12f) continue; // an empty plot
+                    var plot = a + dir * (s + Range(-4f, 4f)) + across * side * Range(15f, 19f);
+                    string name = houses[(h++ + _rng.Next(3)) % houses.Length];
+                    Building(name, plot, streetYaw + (side > 0f ? 90f : -90f) + Range(-6f, 6f), 9f);
+                    if (R() < 0.45f)
+                        Building("barn", plot + across * side * Range(18f, 24f) + dir * Range(-6f, 6f), streetYaw + Range(-10f, 10f) + (R() < 0.5f ? 0f : 90f), 7f);
+                    if (R() < 0.6f)
+                        Building("fences_wood", a + dir * (s + Range(-8f, 8f)) + across * side * 8.5f, streetYaw + 90f, 3f);
+                    // Garden behind the house: a few small fruit-tree-sized trees and bushes.
+                    int n = 3 + _rng.Next(5);
+                    for (int i = 0; i < n; i++)
+                        gardens.Add(plot + across * side * Range(10f, 30f) + dir * Range(-14f, 14f));
+                }
+
+            // Far end: garages behind a concrete fence, the water tower.
+            var end = b + dir * 25f;
+            Building("garages", end + across * 18f, streetYaw + 90f, 12f);
+            Building("fence_concrete", end + across * 8f + dir * 4f, streetYaw, 5f);
+            Building("water_tower", end - across * 20f + dir * 8f, Range(0f, 360f), 6f);
+            // Entrance: the elevator along the road north of the street, a bus stop.
+            var elevator = Building("elevator", a - dir * 40f + across * 40f, streetYaw, 50f);
+            if (elevator != null)
+            {
+                var concrete = Lit("ElevatorConcrete", new Color(0.55f, 0.53f, 0.5f), AssetDatabase.LoadAssetAtPath<Texture2D>(Dir + "concrete_road_barrier_02/textures/concrete_road_barrier_02_diff_1k.jpg"), 0.1f);
+                foreach (var r in elevator.GetComponentsInChildren<Renderer>())
+                {
+                    var mats = r.sharedMaterials;
+                    for (int k = 0; k < mats.Length; k++) mats[k] = concrete;
+                    r.sharedMaterials = mats;
+                }
+            }
+            Building("bus_stop", a + dir * 12f - across * 7f, streetYaw, 3f);
+            Gardens(t, gardens);
+            // Burnt-out cars in the street.
+            for (int i = 0; i < 3; i++)
+            {
+                var car = Building(i % 2 == 0 ? "burnt_cars_a" : "burnt_cars_b", a + dir * Range(40f, length - 40f) + across * Range(-2.5f, 2.5f), streetYaw + Range(-30f, 30f), 4f);
+                if (car != null) car.transform.position += Vector3.up * 0.2f;
+            }
+
+            var box = new Bounds((a + b) * 0.5f, Vector3.zero);
+            box.Encapsulate(a - dir * 90f + across * 60f);
+            box.Encapsulate(b + dir * 50f - across * 60f);
+            box.Encapsulate(a - across * 60f);
+            box.Encapsulate(b + across * 60f);
+            box.Expand(new Vector3(0f, 1000f, 0f));
+            return box;
+        }
+
+        /// <summary>Garden trees as terrain trees: elm and locust at 30-55 % scale (fruit-tree size), some shelled.</summary>
+        static void Gardens(Terrain t, List<Vector3> spots)
+        {
+            var data = t.terrainData;
+            var protos = new List<TreePrototype>(data.treePrototypes);
+            var kinds = new List<int>();
+            for (int i = 0; i < protos.Count; i++)
+            {
+                var n = protos[i].prefab != null ? protos[i].prefab.name : "";
+                if (n.StartsWith("Elm") || n.StartsWith("Locust") || n.StartsWith("Oak")) kinds.Add(i);
+            }
+            if (kinds.Count == 0) return;
+            float size = data.size.x;
+            var trees = new List<TreeInstance>(data.treeInstances);
+            foreach (var p in spots)
+            {
+                var tp = new Vector3(p.x / size, 0f, p.z / size);
+                tp.y = data.GetInterpolatedHeight(tp.x, tp.z) / data.size.y;
+                float sc = Range(0.3f, 0.55f);
+                trees.Add(new TreeInstance { position = tp, prototypeIndex = kinds[_rng.Next(kinds.Count)], widthScale = sc * Range(1.1f, 1.5f), heightScale = sc, rotation = R() * 6.28f, color = Color.white, lightmapColor = Color.white });
+            }
+            data.SetTreeInstances(trees.ToArray(), true);
+        }
+
         // ------------------------------------------------------------------ war damage
 
         static Material _charred;
@@ -582,7 +710,7 @@ namespace ModernDrone.Editor
         /// metres away (a T-72's furthest) - and their hull settles; trucks sit low on burnt-out wheels at a list.
         /// Scorched ground and charred debris around each. Distances and angles are illustrative.
         /// </summary>
-        static void Wrecks(Terrain t, Transform root, List<Site> sites)
+        static void Wrecks(Terrain t, Transform root, List<Site> sites, Bounds village)
         {
             _charred ??= Lit("Charred", Color.white, AssetDatabase.LoadAssetAtPath<Texture2D>(Dir + "Charred.png"), 0.15f);
             var group = new GameObject("Wrecks").transform;
@@ -594,7 +722,7 @@ namespace ModernDrone.Editor
             for (int i = 0; i < 3; i++)
             {
                 var p = new Vector3(Range(150f, size - 150f), 0f, Range(150f, size - 150f));
-                if (Vector2.Distance(new Vector2(p.x, p.z), new Vector2(size, size) * 0.5f) > 400f) spots.Add(p);
+                if (Vector2.Distance(new Vector2(p.x, p.z), new Vector2(size, size) * 0.5f) > 400f && !village.Contains(new Vector3(p.x, village.center.y, p.z))) spots.Add(p);
             }
             var scorch = AssetDatabase.LoadAssetAtPath<Material>("Assets/_Project/Art/Decals/Crater.mat");
             var tyre = Model("old_tyre");

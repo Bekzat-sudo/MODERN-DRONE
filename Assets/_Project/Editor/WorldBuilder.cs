@@ -185,6 +185,46 @@ namespace ModernDrone.Editor
             data.SetAlphamaps(0, 0, maps);
         }
 
+        /// <summary>
+        /// Repaints a band around a polyline with grass (village yards, meadow) over whatever was there - fields
+        /// included - and gives it grass billboards: blends in over the band's outer 30 %.
+        /// </summary>
+        public static void PaintMeadow(Terrain terrain, Vector3[] points, float halfWidth)
+        {
+            var data = terrain.terrainData;
+            int res = data.alphamapResolution;
+            var maps = data.GetAlphamaps(0, 0, res, res);
+            float cell = data.size.x / (res - 1);
+            for (int z = 0; z < res; z++)
+            for (int x = 0; x < res; x++)
+            {
+                var p = new Vector2(x * cell, z * cell);
+                float d = float.MaxValue;
+                for (int i = 1; i < points.Length; i++)
+                    d = Mathf.Min(d, DistanceToSegment(p, new Vector2(points[i - 1].x, points[i - 1].z), new Vector2(points[i].x, points[i].z)));
+                float k = Mathf.Clamp01((halfWidth - d) / (halfWidth * 0.3f));
+                if (k <= 0f) continue;
+                for (int l = 0; l < maps.GetLength(2); l++) maps[z, x, l] *= 1f - k;
+                maps[z, x, (x + z) % 5 == 0 ? DryGrass : Grass] += k;
+            }
+            data.SetAlphamaps(0, 0, maps);
+
+            if (data.detailPrototypes.Length == 0) return;
+            int dres = data.detailResolution;
+            var layer = data.GetDetailLayer(0, 0, dres, dres, 0);
+            float dcell = data.size.x / dres;
+            for (int z = 0; z < dres; z++)
+            for (int x = 0; x < dres; x++)
+            {
+                var p = new Vector2(x * dcell, z * dcell);
+                float d = float.MaxValue;
+                for (int i = 1; i < points.Length; i++)
+                    d = Mathf.Min(d, DistanceToSegment(p, new Vector2(points[i - 1].x, points[i - 1].z), new Vector2(points[i].x, points[i].z)));
+                if (d < halfWidth * 0.85f) layer[z, x] = Mathf.Max(layer[z, x], 8);
+            }
+            data.SetDetailLayer(0, 0, 0, layer);
+        }
+
         /// <summary>Paints a strip of mud (a dirt road) and clears grass and bushes on it.</summary>
         public static void PaintRoad(Terrain terrain, Vector3[] points, float width)
         {

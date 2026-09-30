@@ -70,3 +70,20 @@
 
 - **Oswald** by Vernon Adams, Kalapi Gajjar, Cyreal — [SIL Open Font License 1.1](https://openfontlicense.org), from [Google Fonts](https://github.com/google/fonts/tree/main/ofl/oswald).
 - **IBM Plex Mono** by IBM — [SIL Open Font License 1.1](https://openfontlicense.org), from [Google Fonts](https://github.com/google/fonts/tree/main/ofl/ibmplexmono).
+
+## Village (Sketchfab, CC BY 4.0 - https://creativecommons.org/licenses/by/4.0/)
+
+Downloaded through the Sketchfab Download API into `Art/Environment/Village` (heavy scans decimated, large textures
+downscaled for the game):
+- "Ukrainian traditional house" by Vishchun - https://sketchfab.com/3d-models/957d48d19d99479d9102ce51f4aa662c
+- "Old vilage house_LOD_0" by Nikolay Fedorov - https://sketchfab.com/3d-models/065cb734d68446ec90e3b43da86a5530
+- "Destroyed Building shell" by FWTeastwood - https://sketchfab.com/3d-models/d74a108fc7814ad9944138a6e9f5ee71
+- "Private house in Lypivka, Ukraine" by yaro.pro - https://sketchfab.com/3d-models/36fd9b6fb05c4527916690a7f1c443bc
+- "Abandoned Garage Block Rusty Ruined" by olegolegperepelica - https://sketchfab.com/3d-models/a1959927a98e4752bdb01b6e1f7f7d26
+- "Old wooden barn" by Elizabeth Watts - https://sketchfab.com/3d-models/4887c7e3de244a9db3eb5b4974418b1b
+- "Concrete Grain Elevators" by benjamintang2012 - https://sketchfab.com/3d-models/21c710f0406a4b109fd0c64bcf6abe1f
+- "Old Water Tower Environment" by mapleaber - https://sketchfab.com/3d-models/3791b41608f842a3ab766b1763ebc3bd
+- "Small self-stand fence OKP" by Aleksey Kozhemyakin - https://sketchfab.com/3d-models/9c78bf2e37bb44a98a25db07ce749487
+- "Old Street Fences Pack" by YadroGames - https://sketchfab.com/3d-models/0953ef9c6e9b4a099daf53f91d29cf09
+- "Old Soviet Bus Stop" by Coozy - https://sketchfab.com/3d-models/fe4d132434c24e1c8447a6d1190e8c6d
+- "Burned-out Cars" by Renafox - https://sketchfab.com/3d-models/701066df6b914fd08318524c7ccd96a7
