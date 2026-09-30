@@ -96,28 +96,9 @@ namespace ModernDrone.Editor
         }
 
         /// <summary>Windbreak tree lines along field edges: the main cover in steppe terrain.</summary>
-        internal static void CreateTreeLines(Terrain terrain)
-        {
-            var root = new GameObject("TreeLines");
-            var mat = GetMaterial("TreeLine", new Color(0.18f, 0.26f, 0.12f));
-            var rng = new System.Random(42);
-            foreach (float z in WorldBuilder.TreeRows)
-            {
-                for (float x = 100f; x < Size - 100f; x += 6f)
-                {
-                    if (rng.NextDouble() < 0.08) continue; // gaps in the tree line
-                    float h = 8f + (float)rng.NextDouble() * 7f;
-                    float w = 4f + (float)rng.NextDouble() * 3f;
-                    var p = new Vector3(x, 0f, z + (float)(rng.NextDouble() - 0.5) * 8f);
-                    p.y = terrain.SampleHeight(p) + h * 0.5f;
-                    var tree = Box("Tree", root.transform, mat, GameLayers.Environment);
-                    tree.transform.SetPositionAndRotation(p, Quaternion.Euler(0f, (float)rng.NextDouble() * 360f, 0f));
-                    tree.transform.localScale = new Vector3(w, h, w);
-                    tree.isStatic = true;
-                    // ponytail: box canopy until tree models arrive (Quaternius CC0 pack); bushes grow underneath.
-                }
-            }
-        }
+        /// <summary>Windbreak belts of procedural trees along the tree rows (see TreeBuilder).</summary>
+        internal static void CreateTreeLines(Terrain terrain) =>
+            TreeBuilder.PlantBelts(terrain, WorldBuilder.TreeRows, 100f, Size - 100f, 42);
 
         static void CreateFlightGates(Terrain terrain)
         {

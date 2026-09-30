@@ -24,8 +24,8 @@ namespace ModernDrone.Video
         [Tooltip("Geometric-mean scene luminance treated as correctly exposed (metered: sunlit field from 50 m up 0.20, partly cloudy sky 0.27).")]
         [SerializeField] float referenceLuminance = 0.2f;
         [SerializeField] float minExposure = -1.5f;
-        [Tooltip("Upper limit is small so night scenes stay dark.")]
-        [SerializeField] float maxExposure = 0.7f;
+        [Tooltip("Upper limit is small so night scenes stay dark and dark tree lines or a burning hull do not wash out the field.")]
+        [SerializeField] float maxExposure = 0.35f;
         [Tooltip("Spring natural frequency, rad/s: higher adapts faster.")]
         [SerializeField] float frequency = 5f;
         [Tooltip("Spring damping ratio: below 1 overshoots.")]
