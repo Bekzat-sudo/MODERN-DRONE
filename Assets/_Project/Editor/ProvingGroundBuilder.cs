@@ -82,10 +82,12 @@ namespace ModernDrone.Editor
             go.layer = GameLayers.Terrain;
             go.isStatic = true;
             var terrain = go.GetComponent<Terrain>();
-            if (GraphicsSettings.currentRenderPipeline != null)
-                terrain.materialTemplate = GraphicsSettings.currentRenderPipeline.defaultTerrainMaterial;
+            terrain.materialTemplate = WorldBuilder.TerrainMaterial();
+            // Full shading to the map edge: the baked base map beyond basemapDistance shows the tiling again.
+            terrain.basemapDistance = 2500f;
             go.AddComponent<TerrainTreeInstancer>();
             WorldBuilder.Vegetate(terrain, 11);
+            WorldBuilder.Scar(terrain, 23);
             AssetDatabase.SaveAssets();
             return terrain;
         }

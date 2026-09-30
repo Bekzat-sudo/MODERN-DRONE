@@ -10,8 +10,9 @@ namespace ModernDrone.Editor
     /// <summary>
     /// Ground, vegetation, sky and light for the generated scenes. Photoscanned CC0 assets from Poly Haven (see CREDITS.md):
     /// ground textures, partly cloudy and overcast HDRI skies, bushes and a grass sprite rendered from a grass model in Blender.
-    /// Steppe with windbreak tree lines: grass fields with dry patches, bare mud, forest floor under the tree lines,
-    /// rock on steep slopes.
+    /// Steppe with windbreak tree lines: crop fields between the belts (ploughed, stubble, winter wheat, burnt, fallow
+    /// steppe), grass with dry patches, bare mud, forest floor under the tree lines, rock on steep slopes, shell craters.
+    /// Field textures and the crater decal are procedural (Tools/ground_textures.py).
     /// </summary>
     public static class WorldBuilder
     {
@@ -35,8 +36,10 @@ namespace ModernDrone.Editor
         // Humid air under a low cloud deck: 5 km (scene choice) - 76 % contrast at 350 m, 46 % at 1 km.
         const float OvercastVisibilityMetres = 5000f;
 
-        public const int Grass = 0, DryGrass = 1, Mud = 2, ForestFloor = 3, Rock = 4, GrassWide = 5;
-        const int LayerCount = 6;
+        // The first four layers (base terrain pass) are sampled without visible repetition (TerrainNoTile shader).
+        public const int Grass = 0, DryGrass = 1, GrassWide = 2, Mud = 3, ForestFloor = 4, Rock = 5;
+        public const int Plowed = 6, Stubble = 7, Wheat = 8, Burnt = 9;
+        const int LayerCount = 10;
 
         /// <summary>Tree line rows (z, m) shared by the painter, the vegetation and the tree lines themselves.</summary>
         public static readonly float[] TreeRows = { 350f, 700f, 1300f, 1650f };
@@ -48,12 +51,50 @@ namespace ModernDrone.Editor
             Layer("Grass", "aerial_grass_rock", 27f, new Color(0.9f, 1f, 0.84f)),
             // Same scan, sun-bleached: dry-grass patches of a steppe field.
             Layer("DryGrass", "aerial_grass_rock", 23f, new Color(1.08f, 1.02f, 0.84f)),
+            // The grass scan again at a different scale and a greener tone, blended in by noise to break the tiling.
+            Layer("GrassWide", "aerial_grass_rock", 71f, new Color(0.8f, 0.97f, 0.76f)),
             Layer("Mud", "brown_mud_02", 5f, Color.white),
             Layer("ForestFloor", "forrest_ground_01", 5f, Color.white),
             Layer("Rock", "rocky_trail", 6f, Color.white),
-            // The grass scan again at a different scale and a greener tone, blended in by noise to break the tiling.
-            Layer("GrassWide", "aerial_grass_rock", 71f, new Color(0.8f, 0.97f, 0.76f))
+            // Crop fields; rows run along X, the long side of the fields between the belts.
+            Layer("Plowed", "field_plowed", 8f, Color.white),
+            Layer("Stubble", "field_stubble", 6f, Color.white),
+            Layer("Wheat", "field_wheat", 4f, Color.white),
+            Layer("Burnt", "field_burnt", 10f, Color.white),
         };
+
+        struct Field { public float x0, x1, z0, z1; public int crop; }
+
+        /// <summary>
+        /// Crop fields: the strips between the tree belts, each cut into one to three fields along X by grass field
+        /// roads, with a grass headland along the belts.
+        /// </summary>
+        static List<Field> Fields(float size, System.Random rng)
+        {
+            var edges = new List<float> { 40f };
+            edges.AddRange(TreeRows);
+            edges.Add(size - 40f);
+            int[] crops = { Plowed, Stubble, Wheat, Burnt, -1 };      // -1: fallow steppe
+            float[] weights = { 0.28f, 0.25f, 0.25f, 0.08f, 0.14f };
+            var fields = new List<Field>();
+            for (int i = 0; i < edges.Count - 1; i++)
+            {
+                float z0 = edges[i] + 18f, z1 = edges[i + 1] - 18f;
+                if (z1 - z0 < 60f) continue;
+                var cuts = new List<float> { 40f, size - 40f };
+                int n = rng.Next(3);
+                for (int k = 0; k < n; k++) cuts.Add(300f + (float)rng.NextDouble() * (size - 600f));
+                cuts.Sort();
+                for (int k = 0; k < cuts.Count - 1; k++)
+                {
+                    var f = new Field { x0 = cuts[k] + 4f, x1 = cuts[k + 1] - 4f, z0 = z0, z1 = z1, crop = -1 };
+                    double pick = rng.NextDouble();
+                    for (int c = 0; c < crops.Length; c++) { if ((pick -= weights[c]) <= 0) { f.crop = crops[c]; break; } }
+                    fields.Add(f);
+                }
+            }
+            return fields;
+        }
 
         static TerrainLayer Layer(string name, string scan, float tile, Color tint)
         {
@@ -67,7 +108,10 @@ namespace ModernDrone.Editor
             layer.tileSize = new Vector2(tile, tile);
             layer.smoothness = 0f;
             layer.metallic = 0f;
-            layer.diffuseRemapMax = new Vector4(tint.r, tint.g, tint.b, 1f);
+            // The grass scan is contrasty; squeezing its range hides the repeat from the air.
+            float floor = scan == "aerial_grass_rock" ? 0.3f : 0f;
+            layer.diffuseRemapMin = new Vector4(tint.r * floor, tint.g * floor, tint.b * floor, 0f);
+            layer.diffuseRemapMax = new Vector4(tint.r * (1f - floor * 0.4f), tint.g * (1f - floor * 0.4f), tint.b * (1f - floor * 0.4f), 1f);
             if (created) AssetDatabase.CreateAsset(layer, path); else EditorUtility.SetDirty(layer);
             return layer;
         }
@@ -89,7 +133,7 @@ namespace ModernDrone.Editor
             return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
         }
 
-        /// <summary>Splat map: grass base, dry patches, mud spots, forest floor under the tree lines, rock on slopes.</summary>
+        /// <summary>Splat map: crop fields, grass base, dry patches, mud spots, forest floor under the tree lines, rock on slopes.</summary>
         public static void Paint(TerrainData data, int seed)
         {
             int res = data.alphamapResolution;
@@ -97,6 +141,7 @@ namespace ModernDrone.Editor
             var rng = new System.Random(seed);
             float ox = rng.Next(0, 10000), oz = rng.Next(0, 10000);
             float size = data.size.x;
+            var fields = Fields(size, rng);
             for (int z = 0; z < res; z++)
             for (int x = 0; x < res; x++)
             {
@@ -116,7 +161,23 @@ namespace ModernDrone.Editor
                 float dry = Mathf.Clamp01((patches - 0.55f) * 2.5f + (field - 0.5f) * 0.6f);
                 float wide = Mathf.Clamp01(0.5f + (field - 0.5f) * 2.5f);
                 float green = 1f - dry;
-                float[] w = { green * (1f - wide), dry, mud, forest * 2f, rock * 2f, green * wide };
+                float[] w = { green * (1f - wide), dry, green * wide, mud, forest * 2f, rock * 2f, 0f, 0f, 0f, 0f };
+
+                // Crop field: soft, slightly ragged edges; a second layer in large patches breaks the tiling.
+                float wx = u * size;
+                foreach (var f in fields)
+                {
+                    if (f.crop < 0 || wx < f.x0 - 8f || wx > f.x1 + 8f || wz < f.z0 - 8f || wz > f.z1 + 8f) continue;
+                    float edge = Mathf.Min(Mathf.Min(wx - f.x0, f.x1 - wx), Mathf.Min(wz - f.z0, f.z1 - wz)) + (fine - 0.5f) * 6f;
+                    float c = Mathf.Clamp01(edge / 5f) * (1f - Mathf.Clamp01(forest)) * (1f - rock);
+                    if (c <= 0f) break;
+                    for (int l = 0; l < 6; l++) w[l] *= 1f - c;
+                    int second = f.crop == Plowed ? Mud : f.crop == Stubble ? DryGrass : f.crop == Wheat ? Grass : Stubble;
+                    float mix = Mathf.Clamp01((patches - 0.6f) * 2.5f) * (f.crop == Burnt ? 0.7f : 0.45f);
+                    w[f.crop] += c * (1f - mix) * 3f;
+                    w[second] += c * mix * 3f;
+                    break;
+                }
                 float sum = 0f;
                 foreach (float f in w) sum += f;
                 for (int l = 0; l < LayerCount; l++) maps[z, x, l] = w[l] / sum;
@@ -223,6 +284,9 @@ namespace ModernDrone.Editor
             {
                 float cx = (float)rng.NextDouble() * size, cz = (float)rng.NextDouble() * size;
                 if (Vector2.Distance(new Vector2(cx, cz), new Vector2(size, size) * 0.5f) < 200f) continue; // keep the launch field open
+                int ax = Mathf.Clamp((int)(cx / size * (data.alphamapResolution - 1)), 0, data.alphamapResolution - 1);
+                int az = Mathf.Clamp((int)(cz / size * (data.alphamapResolution - 1)), 0, data.alphamapResolution - 1);
+                if (splat[az, ax, Grass] + splat[az, ax, GrassWide] + splat[az, ax, DryGrass] < 0.5f) continue; // not in crop fields
                 int n = 3 + rng.Next(8);
                 for (int i = 0; i < n; i++)
                     Add(cx + (float)(rng.NextDouble() - 0.5) * 12f, cz + (float)(rng.NextDouble() - 0.5) * 12f, 0.9f + (float)rng.NextDouble());
@@ -230,6 +294,91 @@ namespace ModernDrone.Editor
             data.SetTreeInstances(trees.ToArray(), true);
             terrain.treeDistance = 450f;
             terrain.treeBillboardDistance = 450f;
+        }
+
+        /// <summary>
+        /// Shell craters as decals: clusters beside the tree belts (positions there get shelled) and single craters
+        /// scattered over the fields, older ones fainter. Mortar (rim about 1.5-3 m) to artillery (4-7 m) sizes are
+        /// illustrative. The launch field around the centre is left clean.
+        /// </summary>
+        public static void Scar(Terrain terrain, int seed)
+        {
+            var data = terrain.terrainData;
+            var rng = new System.Random(seed);
+            float R() => (float)rng.NextDouble();
+            float size = data.size.x;
+            var centre = new Vector2(size, size) * 0.5f;
+            var mat = CraterMaterial();
+            var root = new GameObject("Craters").transform;
+            void Crater(float x, float z, float diameter, float fade)
+            {
+                if (x < 20f || z < 20f || x > size - 20f || z > size - 20f || Vector2.Distance(new Vector2(x, z), centre) < 180f) return;
+                var p = new Vector3(x, 0f, z);
+                p.y = terrain.SampleHeight(p) + terrain.transform.position.y;
+                var go = new GameObject("Crater");
+                go.transform.SetParent(root, false);
+                go.transform.SetPositionAndRotation(p + Vector3.up * 1.5f, Quaternion.Euler(90f, R() * 360f, 0f));
+                var dp = go.AddComponent<DecalProjector>();
+                dp.material = mat;
+                float s = diameter / 0.42f; // the texture's rim sits at 0.42 of its half-width
+                dp.size = new Vector3(s, s, 3f);
+                dp.pivot = new Vector3(0f, 0f, 1.5f);
+                dp.fadeFactor = fade;
+                dp.drawDistance = 900f;
+            }
+            float Diameter() => R() < 0.8f ? 1.5f + R() * 1.5f : 4f + R() * 3f;
+            for (int c = 0; c < 18; c++)
+            {
+                float row = TreeRows[rng.Next(TreeRows.Length)];
+                float cx = 150f + R() * (size - 300f), cz = row + (R() < 0.5f ? -1f : 1f) * (20f + R() * 50f);
+                int n = 4 + rng.Next(11);
+                for (int i = 0; i < n; i++)
+                    Crater(cx + (R() - 0.5f) * 50f, cz + (R() - 0.5f) * 30f, Diameter(), 0.6f + 0.4f * R());
+            }
+            for (int i = 0; i < 120; i++)
+                Crater(R() * size, R() * size, Diameter(), 0.35f + 0.55f * R());
+        }
+
+        static Material CraterMaterial()
+        {
+            const string path = "Assets/_Project/Art/Decals/Crater.mat";
+            var tex = DecalTexture("Assets/_Project/Art/Decals/Crater.png", false);
+            var nrm = DecalTexture("Assets/_Project/Art/Decals/Crater_nor.png", true);
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (mat == null)
+            {
+                mat = new Material(Shader.Find("Shader Graphs/Decal"));
+                AssetDatabase.CreateAsset(mat, path);
+            }
+            mat.SetTexture("Base_Map", tex);
+            mat.SetTexture("Normal_Map", nrm);
+            mat.SetFloat("Normal_Blend", 1f);
+            mat.enableInstancing = true;
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
+        static Texture2D DecalTexture(string path, bool normal)
+        {
+            var imp = (TextureImporter)AssetImporter.GetAtPath(path);
+            if (imp != null && (imp.wrapMode != TextureWrapMode.Clamp || (normal && imp.textureType != TextureImporterType.NormalMap) || (!normal && !imp.alphaIsTransparency)))
+            {
+                imp.wrapMode = TextureWrapMode.Clamp;
+                if (normal) imp.textureType = TextureImporterType.NormalMap; else imp.alphaIsTransparency = true;
+                imp.SaveAndReimport();
+            }
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+        }
+
+        /// <summary>Terrain material on the TerrainNoTile shader (URP Terrain Lit with repetition-free base layers).</summary>
+        public static Material TerrainMaterial()
+        {
+            const string path = Dir + "Ground/TerrainNoTile.mat";
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (mat != null) return mat;
+            mat = new Material(Shader.Find("ModernDrone/Terrain/Lit"));
+            AssetDatabase.CreateAsset(mat, path);
+            return mat;
         }
 
         /// <summary>Removes bushes and grass around a point (a vehicle or position placed on the terrain).</summary>
@@ -411,8 +560,8 @@ namespace ModernDrone.Editor
             color.contrast.Override(20f);      // Neutral is flatter than ACES
             color.saturation.Override(-16f);
             var balance = Get<WhiteBalance>();
-            balance.temperature.Override(-6f);
-            balance.tint.Override(2f);
+            balance.temperature.Override(-3f); // cooler turns chernozem mauve
+            balance.tint.Override(0f);
             var lgg = Get<LiftGammaGain>();
             lgg.lift.Override(new Vector4(1f, 1f, 1.02f, 0f)); // cool shadows
             lgg.gamma.Override(new Vector4(1f, 1f, 1f, -0.04f)); // slightly deeper midtones
