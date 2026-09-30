@@ -15,6 +15,10 @@ namespace ModernDrone.Drone
 
         public void SetProps(Transform[] propTransforms) => props = propTransforms;
 
+        /// <summary>Propeller transforms, front-right, front-left, rear-right, rear-left (for render-only copies).</summary>
+        public Transform[] Props => props;
+        public float MaxVisualSpin => maxVisualSpin;
+
         void LateUpdate()
         {
             if (drone == null) return;

@@ -63,6 +63,8 @@ namespace ModernDrone.Missions
         readonly System.Collections.Generic.List<(Vector3, Quaternion)> _impactPoses = new System.Collections.Generic.List<(Vector3, Quaternion)>();
         Transform _tracked;
         GameObject _ghost;
+        Transform[] _ghostProps = new Transform[0];
+        float _ghostPropSpin;
         readonly System.Collections.Generic.List<Behaviour> _hiddenLights = new System.Collections.Generic.List<Behaviour>();
         readonly System.Collections.Generic.List<Renderer> _hiddenFx = new System.Collections.Generic.List<Renderer>();
         Texture2D _noise;
@@ -289,6 +291,11 @@ namespace ModernDrone.Missions
 
                 var pose = _track.Sample(_replayTime);
                 _ghost.transform.SetPositionAndRotation(pose.position, pose.rotation);
+                // Motor speed is not recorded: props spin at a cruise rate that follows the replay (stopped when
+                // paused, backwards when scrubbing back, like rewound video).
+                for (int i = 0; i < _ghostProps.Length && i < ModernDrone.Drone.QuadMixer.Spin.Length; i++)
+                    if (_ghostProps[i] != null)
+                        _ghostProps[i].Rotate(0f, ModernDrone.Drone.QuadMixer.Spin[i] * _ghostPropSpin * _replayRate * Time.unscaledDeltaTime, 0f, Space.Self);
                 PoseVehicles(_replayTime);
                 Vector3 aim = Vector3.Lerp(focus, pose.position, 0.5f);
                 Vector3 camPos = MovedRecon(focus, reconPos);
@@ -345,20 +352,37 @@ namespace ModernDrone.Missions
             }
         }
 
-        /// <summary>Render-only copy of the drone's meshes (the drone's own scripts must not run on it).</summary>
+        /// <summary>
+        /// Render-only copy of the drone's meshes (the drone's own scripts must not run on it). Propeller meshes hang
+        /// under their own pivots, copied from PropVisuals, so the replay can spin them.
+        /// </summary>
         GameObject BuildGhost()
         {
             var root = new GameObject("Replay_Drone");
+            _ghostProps = new Transform[0];
             if (_tracked == null) return root;
-            var inverse = Quaternion.Inverse(_tracked.rotation);
+            root.transform.SetPositionAndRotation(_tracked.position, _tracked.rotation);
+            var visuals = _tracked.GetComponentInChildren<ModernDrone.Drone.PropVisuals>(true);
+            var props = visuals != null ? visuals.Props : new Transform[0];
+            _ghostPropSpin = visuals != null ? visuals.MaxVisualSpin * 0.6f : 0f;
+            _ghostProps = new Transform[props.Length];
+            for (int i = 0; i < props.Length; i++)
+            {
+                if (props[i] == null) continue;
+                _ghostProps[i] = new GameObject("Prop" + i).transform;
+                _ghostProps[i].SetPositionAndRotation(props[i].position, props[i].rotation);
+                _ghostProps[i].SetParent(root.transform, true);
+            }
             foreach (var mf in _tracked.GetComponentsInChildren<MeshFilter>(true))
             {
                 var mr = mf.GetComponent<MeshRenderer>();
                 if (mr == null || mf.sharedMesh == null) continue;
+                Transform parent = root.transform;
+                for (int i = 0; i < props.Length; i++)
+                    if (props[i] != null && mf.transform.IsChildOf(props[i])) { parent = _ghostProps[i]; break; }
                 var go = new GameObject(mf.name);
-                go.transform.SetParent(root.transform, false);
-                go.transform.localPosition = _tracked.InverseTransformPoint(mf.transform.position);
-                go.transform.localRotation = inverse * mf.transform.rotation;
+                go.transform.SetPositionAndRotation(mf.transform.position, mf.transform.rotation);
+                go.transform.SetParent(parent, true);
                 go.transform.localScale = mf.transform.lossyScale;
                 go.AddComponent<MeshFilter>().sharedMesh = mf.sharedMesh;
                 go.AddComponent<MeshRenderer>().sharedMaterials = mr.sharedMaterials;
