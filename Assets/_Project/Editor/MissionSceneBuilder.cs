@@ -62,7 +62,7 @@ namespace ModernDrone.Editor
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
             var terrain = ProvingGroundBuilder.CreateTerrain(Terrain02Path);
-            ProvingGroundBuilder.CreateLighting();
+            ProvingGroundBuilder.CreateLighting(overcast: true);
             ProvingGroundBuilder.CreateTreeLines(terrain);
             ProvingGroundBuilder.CreateSpawn(terrain);
 
@@ -148,7 +148,7 @@ namespace ModernDrone.Editor
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             var terrain = ProvingGroundBuilder.CreateTerrain(Terrain04Path);
-            ProvingGroundBuilder.CreateLighting();
+            ProvingGroundBuilder.CreateLighting(overcast: true);
             ProvingGroundBuilder.CreateTreeLines(terrain);
             ProvingGroundBuilder.CreateSpawn(terrain);
 
@@ -228,7 +228,7 @@ namespace ModernDrone.Editor
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             var terrain = ProvingGroundBuilder.CreateTerrain("Assets/_Project/Scenes/Mission_06_Terrain.asset");
-            ProvingGroundBuilder.CreateLighting();
+            ProvingGroundBuilder.CreateLighting(overcast: true);
             ProvingGroundBuilder.CreateTreeLines(terrain);
             ProvingGroundBuilder.CreateSpawn(terrain);
 

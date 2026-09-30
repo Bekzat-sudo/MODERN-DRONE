@@ -9,7 +9,7 @@ namespace ModernDrone.Editor
 {
     /// <summary>
     /// Ground, vegetation, sky and light for the generated scenes. Photoscanned CC0 assets from Poly Haven (see CREDITS.md):
-    /// ground textures, a partly cloudy HDRI sky, bushes and a grass sprite rendered from a grass model in Blender.
+    /// ground textures, partly cloudy and overcast HDRI skies, bushes and a grass sprite rendered from a grass model in Blender.
     /// Steppe with windbreak tree lines: grass fields with dry patches, bare mud, forest floor under the tree lines,
     /// rock on steep slopes.
     /// </summary>
@@ -17,6 +17,7 @@ namespace ModernDrone.Editor
     {
         const string Dir = "Assets/_Project/Art/Environment/";
         const string HdrPath = Dir + "Sky/kloofendal_48d_partly_cloudy_puresky_2k.hdr";
+        const string OvercastHdrPath = Dir + "Sky/kloofendal_overcast_puresky_2k.hdr";
 
         // Sun position measured on the HDRI (brightest texel, u 0.595 / v 0.766 in the equirectangular map):
         // 47.9 deg elevation; the Unity panoramic skybox maps it to this light direction.
@@ -24,11 +25,15 @@ namespace ModernDrone.Editor
         // Sky colour at the horizon, averaged over the HDRI's horizon rows: linear (0.43, 0.46, 0.56), i.e. this in sRGB,
         // so far terrain fades into the sky behind it.
         static readonly Color Horizon = new Color(0.69f, 0.71f, 0.78f);
+        // Same measurement on the overcast HDRI: linear (0.63, 0.66, 0.73).
+        static readonly Color OvercastHorizon = new Color(0.82f, 0.84f, 0.87f);
 
         // Haze as Beer-Lambert extinction from a meteorological visibility V (Koschmieder: sigma = 3.912 / V, contrast
         // threshold 2 %). 8 km is a hazy summer day over dusty steppe - a scene choice, not a measurement:
         // 84 % contrast left at 350 m (recon drone range), 61 % at 1 km, 38 % at 2 km.
         const float VisibilityMetres = 8000f;
+        // Humid air under a low cloud deck: 5 km (scene choice) - 76 % contrast at 350 m, 46 % at 1 km.
+        const float OvercastVisibilityMetres = 5000f;
 
         public const int Grass = 0, DryGrass = 1, Mud = 2, ForestFloor = 3, Rock = 4, GrassWide = 5;
         const int LayerCount = 6;
@@ -319,19 +324,23 @@ namespace ModernDrone.Editor
 
         // ------------------------------------------------------------------ sky and light
 
-        /// <summary>HDRI sky, a sun matching it, sky ambient and reflections, horizon-coloured haze and a post-processing volume.</summary>
-        public static void CreateLighting()
+        /// <summary>
+        /// HDRI sky, a sun matching it, sky ambient and reflections, horizon-coloured haze and a post-processing volume.
+        /// Overcast: the cloud deck scatters the direct beam, so the light is mostly sky ambient - the sun is kept
+        /// weak and neutral (faint, soft shadows only), and the haze is thicker. Intensities are art direction.
+        /// </summary>
+        public static void CreateLighting(bool overcast = false)
         {
             var sun = new GameObject("Sun").AddComponent<Light>();
             sun.type = LightType.Directional;
-            sun.intensity = 1.6f;
+            sun.intensity = overcast ? 0.3f : 1.6f;
             sun.shadows = LightShadows.Soft;
-            sun.shadowStrength = 0.85f;
-            sun.color = new Color(1f, 0.95f, 0.86f);
+            sun.shadowStrength = overcast ? 0.35f : 0.85f;
+            sun.color = overcast ? new Color(0.94f, 0.96f, 1f) : new Color(1f, 0.95f, 0.86f);
             sun.transform.rotation = SunRotation;
             RenderSettings.sun = sun;
 
-            RenderSettings.skybox = SkyMaterial();
+            RenderSettings.skybox = overcast ? SkyMaterial(OvercastHdrPath, "SkyOvercast") : SkyMaterial(HdrPath, "Sky");
             RenderSettings.ambientMode = AmbientMode.Skybox;
             RenderSettings.ambientIntensity = 1f;
             RenderSettings.defaultReflectionMode = DefaultReflectionMode.Skybox;
@@ -339,8 +348,8 @@ namespace ModernDrone.Editor
 
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Exponential;
-            RenderSettings.fogColor = Horizon;
-            RenderSettings.fogDensity = 3.912f / VisibilityMetres;
+            RenderSettings.fogColor = overcast ? OvercastHorizon : Horizon;
+            RenderSettings.fogDensity = 3.912f / (overcast ? OvercastVisibilityMetres : VisibilityMetres);
             DynamicGI.UpdateEnvironment();
 
             var volume = new GameObject("PostProcessing").AddComponent<Volume>();
@@ -348,16 +357,16 @@ namespace ModernDrone.Editor
             volume.sharedProfile = PostProfile();
         }
 
-        static Material SkyMaterial()
+        static Material SkyMaterial(string hdrPath, string name)
         {
-            const string path = Dir + "Sky/Sky.mat";
+            string path = Dir + "Sky/" + name + ".mat";
             var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
             if (mat == null)
             {
                 mat = new Material(Shader.Find("Skybox/Panoramic"));
                 AssetDatabase.CreateAsset(mat, path);
             }
-            var importer = (TextureImporter)AssetImporter.GetAtPath(HdrPath);
+            var importer = (TextureImporter)AssetImporter.GetAtPath(hdrPath);
             if (importer != null && importer.wrapModeU != TextureWrapMode.Repeat)
             {
                 importer.wrapModeU = TextureWrapMode.Repeat;
@@ -365,7 +374,7 @@ namespace ModernDrone.Editor
                 importer.mipmapEnabled = false; // mips make a seam where the panorama wraps
                 importer.SaveAndReimport();
             }
-            mat.SetTexture("_MainTex", AssetDatabase.LoadAssetAtPath<Texture2D>(HdrPath));
+            mat.SetTexture("_MainTex", AssetDatabase.LoadAssetAtPath<Texture2D>(hdrPath));
             mat.SetFloat("_Exposure", 1f);
             mat.SetFloat("_Rotation", 0f);
             EditorUtility.SetDirty(mat);

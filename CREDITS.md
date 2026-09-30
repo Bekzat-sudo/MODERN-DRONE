@@ -52,8 +52,8 @@
 
 ## Environment
 
-- Ground textures (aerial_grass_rock, brown_mud_02, forrest_ground_01, rocky_trail), sky HDRI
-  (kloofendal_48d_partly_cloudy_puresky), bushes (shrub_02) and grass (grass_bermuda_01) from
+- Ground textures (aerial_grass_rock, brown_mud_02, forrest_ground_01, rocky_trail), sky HDRIs
+  (kloofendal_48d_partly_cloudy_puresky, kloofendal_overcast_puresky), bushes (shrub_02) and grass (grass_bermuda_01) from
   [Poly Haven](https://polyhaven.com), licensed under [CC0](https://polyhaven.com/license).
   `Assets/_Project/Art/Environment/`; bushes decimated, grass rendered to a billboard sprite.
 

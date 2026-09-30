@@ -89,10 +89,10 @@ namespace ModernDrone.Editor
             return terrain;
         }
 
-        internal static void CreateLighting()
+        internal static void CreateLighting(bool overcast = false)
         {
             WorldBuilder.ConfigurePipeline();
-            WorldBuilder.CreateLighting();
+            WorldBuilder.CreateLighting(overcast);
         }
 
         /// <summary>Windbreak tree lines along field edges: the main cover in steppe terrain.</summary>
