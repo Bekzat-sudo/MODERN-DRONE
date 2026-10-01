@@ -51,8 +51,18 @@ namespace ModernDrone.Vehicles
             fx.OnStart(f =>
             {
                 Shockwaves.Emit(position, size);
-                // A puff of smoke the size of the cloud hides what is behind it for a while.
-                SmokeVolumes.Add(position + Vector3.up * 2f * size, 3.5f * Mathf.Sqrt(size) + 1.5f, kind == ExplosionKind.Era ? 0.25f : 0.6f, Time.time + 9f);
+                // The burst's smoke and dust hide what is behind it for a while, by kind (SmokeVolumes.Cloud), and its
+                // flash whites out thermal sights looking at it.
+                SmokeVolumes.Add(kind switch
+                {
+                    ExplosionKind.Air => SmokeVolumes.Kind.AirBurst,
+                    ExplosionKind.Era => SmokeVolumes.Kind.Era,
+                    ExplosionKind.Ground => SmokeVolumes.Kind.GroundBurst,
+                    ExplosionKind.Fuel => SmokeVolumes.Kind.Fuel,
+                    ExplosionKind.Ammo => SmokeVolumes.Kind.Fuel,
+                    _ => SmokeVolumes.Kind.VehicleBurst,
+                }, position + Vector3.up * size, size);
+                SmokeVolumes.AddFlash(position, size);
                 if (ground && kind != ExplosionKind.Air) Scorch(position, size, kind);
                 if (kind == ExplosionKind.Ammo) FxDebris.Throw(position, 6, 22f, 1.2f);
                 else if (kind == ExplosionKind.Armor && size >= 0.8f) FxDebris.Throw(position, 2, 12f, 0.6f);
@@ -166,18 +176,18 @@ namespace ModernDrone.Vehicles
             stopper.Arm(after);
         }
 
-        /// <summary>Dense grey smoke cloud laid by a vehicle's smoke grenades; drifts and thins out over ~30 s.</summary>
+        /// <summary>Dense grey smoke cloud laid by a vehicle's smoke grenades; drifts and thins out over about a minute.</summary>
         public static void SmokeScreen(Vector3 position)
         {
             Register();
             var fx = FxPool.Spawn("smokescreen", position + Vector3.up * 1.5f, Quaternion.identity);
-            fx.Lifetime = 36f;
+            fx.Lifetime = 70f;
             SetWind(fx, 0.6f);
-            // Screening grenades build a wall a few tens of metres wide within seconds (abstract density).
+            // Screening grenades build a wall of ~10 m clouds within 1-2 s along the wind (SmokeVolumes.Cloud, Screen).
             fx.OnStart(f =>
             {
                 for (int i = 0; i < 4; i++)
-                    SmokeVolumes.Add(position + Wind.Current * (2f + i * 3f) + Vector3.up * 3f, 9f, 1.5f, Time.time + 28f);
+                    SmokeVolumes.Add(SmokeVolumes.Kind.Screen, position + Wind.Current * (2f + i * 3f) + Vector3.up * 3f, 1f);
             });
         }
 
@@ -353,10 +363,12 @@ namespace ModernDrone.Vehicles
             var root = new GameObject("VFX_SmokeScreen");
             var smoke = Smoke(root.transform, "Smoke", FxAssets.Smoke, new Color(0.78f, 0.79f, 0.76f), 7f, 0, 24f, alpha: 1f);
             var main = smoke.main;
-            main.duration = 6f;
+            // Grenades burn for a while: the cloud is fed for ~25 s and drifts off over the next half minute
+            // (it screens for up to 1-2 min in calm air, less in wind: SmokeVolumes.Cloud).
+            main.duration = 25f;
             main.startSpeed = new ParticleSystem.MinMaxCurve(2f, 6f);
             var emission = smoke.emission;
-            emission.rateOverTime = 7f;
+            emission.rateOverTime = 3f;
             emission.SetBursts(new[] { new ParticleSystem.Burst(0f, 16) });
             var shape = smoke.shape;
             shape.shapeType = ParticleSystemShapeType.Hemisphere;
@@ -643,46 +655,81 @@ namespace ModernDrone.Vehicles
         }
 
         static readonly System.Collections.Generic.List<Vector3> _treeHits = new System.Collections.Generic.List<Vector3>();
+        static TerrainData _treeData;
+        static Vector3[] _crowns = new Vector3[0];
 
-        /// <summary>Crown centres of terrain trees within <paramref name="reach"/>, nearest first.</summary>
+        /// <summary>Crown centres of terrain trees within <paramref name="reach"/>, nearest first (positions cached per terrain).</summary>
         static System.Collections.Generic.List<Vector3> TreesNear(Terrain terrain, Vector3 p, float reach)
         {
-            _treeHits.Clear();
             var data = terrain.terrainData;
-            Vector3 origin = terrain.transform.position, size = data.size;
-            foreach (var inst in data.treeInstances)
+            if (_treeData != data || _crowns.Length != data.treeInstanceCount)
             {
-                Vector3 w = origin + Vector3.Scale(inst.position, size);
-                if ((w - p).sqrMagnitude > reach * reach) continue;
-                _treeHits.Add(w + Vector3.up * Mathf.Max(3f, 9f * inst.heightScale));
+                _treeData = data;
+                var trees = data.treeInstances;
+                Vector3 origin = terrain.transform.position, size = data.size;
+                _crowns = new Vector3[trees.Length];
+                for (int i = 0; i < trees.Length; i++)
+                    _crowns[i] = origin + Vector3.Scale(trees[i].position, size) + Vector3.up * Mathf.Max(3f, 9f * trees[i].heightScale);
             }
+            _treeHits.Clear();
+            float r2 = reach * reach;
+            foreach (var c in _crowns)
+                if ((c - p).sqrMagnitude <= r2 + 81f) _treeHits.Add(c);
             _treeHits.Sort((a, b) => (a - p).sqrMagnitude.CompareTo((b - p).sqrMagnitude));
             return _treeHits;
         }
 
-        /// <summary>Gives the smoke of a fresh effect the current wind (per system: low smoke drifts slower, log profile).</summary>
+        // Smoke picks up the wind over its first seconds and moves faster higher up; rising slows as it cools and mixes.
+        static readonly AnimationCurve WindRamp = new AnimationCurve(new Keyframe(0f, 0.15f), new Keyframe(0.25f, 0.8f), new Keyframe(1f, 1.3f));
+        static readonly AnimationCurve RiseRamp = new AnimationCurve(new Keyframe(0f, 1f), new Keyframe(1f, 0.45f));
+        // Per pooled effect: its drifting systems and their buoyant rise (worked out once, the effect is reused).
+        static readonly System.Collections.Generic.Dictionary<FxEffect, (ParticleSystem ps, float rise)[]> _drifting =
+            new System.Collections.Generic.Dictionary<FxEffect, (ParticleSystem, float)[]>();
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetCaches()
+        {
+            _drifting.Clear();
+            _treeData = null;
+            UnityEngine.SceneManagement.SceneManager.sceneUnloaded -= OnSceneUnloaded;
+            UnityEngine.SceneManagement.SceneManager.sceneUnloaded += OnSceneUnloaded;
+        }
+
+        static void OnSceneUnloaded(UnityEngine.SceneManagement.Scene _) => _drifting.Clear();
+
+        static (ParticleSystem ps, float rise)[] Drifting(FxEffect fx)
+        {
+            if (_drifting.TryGetValue(fx, out var list) && list.Length > 0 && list[0].ps != null) return list;
+            var found = new System.Collections.Generic.List<(ParticleSystem, float)>();
+            string root = fx.name;
+            foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>(true))
+            {
+                string n = ps.name;
+                if (!n.Contains("Smoke") && !n.Contains("Dust") && n != "DirtColumn") continue;
+                // Buoyant rise: a fire's plume climbs a few m/s (hot gas), a blast's cloud less, dust hardly (abstract).
+                float rise = n.Contains("Dust") || n == "DirtColumn" ? 0.2f
+                    : root.Contains("Fire") || root.Contains("CookOff") || root.Contains("Seep") ? 2.6f
+                    : root.Contains("Explosion") ? 1.3f : 0.5f;
+                found.Add((ps, rise));
+            }
+            return _drifting[fx] = found.ToArray();
+        }
+
+        /// <summary>Gives the smoke of an effect the current wind (low smoke drifts slower: log profile).</summary>
         static void SetWind(FxEffect fx, float factor = 1f)
         {
             Vector3 w = Wind.Current * factor;
-            float h = Mathf.Max(2f, fx.transform.position.y - (Terrain.activeTerrain != null ? Terrain.activeTerrain.SampleHeight(fx.transform.position) : 0f) + 4f);
+            Vector3 p = fx.transform.position;
+            float h = Mathf.Max(2f, p.y - (Terrain.activeTerrain != null ? Terrain.activeTerrain.SampleHeight(p) : 0f) + 4f);
             w *= Wind.HeightFactor(h);
-            foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>(true))
+            foreach (var (ps, rise) in Drifting(fx))
             {
-                if (!ps.name.Contains("Smoke") && !ps.name.Contains("Dust") && ps.name != "DirtColumn") continue;
                 var vel = ps.velocityOverLifetime;
                 vel.enabled = true;
                 vel.space = ParticleSystemSimulationSpace.World;
-                // Smoke picks up the wind over its first seconds (curve), and moves faster higher up.
-                var ramp = new AnimationCurve(new Keyframe(0f, 0.15f), new Keyframe(0.25f, 0.8f), new Keyframe(1f, 1.3f));
-                vel.x = new ParticleSystem.MinMaxCurve(w.x, ramp);
-                // Buoyant rise: a fire's plume climbs a few m/s (hot gas), a blast's cloud less, dust hardly
-                // (look values, abstract), slowing as the smoke cools and mixes.
-                string root = fx.name;
-                float rise = ps.name.Contains("Dust") || ps.name == "DirtColumn" ? 0.2f
-                    : root.Contains("Fire") || root.Contains("CookOff") || root.Contains("Seep") ? 2.6f
-                    : root.Contains("Explosion") ? 1.3f : 0.5f;
-                vel.y = new ParticleSystem.MinMaxCurve(rise, new AnimationCurve(new Keyframe(0f, 1f), new Keyframe(1f, 0.45f)));
-                vel.z = new ParticleSystem.MinMaxCurve(w.z, ramp);
+                vel.x = new ParticleSystem.MinMaxCurve(w.x, WindRamp);
+                vel.y = new ParticleSystem.MinMaxCurve(rise, RiseRamp);
+                vel.z = new ParticleSystem.MinMaxCurve(w.z, WindRamp);
             }
         }
 
@@ -865,6 +912,9 @@ namespace ModernDrone.Vehicles
         float _left = -1f;
 
         public void Arm(float seconds) => _left = seconds;
+
+        // Pooled: the next user of this effect must not inherit the timer.
+        void OnDisable() => _left = -1f;
 
         void Update()
         {

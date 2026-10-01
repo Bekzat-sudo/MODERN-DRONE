@@ -49,6 +49,8 @@ namespace ModernDrone.Vehicles
         readonly List<int> _blown = new List<int>();
         readonly Dictionary<VehicleFire, Burning> _burning = new Dictionary<VehicleFire, Burning>();
         readonly List<FxEffect> _jets = new List<FxEffect>();
+        // Wreck fire and smoke after destruction (not tied to a VehicleFire).
+        readonly List<FxEffect> _wreck = new List<FxEffect>();
         static int _nextSmokeId = 1000;
         readonly int _smokeId = _nextSmokeId += 2;
         FireVent _ring;
@@ -185,7 +187,7 @@ namespace ModernDrone.Vehicles
             {
                 // Spilled fuel burns on the ground under the hull: already outside.
                 float size = Mathf.Clamp(fire.Radius * 0.5f, 0.8f, 2f);
-                b.flames.Add((null, SimpleVfx.Fire(transform, fire.Position, size)));
+                b.flames.Add((null, Own(SimpleVfx.Fire(transform, fire.Position, size))));
                 return;
             }
             if (Combustion.Of(fire.Kind).violent) BlowHatches(fire);
@@ -200,7 +202,7 @@ namespace ModernDrone.Vehicles
             {
                 var vent = _vents[i];
                 vent.Hatch.Blow(Random.Range(380f, 700f));
-                _jets.Add(SimpleVfx.CookOff(vent.transform, vent.transform.position, Random.Range(5f, 10f), vent.transform.up, 1f));
+                _jets.Add(Own(SimpleVfx.CookOff(vent.transform, vent.transform.position, Random.Range(5f, 10f), vent.transform.up, 1f)));
             }
         }
 
@@ -213,7 +215,7 @@ namespace ModernDrone.Vehicles
             for (int i = b.flames.Count - 1; i >= 0; i--)
             {
                 var (vent, fx) = b.flames[i];
-                if (_shares.Exists(s => _vents[s.index] == vent)) continue;
+                if (Chosen(vent)) continue;
                 if (fx != null) fx.StopEmitting();
                 b.flames.RemoveAt(i);
             }
@@ -221,17 +223,17 @@ namespace ModernDrone.Vehicles
             foreach (var (index, share) in _shares)
             {
                 var vent = _vents[index];
-                if (b.flames.Exists(f => f.vent == vent)) continue;
+                if (HasFlames(b, vent)) continue;
                 // Flame size: the fire's heat release through this opening (abstract scale, 1 = a hatch-sized fire).
                 float size = Mathf.Clamp(Mathf.Sqrt(b.fire.Intensity * share) * Mathf.Lerp(0.45f, 1.4f, Mathf.Clamp01(vent.Area / 1.2f)), 0.3f, 2.2f);
-                b.flames.Add((vent, SimpleVfx.Fire(vent.transform, vent.transform.position, size, vent.transform.up, black)));
+                b.flames.Add((vent, Own(SimpleVfx.Fire(vent.transform, vent.transform.position, size, vent.transform.up, black))));
             }
             if (_shares.Count == 0)
             {
                 if (b.seep == null || !b.seep.isActiveAndEnabled)
                 {
                     int s = VentPicker.Seep(b.fire.Position, VentInfo());
-                    if (s >= 0) b.seep = SimpleVfx.Seep(_vents[s].transform, _vents[s].transform.position, black);
+                    if (s >= 0) b.seep = Own(SimpleVfx.Seep(_vents[s].transform, _vents[s].transform.position, black));
                 }
             }
             else if (b.seep != null)
@@ -278,10 +280,11 @@ namespace ModernDrone.Vehicles
                 foreach (var j in _jets) if (j != null && j.isActiveAndEnabled && !j.transform.IsChildOf(transform)) j.StopEmitting(3f);
                 _heat = 1f;
                 // Propellant keeps burning after the blast: a flame column out of the open turret ring, then the wreck burns.
-                SimpleVfx.CookOff(transform, ring, Random.Range(10f, 16f), Vector3.up, 1.8f);
+                _jets.Add(Own(SimpleVfx.CookOff(transform, ring, Random.Range(10f, 16f), Vector3.up, 1.8f)));
                 SimpleVfx.ScatterFires(transform.position, Random.Range(3, 6), 9f);
                 foreach (var b in _burning.Values) Assign(b);
-                var wreck = SimpleVfx.Fire(transform, ring, 1.8f, Vector3.up, true);
+                var wreck = Own(SimpleVfx.Fire(transform, ring, 1.8f, Vector3.up, true));
+                _wreck.Add(wreck);
                 Stop(wreck, wreckBurn);
             }
             // Whatever still burns goes on for a few minutes, then dies down; the smoke outlives the flames.
@@ -293,9 +296,44 @@ namespace ModernDrone.Vehicles
             }
             if (cause == DestructionCause.BurnedOut)
             {
-                var smoke = SimpleVfx.Seep(transform, transform.position + Vector3.up * 2f, true, 1.6f);
+                var smoke = Own(SimpleVfx.Seep(transform, transform.position + Vector3.up * 2f, true, 1.6f));
+                _wreck.Add(smoke);
                 Stop(smoke, wreckBurn);
             }
+        }
+
+        /// <summary>
+        /// Keeps a reference to a pooled effect only while it is ours: the pool may recycle it for someone else (a
+        /// barrage past the cap), and then it is dropped from every list here.
+        /// </summary>
+        FxEffect Own(FxEffect fx)
+        {
+            if (fx != null) fx.Released += Forget;
+            return fx;
+        }
+
+        void Forget(FxEffect fx)
+        {
+            foreach (var b in _burning.Values)
+            {
+                for (int i = b.flames.Count - 1; i >= 0; i--)
+                    if (b.flames[i].fx == fx) b.flames.RemoveAt(i);
+                if (b.seep == fx) b.seep = null;
+            }
+            _jets.Remove(fx);
+            _wreck.Remove(fx);
+        }
+
+        bool Chosen(FireVent vent)
+        {
+            foreach (var s in _shares) if (_vents[s.index] == vent) return true;
+            return false;
+        }
+
+        static bool HasFlames(Burning b, FireVent vent)
+        {
+            foreach (var f in b.flames) if (f.vent == vent) return true;
+            return false;
         }
 
         static void Stop(FxEffect fx, float after)
@@ -349,6 +387,12 @@ namespace ModernDrone.Vehicles
                     flames += fx.Scale;
                     hot = fx.transform.position;
                 }
+            foreach (var fx in _wreck)
+            {
+                if (fx == null || !fx.isActiveAndEnabled) continue;
+                SimpleVfx.UpdateWind(fx);
+                if (fx.Key == "fire") { flames += fx.Scale; hot = fx.transform.position; }
+            }
             // The smoke column downwind of the fire hides what is behind it (two stacked spheres, density abstract).
             if (flames > 0.1f)
             {

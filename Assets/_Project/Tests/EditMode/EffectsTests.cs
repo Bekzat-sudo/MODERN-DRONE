@@ -116,23 +116,95 @@ namespace ModernDrone.Tests
             Assert.AreEqual(0f, Shockwaves.Push(1f, 10f, Shockwaves.Ring + 0.1f));
         }
 
+        /// <summary>Seconds a target 50 m straight behind a fresh cloud stays hidden (0.1 s steps).</summary>
+        static float HiddenFor(SmokeVolumes.Kind kind, bool thermal)
+        {
+            SmokeVolumes.Clear();
+            var cloud = new Vector3(0f, 2f, 0f);
+            SmokeVolumes.Add(SmokeVolumes.Cloud(kind, cloud, 1f, 0f, Vector3.zero));
+            var eye = new Vector3(0f, 2f, -60f);
+            float hidden = 0f;
+            for (float t = 0f; t < 60f; t += 0.1f)
+            {
+                // Aim at where the cloud is (it rises): the worst case for the observer.
+                var target = SmokeVolumes.Volumes[0].CentreAt(t) + new Vector3(0f, 0f, 50f);
+                if (!SmokeVolumes.Visible(eye, target, thermal, t)) hidden = t;
+            }
+            SmokeVolumes.Clear();
+            return hidden;
+        }
+
         [Test]
-        public void SmokeBlocksTheViewButNotTheThermalSight()
+        public void AirBurstHidesForAboutTwoSeconds()
+        {
+            float t = HiddenFor(SmokeVolumes.Kind.AirBurst, false);
+            Assert.That(t, Is.InRange(1f, 3f));
+            Assert.AreEqual(0f, HiddenFor(SmokeVolumes.Kind.AirBurst, true), 1e-4f, "soot barely stops a thermal sight");
+        }
+
+        [Test]
+        public void GroundBurstHidesForSecondsThenHangsAsHaze()
+        {
+            float t = HiddenFor(SmokeVolumes.Kind.GroundBurst, false);
+            Assert.That(t, Is.InRange(3f, 6f));
+            Assert.Less(HiddenFor(SmokeVolumes.Kind.GroundBurst, true), t, "dust hinders a thermal sight less than the eye");
+            // Thin haze still dims the view after 15 s, but is gone within a minute.
+            var v = SmokeVolumes.Cloud(SmokeVolumes.Kind.GroundBurst, Vector3.zero, 1f, 0f, Vector3.zero);
+            Assert.Greater(v.DensityAt(15f), 0f);
+            Assert.AreEqual(0f, v.DensityAt(61f));
+        }
+
+        [Test]
+        public void EraPuffIsGoneInAboutASecond()
+        {
+            Assert.That(HiddenFor(SmokeVolumes.Kind.Era, false), Is.LessThanOrEqualTo(1.2f));
+        }
+
+        [Test]
+        public void BiggerChargesMakeBiggerClouds()
+        {
+            var small = SmokeVolumes.Cloud(SmokeVolumes.Kind.GroundBurst, Vector3.zero, 1f, 0f, Vector3.zero);
+            var big = SmokeVolumes.Cloud(SmokeVolumes.Kind.GroundBurst, Vector3.zero, 8f, 0f, Vector3.zero);
+            Assert.AreEqual(2f, big.radius / small.radius, 1e-3f); // cube root of the charge
+        }
+
+        [Test]
+        public void SmokeIsBlownDownwind()
+        {
+            var v = SmokeVolumes.Cloud(SmokeVolumes.Kind.AirBurst, Vector3.zero, 1f, 0f, new Vector3(4f, 0f, 0f));
+            Assert.Greater(v.CentreAt(5f).x, 10f);
+        }
+
+        [Test]
+        public void FlashDazzlesThermalSightsForOneToThreeSeconds()
         {
             SmokeVolumes.Clear();
             try
             {
-                var a = new Vector3(0f, 2f, -50f);
-                var b = new Vector3(0f, 2f, 50f);
-                Assert.AreEqual(1f, SmokeVolumes.Transmittance(a, b), 1e-5f);
-                SmokeVolumes.Add(new Vector3(0f, 2f, 0f), 9f, 1.5f, float.MaxValue);
-                float visible = SmokeVolumes.Transmittance(a, b);
-                float thermal = SmokeVolumes.Transmittance(a, b, thermal: true);
-                Assert.Less(visible, SmokeVolumes.SeeThreshold);
-                Assert.Greater(thermal, SmokeVolumes.SeeThreshold);
-                // A line that passes beside the cloud is clear.
-                Assert.AreEqual(1f, SmokeVolumes.Transmittance(a + Vector3.right * 20f, b + Vector3.right * 20f), 1e-5f);
-                SmokeVolumes.Prune(float.MaxValue);
+                var eye = new Vector3(0f, 2f, -200f);
+                var target = new Vector3(3f, 2f, 0f); // just beside the burst
+                SmokeVolumes.AddFlash(Vector3.zero, 1f, 0f);
+                Assert.IsFalse(SmokeVolumes.Visible(eye, target, true, 0.5f));
+                Assert.IsTrue(SmokeVolumes.Visible(eye, target, false, 0.5f), "day optics are not whited out");
+                Assert.IsTrue(SmokeVolumes.Visible(eye, target, true, 3.1f));
+                Assert.IsTrue(SmokeVolumes.Visible(eye, new Vector3(150f, 2f, 0f), true, 0.5f), "looking away from the flash");
+            }
+            finally { SmokeVolumes.Clear(); }
+        }
+
+        [Test]
+        public void BurningColumnHidesWhileRefreshed()
+        {
+            SmokeVolumes.Clear();
+            try
+            {
+                var a = new Vector3(0f, 6f, -50f);
+                var b = new Vector3(0f, 6f, 50f);
+                Assert.AreEqual(1f, SmokeVolumes.Transmittance(a, b, false, 0f), 1e-5f);
+                SmokeVolumes.Set(1, new Vector3(0f, 6f, 0f), 7f, 0.45f, 10f);
+                Assert.Less(SmokeVolumes.Transmittance(a, b, false, 1f), SmokeVolumes.SeeThreshold);
+                Assert.Greater(SmokeVolumes.Transmittance(a, b, true, 1f), SmokeVolumes.SeeThreshold);
+                SmokeVolumes.Prune(11f);
                 Assert.AreEqual(0, SmokeVolumes.Volumes.Count);
             }
             finally { SmokeVolumes.Clear(); }

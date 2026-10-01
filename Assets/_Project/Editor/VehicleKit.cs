@@ -219,7 +219,7 @@ namespace ModernDrone.Editor
 
         /// <summary>
         /// Model nodes named Hatch_* (one per LOD copy) become one lid on a hinge: they are gathered under a pivot on the
-        /// lid's front edge (at the hull's axes) carrying a <see cref="Hatch"/>, with a <see cref="FireVent"/> in the
+        /// lid's own origin in the model, its hinge (at the hull's axes) carrying a <see cref="Hatch"/>, with a <see cref="FireVent"/> in the
         /// opening and a dark plate inside it that glows while the vehicle burns. Lid mass ~30 kg (estimate).
         /// </summary>
         static void SetupHatches(Transform root)
@@ -245,9 +245,10 @@ namespace ModernDrone.Editor
                     for (int i = 0; i < 8; i++)
                         b.Encapsulate(root.InverseTransformPoint(rb.center + Vector3.Scale(rb.extents, new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1))));
                 }
+                // The model's own origin of the lid is its hinge (Tools/Blender/t72_hatches.py puts it on the front edge).
                 var pivot = new GameObject(kv.Key + "_Hinge").transform;
                 pivot.SetParent(parent, false);
-                pivot.SetPositionAndRotation(root.TransformPoint(new Vector3(b.center.x, b.min.y, b.max.z)), root.rotation);
+                pivot.SetPositionAndRotation(parts[0].position, root.rotation);
                 foreach (var t in parts) t.SetParent(pivot, true);
                 pivot.gameObject.AddComponent<Hatch>().Configure(115f, 30f, 0.7f, Vector3.right);
 

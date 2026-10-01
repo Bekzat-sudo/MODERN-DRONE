@@ -1,7 +1,8 @@
 // Wind and blast-wave sway for VegetationLit (included in every pass after its vertex function).
 // Globals from ModernDrone.Core.Wind / Shockwaves:
 //   _WindVector (xyz wind at 10 m, m/s; w gustiness), _FxTime (game time, frozen with the world),
-//   _ShockCount, _Shocks[4] (xyz centre, w start time), _ShockParams[4] (x = strength, cube root of the charge).
+//   _Shocks[4] (xyz centre, w start time), _ShockParams[4] (x = strength, cube root of the charge; 0 = empty slot).
+//   The slots are a ring buffer: all four are checked, the front's age discards old ones.
 // The crown bends downwind with the square of the wind speed (drag) and the square of the height up the tree
 // (a cantilevered trunk), plus a slow sway and, for alpha-clipped leaves, a fast flutter. A blast front reaching
 // the tree at ~360 m/s shoves it away from the burst, then it swings back (ModernDrone.Core.Shockwaves.Push).
@@ -11,7 +12,6 @@
 
 float4 _WindVector;
 float _FxTime;
-int _ShockCount;
 float4 _Shocks[4];
 float4 _ShockParams[4];
 
@@ -36,8 +36,9 @@ float3 VegetationDisplaceOS(float3 positionOS)
                                                       sin(_FxTime * 8.2 + dot(positionWS, float3(2.7, 1.1, 2.3)))) * h;
     #endif
 
-    for (int i = 0; i < _ShockCount && i < 4; i++)
+    [unroll] for (int i = 0; i < 4; i++)
     {
+        if (_ShockParams[i].x <= 0.0) continue;
         float3 away = pivot - _Shocks[i].xyz;
         float d = length(away);
         float t = _FxTime - _Shocks[i].w - d / 360.0;

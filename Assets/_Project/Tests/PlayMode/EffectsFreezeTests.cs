@@ -48,5 +48,20 @@ namespace ModernDrone.Tests
             Assert.AreEqual(2, built);
             Assert.AreEqual(2, FxPool.LiveCount("test_cap"));
         }
+    
+
+        [UnityTest]
+        public IEnumerator PooledEffect_DoesNotInheritThePreviousStopTimer()
+        {
+            FxPool.Register("test_stop", () => new GameObject("VFX_TestStop"), 1);
+            var first = FxPool.Spawn("test_stop", Vector3.zero, Quaternion.identity);
+            first.gameObject.AddComponent<FxStopAfter>().Arm(0.2f);
+            first.Release();
+            var second = FxPool.Spawn("test_stop", Vector3.zero, Quaternion.identity);
+            Assert.AreSame(first, second); // the same instance, handed to a new owner
+            for (float t = 0f; t < 0.5f; t += Time.deltaTime) yield return null;
+            Assert.AreEqual(0f, second.Lifetime, "a stale timer stopped the new owner's effect");
+            Assert.AreEqual(1, FxPool.LiveCount("test_stop"));
+        }
     }
 }

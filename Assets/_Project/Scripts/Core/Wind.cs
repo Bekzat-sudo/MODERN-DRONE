@@ -59,9 +59,22 @@ namespace ModernDrone.Core
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot() => Ensure();
 
-        // Play mode may start without a domain reload: drop blast waves and smoke from the last session.
+        // Play mode may start without a domain reload, and Time.time runs on across scene loads: drop blast waves and
+        // smoke from the last session and from the last mission.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void ResetStatics()
+        {
+            Clear();
+            UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnSceneLoaded;
+            UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoaded;
+        }
+
+        static void OnSceneLoaded(UnityEngine.SceneManagement.Scene scene, UnityEngine.SceneManagement.LoadSceneMode mode)
+        {
+            if (mode == UnityEngine.SceneManagement.LoadSceneMode.Single) Clear();
+        }
+
+        static void Clear()
         {
             Shockwaves.Clear();
             SmokeVolumes.Clear();

@@ -8,7 +8,8 @@ namespace ModernDrone.Core
     /// about the speed of sound (Kinney and Graham, "Explosive Shocks in Air": Mach 1.1 at a scaled distance of
     /// ~3 m/kg^(1/3)). The push is an abstract measure (1 = bends a tree crown fully): a gameplay choice scaled with the
     /// cube root of the charge size (Hopkinson-Cranz scaling, en.wikipedia.org/wiki/Blast_wave), falling off as 1/r.
-    /// Shader globals: _ShockCount and _Shocks[4] (xyz = centre, w = start game time), _ShockParams[4] (x = strength).
+    /// Shader globals: _Shocks[4] (xyz = centre, w = start game time), _ShockParams[4] (x = strength, 0 = empty), a ring
+    /// buffer the shader walks in full (a front's age discards the old ones).
     /// </summary>
     public static class Shockwaves
     {
@@ -19,7 +20,6 @@ namespace ModernDrone.Core
 
         static readonly int ShocksId = Shader.PropertyToID("_Shocks");
         static readonly int ParamsId = Shader.PropertyToID("_ShockParams");
-        static readonly int CountId = Shader.PropertyToID("_ShockCount");
 
         static readonly Vector4[] _shocks = new Vector4[Max];
         static readonly Vector4[] _params = new Vector4[Max];
@@ -50,15 +50,11 @@ namespace ModernDrone.Core
             return strength * Mathf.Exp(-t * 3f) * Mathf.Cos(t * 7f) * Mathf.Clamp01(t * 30f);
         }
 
-        /// <summary>Active fronts for the vegetation shaders; old ones are dropped by the shader by their age.</summary>
+        /// <summary>The fronts for the vegetation shaders (old ones are dropped there by their age).</summary>
         public static void Publish(float time)
         {
-            int count = 0;
-            for (int i = 0; i < Max; i++)
-                if (_params[i].x > 0f && time - _shocks[i].w < 4f) count++;
             Shader.SetGlobalVectorArray(ShocksId, _shocks);
             Shader.SetGlobalVectorArray(ParamsId, _params);
-            Shader.SetGlobalInt(CountId, count);
         }
 
         public static void Clear()

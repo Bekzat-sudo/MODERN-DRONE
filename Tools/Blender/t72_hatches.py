@@ -100,11 +100,11 @@ for h in HATCHES:
     lid.parent = obj
     lid.matrix_world = world
 
-    # Origin on the hinge: front (lowest y) edge of the lid, at its base.
+    # Origin on the hinge: front (lowest y) edge of the lid, at its base (the game opens lids about this point).
     pts = [lid.matrix_world @ v.co for v in lid.data.vertices]
     ymin = min(p.y for p in pts)
     zlow = min(p.z for p in pts)
-    hinge = (cx, ymin, zlow) if name != "Hatch_Driver" else (cx, cy, zlow)
+    hinge = (cx, ymin, zlow)
     bpy.context.scene.cursor.location = hinge
     bpy.ops.object.select_all(action="DESELECT")
     lid.select_set(True)

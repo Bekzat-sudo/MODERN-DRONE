@@ -293,6 +293,9 @@ namespace ModernDrone.Vehicles
                 Follower(_roarSrc != null ? _roarSrc : _crackleSrc);
             }
 
+            // The host is a pooled jet: when it is pooled again the sound goes with it.
+            void OnDisable() => Destroy(gameObject);
+
             AudioSource Loop(AudioClip clip, float volume, float min)
             {
                 if (clip == null) return null;
