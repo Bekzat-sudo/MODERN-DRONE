@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ModernDrone.Core;
 using ModernDrone.Drone;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -105,8 +106,6 @@ namespace ModernDrone.UI
                 case 7: OsdRows(); break;
                 case 8: GraphicsRows(); break;
             }
-            _rows.Add(MenuRow.Header(""));
-            _rows.Add(MenuRow.Button("← Назад (сохранить)", () => { ControlSettings.Save(); Closed = true; }));
         }
 
         void DeviceRows()
@@ -119,14 +118,19 @@ namespace ModernDrone.UI
                 Adjust = CycleJoystick,
                 Activate = () => CycleJoystick(1)
             });
+            _rows[_rows.Count - 1].Note = "← → — выбрать другую аппаратуру, если подключено несколько.";
             _rows.Add(MenuRow.Info("Геймпад", () => Gamepad.current?.displayName ?? "не подключён"));
             _rows.Add(MenuRow.Choice("Режим при старте", new[] { "Acro", "Angle" }, () => (int)S.startMode, v => S.startMode = (FlightMode)v));
             _rows.Add(MenuRow.Header("Подключённые устройства"));
             foreach (var d in InputSystem.devices)
                 if (d is Joystick || d is Gamepad || d is Keyboard || d is Mouse)
-                    _rows.Add(MenuRow.Info("  " + d.displayName, () => d is Joystick ? "джойстик" : d is Gamepad ? "геймпад" : d is Keyboard ? "клавиатура" : "мышь"));
+                    _rows.Add(MenuRow.Info(d.displayName, () => d is Joystick ? "джойстик" : d is Gamepad ? "геймпад" : d is Keyboard ? "клавиатура" : "мышь"));
             _rows.Add(MenuRow.Header(""));
-            _rows.Add(MenuRow.Button("Сбросить все настройки управления", () => { ControlSettings.ResetToDefaults(); BuildRows(); }));
+            _rows.Add(new MenuRow("Сбросить все настройки управления")
+            {
+                Activate = () => { ControlSettings.ResetToDefaults(); BuildRows(); }, Danger = true,
+                Note = "Кнопки, оси, рейты, OSD и графика вернутся к значениям по умолчанию."
+            });
         }
 
         static void CycleJoystick(int dir)
@@ -144,7 +148,8 @@ namespace ModernDrone.UI
         {
             _rows.Add(MenuRow.Header("Мышь — тангаж и крен (виртуальный стик)"));
             _rows.Add(MenuRow.Slider("Чувствительность наклонов", () => S.mouseSensitivity * 1000f, v => S.mouseSensitivity = v / 1000f, 0.25f, 10f, 0.25f, "0.00"));
-            _rows.Add(MenuRow.Slider("Возврат в центр, /с (0 — держит)", () => S.mouseReturn, v => S.mouseReturn = v, 0f, 10f, 0.5f, "0.0"));
+            _rows.Add(MenuRow.Slider("Возврат в центр, /с", () => S.mouseReturn, v => S.mouseReturn = v, 0f, 10f, 0.5f, "0.0"));
+            _rows[_rows.Count - 1].Note = "Как быстро виртуальный стик сам возвращается в центр. 0 — держит положение, как стик без пружины.";
             _rows.Add(MenuRow.Choice("Тангаж: мышь вверх", new[] { "нос вниз (как стик FPV)", "нос вверх" }, () => S.mousePitchUpIsNoseUp ? 1 : 0, v => S.mousePitchUpIsNoseUp = v == 1));
             _rows.Add(MenuRow.Toggle("Инверсия крена", () => S.mouseInvertRoll, v => S.mouseInvertRoll = v));
             _rows.Add(MenuRow.Header("Клавиатура"));
@@ -152,7 +157,7 @@ namespace ModernDrone.UI
             _rows.Add(MenuRow.Slider("Сила рыскания", () => S.kbYaw, v => S.kbYaw = v, 0.1f, 1f, 0.05f));
             _rows.Add(MenuRow.Info("Колесо мыши", () => "газ ±"));
             _rows.Add(MenuRow.Info("Средняя кнопка мыши", () => "центр стика"));
-            _rows.Add(MenuRow.Info("Клавиши газа / рыскания", () => "вкладка «Кнопки»"));
+            _rows.Add(MenuRow.Info("Клавиши газа и рыскания", () => "вкладка «Кнопки»"));
         }
 
         void GamepadRows()
@@ -175,15 +180,20 @@ namespace ModernDrone.UI
         void JoystickRows()
         {
             _rows.Add(MenuRow.Info("Устройство", () => ControlInput.PreferredJoystick?.displayName ?? "не подключено"));
-            _rows.Add(MenuRow.Button("▶ Мастер калибровки", () =>
+            _rows.Add(new MenuRow("Мастер калибровки")
             {
-                var d = ControlInput.PreferredJoystick;
-                if (d != null) _wizard = new CalibrationWizard(d);
-            }));
+                Activate = () =>
+                {
+                    var d = ControlInput.PreferredJoystick;
+                    if (d != null) _wizard = new CalibrationWizard(d);
+                },
+                Enabled = () => ControlInput.PreferredJoystick != null,
+                Note = "Пошагово: стики в центр, крайние положения, тумблеры. Нужна подключённая аппаратура или джойстик."
+            });
             _rows.Add(MenuRow.Slider("Мёртвая зона", () => S.jsDeadband, v => S.jsDeadband = v, 0f, 0.1f, 0.005f, "0.000"));
             _rows.Add(MenuRow.Toggle("Арм тумблером (ось)", () => S.jsUseArmAxis, v => S.jsUseArmAxis = v));
             _rows.Add(MenuRow.Toggle("Режим тумблером (ось)", () => S.jsUseModeAxis, v => S.jsUseModeAxis = v));
-            _rows.Add(MenuRow.Header("Оси (← → инвертировать)"));
+            _rows.Add(MenuRow.Header("Оси"));
             AxisRow("Газ", () => S.jsThrottle, true);
             AxisRow("Крен", () => S.jsRoll, false);
             AxisRow("Тангаж", () => S.jsPitch, false);
@@ -204,13 +214,13 @@ namespace ModernDrone.UI
                     string val = v.HasValue ? v.Value.ToString("+0.00;-0.00", System.Globalization.CultureInfo.InvariantCulture) : "нет оси";
                     return $"{a.control}{(a.invert ? " (инв.)" : "")}  {val}";
                 },
-                Adjust = _ => axis().invert = !axis().invert
+                Adjust = _ => axis().invert = !axis().invert,
+                Note = "← → — инвертировать ось. Справа — назначенная ось и её текущее значение."
             });
         }
 
         void BindingRows()
         {
-            _rows.Add(MenuRow.Info("Enter/A — назначить; при ожидании кнопки Backspace — очистить", () => ""));
             foreach (PilotAction action in Enum.GetValues(typeof(PilotAction)))
             {
                 var a = action;
@@ -222,18 +232,21 @@ namespace ModernDrone.UI
                 _rows.Add(BindRow("  Джойстик / аппаратура", a, b => b.joystick, (b, v) => b.joystick = v, d => d is Joystick));
             }
             _rows.Add(MenuRow.Header(""));
-            _rows.Add(MenuRow.Button("Сбросить кнопки по умолчанию", () => { S.bindings = ControlSettings.DefaultBindings(); BuildRows(); }));
+            _rows.Add(new MenuRow("Сбросить кнопки по умолчанию") { Activate = () => { S.bindings = ControlSettings.DefaultBindings(); BuildRows(); }, Danger = true });
         }
 
         MenuRow BindRow(string label, PilotAction action, Func<ActionBinding, string> get, Action<ActionBinding, string> set, Func<InputDevice, bool> filter)
         {
-            return MenuRow.Button(label, () =>
+            var row = MenuRow.Button(label, () =>
             {
                 _captureLabel = $"{ActionName(action)} — {label.Trim()}";
                 _captureFilter = filter;
                 _captureStartFrame = Time.frameCount;
                 _capture = path => set(S.Binding(action), path);
             }, () => ControlInput.DisplayName(get(S.Binding(action))));
+            row.IsBinding = true;
+            row.Note = "Enter / A — назначить: нажмите нужную кнопку. Backspace во время ожидания — очистить.";
+            return row;
         }
 
         void PollCapture()
@@ -303,21 +316,24 @@ namespace ModernDrone.UI
             }));
             _rows.Add(MenuRow.Header("Изображение"));
             _rows.Add(MenuRow.Choice("Сглаживание", ModernDrone.Video.GraphicsQuality.AntiAliasingNames, () => S.antiAliasing, v => { S.antiAliasing = v; ControlSettings.NotifyChanged(); }));
-            _rows.Add(MenuRow.Slider("Разрешение рендера (STP или FSR 1.0 дотягивают до экрана)", () => S.renderScale, v => { S.renderScale = v; ControlSettings.NotifyChanged(); }, 0.5f, 1f, 0.05f, "0%"));
+            _rows.Add(MenuRow.Slider("Разрешение рендера", () => S.renderScale, v => { S.renderScale = v; ControlSettings.NotifyChanged(); }, 0.5f, 1f, 0.05f, "0%"));
+            _rows[_rows.Count - 1].Note = "Доля от разрешения экрана; STP или FSR 1.0 дотягивают картинку до экрана. Меньше — выше FPS.";
             _rows.Add(MenuRow.Header("Детализация"));
             _rows.Add(MenuRow.Choice("Тени", ModernDrone.Video.GraphicsQuality.LevelNames, () => S.shadowQuality, v => { S.shadowQuality = v; ControlSettings.NotifyChanged(); }));
             _rows.Add(MenuRow.Choice("Деревья и кусты", new[] { "низкая", "средняя", "высокая" }, () => S.vegetationDetail - 1, v => { S.vegetationDetail = v + 1; ControlSettings.NotifyChanged(); }));
             _rows.Add(MenuRow.Choice("Трава", ModernDrone.Video.GraphicsQuality.LevelNames, () => S.grassQuality, v => { S.grassQuality = v; ControlSettings.NotifyChanged(); }));
             _rows.Add(MenuRow.Header("Кадры"));
-            _rows.Add(MenuRow.Choice("Ограничение FPS (без вертикальной синхронизации)", Array.ConvertAll(ModernDrone.Video.GraphicsQuality.FrameLimits, f => f == 0 ? "нет" : f.ToString()),
+            _rows.Add(MenuRow.Choice("Ограничение FPS", Array.ConvertAll(ModernDrone.Video.GraphicsQuality.FrameLimits, f => f == 0 ? "нет" : f.ToString()),
                 () => S.frameRateLimit, v => { S.frameRateLimit = v; ControlSettings.NotifyChanged(); }));
+            _rows[_rows.Count - 1].Note = "Работает при выключенной вертикальной синхронизации (вкладка «Экран и звук»).";
             _rows.Add(MenuRow.Toggle("Счётчик FPS", () => S.showFps, v => S.showFps = v));
         }
 
         void FlightRows()
         {
             _rows.Add(MenuRow.Header("Плавность"));
-            _rows.Add(MenuRow.Slider("Сглаживание стиков, Гц (меньше — плавнее)", () => S.stickSmoothingHz, v => { S.stickSmoothingHz = v; ControlSettings.NotifyChanged(); }, 4f, 60f, 1f, "0"));
+            _rows.Add(MenuRow.Slider("Сглаживание стиков, Гц", () => S.stickSmoothingHz, v => { S.stickSmoothingHz = v; ControlSettings.NotifyChanged(); }, 4f, 60f, 1f, "0"));
+            _rows[_rows.Count - 1].Note = "Частота среза фильтра стиков: меньше — плавнее, но с задержкой.";
             RateRows("Крен", () => S.rollRates, v => S.rollRates = v);
             RateRows("Тангаж", () => S.pitchRates, v => S.pitchRates = v);
             RateRows("Рыскание", () => S.yawRates, v => S.yawRates = v);
@@ -351,8 +367,8 @@ namespace ModernDrone.UI
         {
             var osd = S.osd;
             _rows.Add(MenuRow.Header("Пресет"));
-            _rows.Add(MenuRow.Button("Минимальный (как на ударных FPV)", () => { osd.entries = OsdSettings.Minimal(); BuildRows(); }));
-            _rows.Add(MenuRow.Button("Полный (Betaflight)", () => { osd.entries = OsdSettings.Full(); BuildRows(); }));
+            _rows.Add(new MenuRow("Минимальный") { Activate = () => { osd.entries = OsdSettings.Minimal(); BuildRows(); }, Note = "Как на ударных FPV: только самое нужное для удара." });
+            _rows.Add(new MenuRow("Полный") { Activate = () => { osd.entries = OsdSettings.Full(); BuildRows(); }, Note = "Все элементы, раскладка как в Betaflight." });
             _rows.Add(MenuRow.Header("Элементы и их место"));
             foreach (var (item, label) in OsdItems)
             {
@@ -361,7 +377,8 @@ namespace ModernDrone.UI
             }
             // Betaflight craft name: up to 16 characters, shown upper case; analog OSD fonts hold only Latin letters,
             // digits and a few signs (MAX7456 character set).
-            _rows.Add(MenuRow.Text("Текст позывного (латиница, до 16)", () => osd.craftName, v => osd.craftName = v, 16, CraftNameChar));
+            _rows.Add(MenuRow.Text("Текст позывного", () => osd.craftName, v => osd.craftName = v, 16, CraftNameChar));
+            _rows[_rows.Count - 1].Note = "Enter — редактировать. Латиница, цифры и « -_.!», до 16 символов: шрифт аналогового OSD (MAX7456) другого не умеет.";
             _rows.Add(MenuRow.Header("Графика"));
             _rows.Add(MenuRow.Toggle("Прицельный крест", () => osd.crosshair, v => osd.crosshair = v));
             _rows.Add(MenuRow.Toggle("Искусственный горизонт", () => osd.horizon, v => osd.horizon = v));
@@ -408,72 +425,116 @@ namespace ModernDrone.UI
 
         // ---------------------------------------------------------------- drawing
 
-        public void Draw(Rect r)
+        /// <summary>
+        /// Draws the settings panel centred in <paramref name="screen"/> (the host draws what is behind it: the menu
+        /// ground or the dimmed game). The panel keeps a readable width on ultrawide screens.
+        /// </summary>
+        public void Draw(Rect screen)
         {
-            _gui.EnsureStyles();
-            MenuGui.Fill(r, MenuGui.PanelColor);
-            float pad = r.height * 0.03f;
-            float tabH = _gui.RowHeight * 1.2f;
-            GUI.Label(new Rect(r.x, r.y + pad, r.width, _gui.title.fontSize * 1.2f), "НАСТРОЙКИ", _gui.title);
+            var t = UiTheme.T;
+            float width = Mathf.Min(screen.width - 2f * UiTheme.Px(UiTheme.Margin), UiTheme.Px(1320f));
+            var panel = new Rect(screen.center.x - width * 0.5f, screen.y + UiTheme.Px(UiTheme.S7), width, screen.height - 2f * UiTheme.Px(UiTheme.S7));
+            UiTheme.Panel(panel);
+            var inner = UiTheme.Inset(panel, UiTheme.Px(40f), UiTheme.Px(UiTheme.S6));
 
-            var tabs = new Rect(r.x + pad, r.y + pad + _gui.title.fontSize * 1.5f, r.width - pad * 2, tabH);
-            var body = new Rect(r.x + pad, tabs.yMax + pad, r.width - pad * 2, r.yMax - tabs.yMax - pad * 3 - _gui.hint.fontSize * 2f);
+            var header = new Rect(inner.x, inner.y, inner.width, UiTheme.Px(56f));
+            UiTheme.Text(header, "НАСТРОЙКИ", t.title, UiTheme.TextPrimary);
+            UiTheme.Text(header, "сохраняются при выходе", t.captionRight, UiTheme.TextSecondary);
+
+            var tabs = new Rect(inner.x, header.yMax + UiTheme.Px(UiTheme.S4), inner.width, UiTheme.Px(52f));
+            var prompts = new Rect(inner.x, inner.yMax - UiTheme.Px(36f), inner.width, UiTheme.Px(36f));
+            var note = new Rect(inner.x, prompts.y - UiTheme.Px(UiTheme.S4) - UiTheme.Px(60f), inner.width, UiTheme.Px(60f));
+            // Rows reach into the panel padding so their text lines up with the title.
+            float rowPad = UiTheme.Px(UiTheme.S5);
+            var body = new Rect(inner.x - rowPad, tabs.yMax + UiTheme.Px(UiTheme.S4), inner.width + 2f * rowPad - UiTheme.Px(UiTheme.S4), note.y - tabs.yMax - UiTheme.Px(UiTheme.S5));
 
             if (_wizard != null)
             {
-                DrawWizard(body);
+                DrawWizard(new Rect(inner.x, tabs.y, inner.width, note.yMax - tabs.y));
             }
             else
             {
-                int newTab = _gui.DrawTabs(tabs, Tabs, _tab);
+                int newTab = UiTheme.Tabs(tabs, Tabs, _tab, ControlInput.Key("Q", "LB"), ControlInput.Key("E", "RB"), 0x5e7);
                 if (newTab != _tab) SwitchTab(newTab);
-                _gui.DrawRows(body, _rows, ref _selected);
+                _gui.DrawRows(body, _rows, ref _selected, focused: _capture == null);
+
+                string text = MenuGui.FocusedNote(_rows, _selected);
+                if (text != null)
+                {
+                    UiTheme.Fill(new Rect(note.x, note.y, note.width, 1f), UiTheme.Border);
+                    UiTheme.Text(new Rect(note.x, note.y + UiTheme.Px(UiTheme.S3), note.width, note.height - UiTheme.Px(UiTheme.S3)), text, t.body, UiTheme.TextBody);
+                }
             }
 
-            string hint = _wizard != null ? "Enter / A — далее,  Esc / B — отмена"
-                : "↑↓ — выбор,  ←→ — значение,  Enter / A — действие,  Q/E или LB/RB — вкладки,  Esc / B — назад";
-            GUI.Label(new Rect(r.x, r.yMax - pad - _gui.hint.fontSize * 1.6f, r.width, _gui.hint.fontSize * 1.6f), hint, _gui.hint);
+            string ok = ControlInput.Key("Enter", "A"), back = ControlInput.Key("Esc", "B");
+            if (_wizard != null)
+                UiTheme.Prompts(prompts, false, (ok, "далее"), (back, "отмена"));
+            else if (UiTheme.Prompts(prompts, false, ("↑↓", "пункт"), ("←→", "значение"), (ok, "выбрать"), (back, "назад")) == 3 && _capture == null)
+            {
+                ControlSettings.Save();
+                Closed = true;
+            }
 
             if (_capture != null)
             {
-                var box = new Rect(r.center.x - r.width * 0.3f, r.center.y - r.height * 0.1f, r.width * 0.6f, r.height * 0.2f);
-                MenuGui.Fill(box, new Color(0f, 0f, 0f, 0.95f));
-                GUI.Label(new Rect(box.x, box.y + box.height * 0.15f, box.width, box.height * 0.4f), _captureLabel, _gui.rowSelected);
-                GUI.Label(new Rect(box.x, box.y + box.height * 0.55f, box.width, box.height * 0.35f), "Нажмите кнопку…  (Esc — отмена, Backspace — очистить)", _gui.hint);
+                // Modal: waiting for a key / button.
+                UiTheme.Fill(panel, new Color(UiTheme.Surface.r, UiTheme.Surface.g, UiTheme.Surface.b, 0.85f));
+                float mw = Mathf.Min(panel.width * 0.7f, UiTheme.Px(760f)), mh = UiTheme.Px(220f);
+                var box = new Rect(panel.center.x - mw * 0.5f, panel.center.y - mh * 0.5f, mw, mh);
+                UiTheme.Fill(box, UiTheme.SurfaceRaised);
+                UiTheme.Fill(new Rect(box.x, box.y, box.width, UiTheme.Hair(3f)), UiTheme.Accent);
+                var b = UiTheme.Inset(box, UiTheme.Px(UiTheme.S6), UiTheme.Px(UiTheme.S5));
+                UiTheme.Text(new Rect(b.x, b.y, b.width, UiTheme.Px(26f)), "НАЗНАЧЕНИЕ", t.caption, UiTheme.Accent);
+                UiTheme.TextFit(new Rect(b.x, b.y + UiTheme.Px(30f), b.width, UiTheme.Px(44f)), _captureLabel, t.heading, UiTheme.TextPrimary);
+                UiTheme.Text(new Rect(b.x, b.y + UiTheme.Px(84f), b.width, UiTheme.Px(30f)), "Нажмите кнопку или клавишу…", t.label, UiTheme.TextBody);
+                UiTheme.Prompts(new Rect(b.x, b.yMax - UiTheme.Px(34f), b.width, UiTheme.Px(34f)), false, ("Esc", "отмена"), ("Backspace", "очистить"));
             }
         }
 
         void DrawWizard(Rect body)
         {
-            float h = _gui.RowHeight;
-            GUI.Label(new Rect(body.x, body.y, body.width, h), $"Калибровка: {_wizard.Device.displayName} — {_wizard.StepLabel}", _gui.rowSelected);
-            var instr = new GUIStyle(_gui.row) { wordWrap = true, alignment = TextAnchor.UpperLeft };
-            GUI.Label(new Rect(body.x, body.y + h, body.width, h * 3f), _wizard.Instruction, instr);
+            var t = UiTheme.T;
+            float y = body.y;
+            UiTheme.Text(new Rect(body.x, y, body.width, UiTheme.Px(26f)), $"КАЛИБРОВКА · {_wizard.Device.displayName}", t.caption, UiTheme.Accent);
+            y += UiTheme.Px(30f);
+            UiTheme.TextFit(new Rect(body.x, y, body.width, UiTheme.Px(44f)), _wizard.StepLabel, t.heading, UiTheme.TextPrimary);
+            y += UiTheme.Px(52f);
+            float textW = Mathf.Min(body.width, UiTheme.Px(900f));
+            float ih = t.body.CalcHeight(new GUIContent(_wizard.Instruction), textW);
+            UiTheme.Text(new Rect(body.x, y, textW, ih), _wizard.Instruction, t.body, UiTheme.TextBody);
+            y += ih + UiTheme.Px(UiTheme.S3);
             if (_wizard.Error != null)
             {
-                var err = new GUIStyle(_gui.row);
-                err.normal.textColor = new Color(1f, 0.4f, 0.3f);
-                GUI.Label(new Rect(body.x, body.y + h * 4f, body.width, h), _wizard.Error, err);
+                UiTheme.Text(new Rect(body.x, y, body.width, UiTheme.Px(30f)), _wizard.Error, t.label, UiTheme.Danger);
+                y += UiTheme.Px(30f);
             }
+            y += UiTheme.Px(UiTheme.S4);
 
-            float y = body.y + h * 5f;
-            float bw = body.width * 0.18f;
-            if (GUI.Button(new Rect(body.x, y, bw, h), _wizard.IsLastStep ? "Сохранить" : "Далее")) _wizard.Next();
-            if (_wizard.CanSkip && GUI.Button(new Rect(body.x + bw + 10f, y, bw, h), "Пропустить")) _wizard.Skip();
-            if (GUI.Button(new Rect(body.x + (bw + 10f) * 2f, y, bw, h), "Отмена")) _wizard.Cancel();
+            float bw = UiTheme.Px(240f), bh = UiTheme.Px(56f), gap = UiTheme.Px(UiTheme.S3), x = body.x;
+            if (UiTheme.Button(new Rect(x, y, bw, bh), _wizard.IsLastStep ? "СОХРАНИТЬ" : "ДАЛЕЕ", true, true, ControlInput.Key("Enter", "A"))) _wizard.Next();
+            x += bw + gap;
+            if (_wizard.CanSkip)
+            {
+                if (UiTheme.Button(new Rect(x, y, bw * 0.8f, bh), "ПРОПУСТИТЬ", false, false)) _wizard.Skip();
+                x += bw * 0.8f + gap;
+            }
+            if (UiTheme.Button(new Rect(x, y, bw * 0.8f, bh), "ОТМЕНА", false, false)) _wizard.Cancel();
             if (_wizard != null && _wizard.Finished) { _wizard = null; BuildRows(); return; }
 
-            y += h * 1.5f;
-            GUI.Label(new Rect(body.x, y, body.width, h), $"Монитор осей ({_wizard.AxisCount})", _gui.header);
-            y += h;
+            y += bh + UiTheme.Px(UiTheme.S6);
+            UiTheme.Text(new Rect(body.x, y, body.width, UiTheme.Px(26f)), $"МОНИТОР ОСЕЙ · {_wizard.AxisCount}", t.caption, UiTheme.TextSecondary);
+            y += UiTheme.Px(34f);
+            float lh = UiTheme.Px(34f);
             foreach (var (path, raw, n, assigned) in _wizard.Monitor())
             {
-                if (y > body.yMax - h) break;
-                GUI.Label(new Rect(body.x, y, body.width * 0.25f, h), (assigned ? "✔ " : "   ") + path, _gui.row);
-                MenuGui.Bar(new Rect(body.x + body.width * 0.27f, y + h * 0.3f, body.width * 0.55f, h * 0.4f), n, true);
-                GUI.Label(new Rect(body.x + body.width * 0.84f, y, body.width * 0.16f, h),
-                    raw.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture), _gui.value);
-                y += h * 0.8f;
+                if (y > body.yMax - lh) break;
+                var line = new Rect(body.x, y, body.width, lh);
+                UiTheme.Marker(line, assigned ? UiTheme.Success : UiTheme.TextSecondary, assigned);
+                UiTheme.Text(new Rect(body.x + UiTheme.Px(22f), y, body.width * 0.25f, lh), path, t.label, assigned ? UiTheme.TextPrimary : UiTheme.TextBody);
+                MenuGui.Bar(new Rect(body.x + body.width * 0.28f, y + lh * 0.4f, body.width * 0.54f, UiTheme.Hair(6f)), n, true);
+                UiTheme.Text(new Rect(body.x + body.width * 0.84f, y, body.width * 0.16f, lh),
+                    raw.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture), t.labelRight, UiTheme.TextBody);
+                y += lh;
             }
         }
     }

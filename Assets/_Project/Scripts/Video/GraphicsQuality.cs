@@ -1,3 +1,4 @@
+using ModernDrone.Core;
 using ModernDrone.Drone;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -33,7 +34,6 @@ namespace ModernDrone.Video
 
         float _fps, _fpsTimer;
         int _fpsFrames;
-        GUIStyle _style;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot()
@@ -109,16 +109,12 @@ namespace ModernDrone.Video
         {
             if (!ControlSettings.Current.showFps) return;
             GUI.depth = -1000; // above menus and the OSD
-            _style ??= new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold };
-            _style.fontSize = Mathf.Max(12, Screen.height / 50);
-            var text = $"{_fps:0} FPS  {1000f / Mathf.Max(_fps, 1f):0.0} мс";
-            var r = new Rect(Screen.width - _style.fontSize * 9f, 4f, _style.fontSize * 8.6f, _style.fontSize * 1.5f);
-            var prev = GUI.color;
-            GUI.color = Color.black;
-            GUI.Label(new Rect(r.x + 1f, r.y + 1f, r.width, r.height), text, _style);
-            GUI.color = new Color(0.6f, 1f, 0.6f);
-            GUI.Label(r, text, _style);
-            GUI.color = prev;
+            var t = UiTheme.T;
+            var text = $"{_fps:0} FPS · {1000f / Mathf.Max(_fps, 1f):0.0} мс";
+            float w = UiTheme.Width(text, t.caption) + UiTheme.Px(20f);
+            var r = new Rect(Screen.width - w - UiTheme.Px(8f), UiTheme.Px(8f), w, UiTheme.Px(30f));
+            UiTheme.Fill(r, UiTheme.OverVideo);
+            UiTheme.Text(r, text, t.captionCenter, _fps < 30f ? UiTheme.Warning : UiTheme.TextPrimary);
         }
 
         void OnApplicationQuit()

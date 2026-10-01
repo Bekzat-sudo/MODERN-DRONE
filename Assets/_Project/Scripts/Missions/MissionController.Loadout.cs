@@ -27,8 +27,12 @@ namespace ModernDrone.Missions
             if (ConfirmPressed()) LaunchSortie();
         }
 
-        void DrawLoadout() => HangarScreen.Draw("СНАРЯЖЕНИЕ",
-            FreeFlight ? missionName.ToUpperInvariant() : $"{missionName.ToUpperInvariant()} · ДРОН {_sortiesFlown + 1} ИЗ {Sorties}",
-            ("Q·E / LB·RB", "дрон"), ("↑↓", "слот"), ("←→", "вариант"), ("SPACE / A", "взлёт"));
+        void DrawLoadout()
+        {
+            string note = FreeFlight ? missionName : $"{missionName} · дрон {_sortiesFlown + 1} из {Sorties}";
+            string go = ModernDrone.Drone.ControlInput.Key("Space", "A");
+            HangarScreen.Draw("СНАРЯЖЕНИЕ", note, ("↑↓", "слот"), ("←→", "вариант"));
+            if (ModernDrone.Core.UiTheme.Button(Hangar.ActionRect, "ВЗЛЁТ", true, true, go)) LaunchSortie();
+        }
     }
 }

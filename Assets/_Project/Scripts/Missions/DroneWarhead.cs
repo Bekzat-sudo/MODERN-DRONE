@@ -23,7 +23,6 @@ namespace ModernDrone.Missions
 
         DroneController _drone;
         System.Random _random;
-        GUIStyle _style;
 
         public WarheadData Warhead => warhead;
         public bool Detonated { get; private set; }
@@ -100,24 +99,15 @@ namespace ModernDrone.Missions
         void OnGUI()
         {
             if (!ShowReportOverlay || LastReport == null || Time.time - LastReport.time > reportDuration) return;
-            if (_style == null || _style.fontSize != Mathf.RoundToInt(Screen.height * 0.024f))
-                _style = new GUIStyle(GUI.skin.label)
-                {
-                    fontSize = Mathf.RoundToInt(Screen.height * 0.024f),
-                    fontStyle = FontStyle.Bold,
-                    alignment = TextAnchor.UpperCenter,
-                    wordWrap = true
-                };
-
+            // Free-flight strike report: same panel as the killcam summary.
+            var t = UiTheme.T;
             string text = LastReport.Summary();
-            var rect = new Rect(Screen.width * 0.2f, Screen.height * 0.12f, Screen.width * 0.6f, Screen.height * 0.4f);
-            var prev = GUI.color;
-            GUI.color = new Color(0f, 0f, 0f, 0.55f);
-            float h = _style.CalcHeight(new GUIContent(text), rect.width) + 16f;
-            GUI.DrawTexture(new Rect(rect.x, rect.y - 8f, rect.width, h), Texture2D.whiteTexture);
-            GUI.color = prev;
-            _style.normal.textColor = Color.white;
-            GUI.Label(rect, text, _style);
+            float pw = Mathf.Min(Screen.width * 0.5f, UiTheme.Px(760f)), pad = UiTheme.Px(UiTheme.S5);
+            float height = t.body.CalcHeight(new GUIContent(text), pw - 2f * pad);
+            var panel = new Rect((Screen.width - pw) * 0.5f, Screen.height * 0.14f, pw, height + 2f * pad + UiTheme.Px(32f));
+            UiTheme.Fill(panel, UiTheme.OverVideo);
+            UiTheme.Text(new Rect(panel.x + pad, panel.y + pad, pw - 2f * pad, UiTheme.Px(26f)), "РЕЗУЛЬТАТ УДАРА", t.caption, UiTheme.TextSecondary);
+            UiTheme.Text(new Rect(panel.x + pad, panel.y + pad + UiTheme.Px(32f), pw - 2f * pad, height), text, t.body, UiTheme.TextPrimary);
         }
     }
 }
