@@ -21,6 +21,34 @@ namespace ModernDrone.Drone
 
         public static Joystick PreferredJoystick => FindJoystick(ControlSettings.Current.joystickName);
 
+        static bool _padPrompts;
+        static int _promptFrame = -1;
+
+        /// <summary>
+        /// Menu prompts show gamepad buttons once a gamepad was used, keyboard keys once the keyboard or mouse was
+        /// (the last device touched wins; polled at most once per frame, from the drawing code that asks).
+        /// </summary>
+        public static bool PadPrompts
+        {
+            get
+            {
+                if (_promptFrame == UnityEngine.Time.frameCount) return _padPrompts;
+                _promptFrame = UnityEngine.Time.frameCount;
+                var gp = Gamepad.current;
+                if (gp != null && (gp.buttonSouth.isPressed || gp.buttonEast.isPressed || gp.startButton.isPressed
+                    || gp.dpad.ReadValue().sqrMagnitude > 0.25f || gp.leftStick.ReadValue().sqrMagnitude > 0.25f
+                    || gp.leftShoulder.isPressed || gp.rightShoulder.isPressed))
+                    _padPrompts = true;
+                else if ((Keyboard.current != null && Keyboard.current.anyKey.isPressed)
+                    || (Mouse.current != null && (Mouse.current.leftButton.isPressed || Mouse.current.delta.ReadValue().sqrMagnitude > 4f)))
+                    _padPrompts = false;
+                return _padPrompts;
+            }
+        }
+
+        /// <summary>The keyboard or the gamepad name of a menu control, whichever device is in use.</summary>
+        public static string Key(string keyboard, string gamepad) => PadPrompts ? gamepad : keyboard;
+
         public static bool WasPressed(PilotAction action) => Check(action, pressedThisFrame: true);
 
         public static bool IsHeld(PilotAction action) => Check(action, pressedThisFrame: false);

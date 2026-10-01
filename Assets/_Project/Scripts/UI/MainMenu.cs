@@ -10,7 +10,8 @@ namespace ModernDrone.UI
     /// <summary>
     /// Start screen, "tactical tablet" look: navigation on the left (campaign, hangar, proving ground, settings, quit),
     /// the campaign on the right — mission cards with progress, the selected mission's briefing and a launch button,
-    /// and a recon window onto the slowly orbiting backdrop.
+    /// and a recon window onto the slowly orbiting backdrop. Focus is either in the navigation or in the mission grid;
+    /// the other side shows its choice as "current" (amber edge, no fill).
     /// </summary>
     public sealed class MainMenu : MonoBehaviour
     {
@@ -36,22 +37,16 @@ namespace ModernDrone.UI
         };
         [SerializeField] string[] missionBriefings = new string[0];
 
-        enum Nav { Campaign, Hangar, ProvingGround, Settings, Quit }
-        static readonly (Nav nav, string label)[] NavItems =
-        {
-            (Nav.Campaign, "КАМПАНИЯ"), (Nav.Hangar, "АНГАР"), (Nav.ProvingGround, "ПОЛИГОН"),
-            (Nav.Settings, "НАСТРОЙКИ"), (Nav.Quit, "ВЫХОД"),
-        };
         const int GridColumns = 4;
 
         readonly MenuGui _gui = new MenuGui();
+        readonly List<MenuRow> _navRows = new List<MenuRow>();
         SettingsMenu _settings;
         bool _inSettings, _inHangar, _inMissions;
         Hangar _hangar;
         int _nav, _mission = -1;
         float _angle = 200f;
         Rect _recon; // screen rect of the recon window (the backdrop camera renders into it)
-        GUIStyle _kicker, _brand, _navLabel, _navNote, _caption, _captionAccent, _cardTitle, _cardNote, _title, _body, _button, _prompt, _key;
 
         void Awake()
         {
@@ -59,6 +54,12 @@ namespace ModernDrone.UI
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
             _settings = new SettingsMenu(_gui);
+            _navRows.Add(MenuRow.Button("КАМПАНИЯ", () => _inMissions = true, () => $"{DoneCount()} / {missionScenes.Length}"));
+            _navRows.Add(MenuRow.Button("АНГАР", OpenHangar, SavedDrone));
+            _navRows.Add(MenuRow.Button("ПОЛИГОН", () => GameScenes.Load(GameScenes.ProvingGround), () => "свободный полёт"));
+            _navRows.Add(MenuRow.Button("НАСТРОЙКИ", () => { _settings.Open(); _inSettings = true; }, () => "управление · видео"));
+            _navRows.Add(MenuRow.Header(""));
+            _navRows.Add(new MenuRow("ВЫХОД") { Activate = GameScenes.Quit, Danger = true });
         }
 
         public void SetHangar(DroneConfig[] models, DronePart[] options, WarheadData[] warheadOptions, HangarPreview turntable)
@@ -78,18 +79,6 @@ namespace ModernDrone.UI
 
         // ---- actions
 
-        void Activate(Nav nav)
-        {
-            switch (nav)
-            {
-                case Nav.Campaign: _inMissions = true; break;
-                case Nav.Hangar: OpenHangar(); break;
-                case Nav.ProvingGround: GameScenes.Load(GameScenes.ProvingGround); break;
-                case Nav.Settings: _settings.Open(); _inSettings = true; break;
-                case Nav.Quit: GameScenes.Quit(); break;
-            }
-        }
-
         void OpenHangar()
         {
             _hangar ??= new Hangar(droneModels, parts, warheads, preview, false) { Back = CloseHangar };
@@ -108,6 +97,13 @@ namespace ModernDrone.UI
         MissionProgress.Entry Progress(int i) => MissionProgress.Current.entries.Find(x => x.mission == missionScenes[i]);
 
         bool Completed(int i) => Progress(i)?.completed ?? false;
+
+        int DoneCount()
+        {
+            int done = 0;
+            for (int i = 0; i < missionScenes.Length; i++) if (Completed(i)) done++;
+            return done;
+        }
 
         /// <summary>First mission not yet completed (where the campaign continues).</summary>
         int NextMission()
@@ -170,176 +166,152 @@ namespace ModernDrone.UI
                 if (nav.back) _inMissions = false;
                 return;
             }
-            if (nav.up) _nav = (_nav + NavItems.Length - 1) % NavItems.Length;
-            if (nav.down) _nav = (_nav + 1) % NavItems.Length;
-            if (nav.confirm || nav.right && NavItems[_nav].nav == Nav.Campaign) Activate(NavItems[_nav].nav);
+            // → from the campaign item steps into the mission grid, like Enter.
+            if (nav.right && _nav == 0) _inMissions = true;
+            else MenuGui.Navigate(_navRows, ref _nav, nav);
         }
 
         // ---- drawing
 
         void OnGUI()
         {
-            _gui.EnsureStyles();
-            EnsureStyles();
+            var t = UiTheme.T;
             float w = Screen.width, h = Screen.height;
 
             if (_inHangar)
             {
-                _hangar.Draw("АНГАР", "СБОРКА СОХРАНЯЕТСЯ · ИСПОЛЬЗУЕТСЯ ВО ВСЕХ ЗАДАЧАХ",
-                    ("Q·E / LB·RB", "дрон"), ("↑↓", "слот"), ("←→", "вариант"), ("ESC / B", "назад"));
+                if (_hangar.Draw("АНГАР", "сборка сохраняется и используется во всех задачах",
+                        ("↑↓", "слот"), ("←→", "вариант"), (ControlInput.Key("Esc", "B"), "назад")) == 2)
+                    CloseHangar();
                 return;
             }
             if (_inSettings)
             {
                 UiTheme.Background();
-                _settings.Draw(new Rect(w * 0.12f, h * 0.06f, w * 0.76f, h * 0.88f));
+                _settings.Draw(new Rect(0, 0, w, h));
                 return;
             }
             if (_mission < 0) return;
 
-            float navW = UiTheme.Px(620f), pad = UiTheme.Px(72f);
-            var main = new Rect(navW + UiTheme.Px(56f), UiTheme.Px(64f), w - navW - UiTheme.Px(112f), h - UiTheme.Px(112f));
+            float m = UiTheme.Px(UiTheme.Margin);
+            float navW = Mathf.Clamp(w * 0.3f, UiTheme.Px(500f), UiTheme.Px(600f));
+            var main = new Rect(navW + UiTheme.Px(UiTheme.S7), m, w - navW - UiTheme.Px(UiTheme.S7) - m, h - 2f * m);
 
-            // Mission cards and briefing sit below; the recon window shows the 3D backdrop through the ground.
-            float cardsTop = main.y + UiTheme.Px(44f), cardH = UiTheme.Px(118f), gap = UiTheme.Px(14f);
+            float headerH = UiTheme.Px(40f), cardH = UiTheme.Px(124f), gap = UiTheme.Px(UiTheme.S3);
+            float cardsTop = main.y + headerH + UiTheme.Px(UiTheme.S4);
             int rows = Mathf.CeilToInt(missionScenes.Length / (float)GridColumns);
-            float lowerTop = cardsTop + rows * (cardH + gap) + UiTheme.Px(10f);
-            float briefW = UiTheme.Px(460f);
-            var recon = new Rect(main.x, lowerTop, main.width - briefW - UiTheme.Px(24f), main.yMax - lowerTop);
+            float lowerTop = cardsTop + rows * (cardH + gap) + UiTheme.Px(UiTheme.S4);
+            float briefW = Mathf.Clamp(main.width * 0.4f, UiTheme.Px(460f), UiTheme.Px(600f));
+            // The recon window shows the 3D backdrop through the ground.
+            var recon = new Rect(main.x, lowerTop, main.width - briefW - UiTheme.Px(UiTheme.S5), main.yMax - lowerTop);
             _recon = recon;
             UiTheme.Background(recon);
-            UiTheme.Frame(recon, UiTheme.Line);
-            UiTheme.Fill(new Rect(recon.x + 1, recon.y + 1, UiTheme.Px(250f), UiTheme.Px(34f)), UiTheme.Panel);
-            GUI.Label(new Rect(recon.x + UiTheme.Px(14f), recon.y + 1, UiTheme.Px(240f), UiTheme.Px(34f)), "РАЗВЕДКА · ОБЪЕКТ", _caption);
+            UiTheme.Frame(recon, UiTheme.Border);
+            var tag = new Rect(recon.x + 1f, recon.y + 1f, UiTheme.Width("РАЗВЕДКА · ОБЪЕКТ", t.caption) + UiTheme.Px(UiTheme.S6), UiTheme.Px(34f));
+            UiTheme.Fill(tag, UiTheme.Surface);
+            UiTheme.Text(UiTheme.Inset(tag, UiTheme.Px(UiTheme.S4), 0f), "РАЗВЕДКА · ОБЪЕКТ", t.caption, UiTheme.TextSecondary);
 
-            DrawNav(new Rect(0, 0, navW, h), pad);
-            DrawCampaign(main, cardsTop, cardH, gap);
+            DrawNav(new Rect(0, 0, navW, h));
+            DrawCampaign(main, headerH, cardsTop, cardH, gap);
             DrawBriefing(new Rect(main.xMax - briefW, lowerTop, briefW, main.yMax - lowerTop));
         }
 
-        void DrawNav(Rect r, float pad)
+        void DrawNav(Rect r)
         {
-            var e = Event.current;
-            UiTheme.Fill(r, UiTheme.Panel);
-            UiTheme.Fill(new Rect(r.xMax - 1, 0, 1, r.height), UiTheme.Line);
-            float x = pad, width = r.width - pad - UiTheme.Px(48f), y = UiTheme.Px(72f);
-            GUI.Label(new Rect(x, y, width, UiTheme.Px(28f)), "// FPV · УДАРНЫЙ КОМПЛЕКС", _kicker);
-            GUI.Label(new Rect(x, y + UiTheme.Px(30f), width, UiTheme.Px(90f)), "MODERN DRONE", _brand);
-            y += UiTheme.Px(150f);
-            float rh = UiTheme.Px(72f);
-            int done = 0;
-            for (int i = 0; i < missionScenes.Length; i++) if (Completed(i)) done++;
-            for (int i = 0; i < NavItems.Length; i++)
+            var t = UiTheme.T;
+            UiTheme.Fill(r, UiTheme.Surface);
+            UiTheme.Fill(new Rect(r.xMax - 1, 0, 1, r.height), UiTheme.Border);
+            float m = UiTheme.Px(UiTheme.Margin), x = m, width = r.width - m - UiTheme.Px(UiTheme.S7), y = UiTheme.Px(72f);
+            UiTheme.Text(new Rect(x, y, width, UiTheme.Px(26f)), "FPV · УДАРНЫЙ КОМПЛЕКС", t.caption, UiTheme.Accent);
+            UiTheme.TextFit(new Rect(x, y + UiTheme.Px(26f), width, UiTheme.Px(96f)), "MODERN DRONE", t.display, UiTheme.TextPrimary);
+            y += UiTheme.Px(168f);
+
+            float rowPad = UiTheme.Px(UiTheme.S5);
+            float listH = MenuGui.RowHeight(MenuGui.RowSize.Large) * _navRows.Count;
+            int nav = _inMissions ? 0 : _nav;
+            _gui.DrawRows(new Rect(x - rowPad, y, width + 2f * rowPad, listH), _navRows, ref nav, MenuGui.RowSize.Large, !_inMissions);
+            if (!_inMissions) _nav = nav;
+            else if (nav != 0) { _nav = nav; _inMissions = false; } // the mouse moved back into the navigation
+
+            float bottom = r.height - UiTheme.Px(UiTheme.S8);
+            float lh = UiTheme.Px(30f);
+            UiTheme.Fill(new Rect(x, bottom - UiTheme.Px(120f), width, 1f), UiTheme.Border);
+            UiTheme.KeyValue(new Rect(x, bottom - UiTheme.Px(104f), width, lh), "УПРАВЛЕНИЕ", DeviceSummary(), UiTheme.TextBody);
+            UiTheme.KeyValue(new Rect(x, bottom - UiTheme.Px(104f) + lh, width, lh), "ДРОН ИЗ АНГАРА", SavedDrone(), UiTheme.TextBody);
+            string ok = ControlInput.Key("Enter", "A"), back = ControlInput.Key("Esc", "B");
+            var prompts = new Rect(x, bottom - UiTheme.Px(36f), width, UiTheme.Px(36f));
+            if (_inMissions)
             {
-                var (nav, label) = NavItems[i];
-                var row = new Rect(x - UiTheme.Px(20f), y + i * (rh + UiTheme.Px(6f)), width + UiTheme.Px(20f), rh);
-                bool sel = i == _nav && !_inMissions || nav == Nav.Campaign && _inMissions;
-                if (sel) UiTheme.Box(row, true);
-                _navLabel.normal.textColor = nav == Nav.Quit && !sel ? UiTheme.Muted : UiTheme.Text;
-                GUI.Label(new Rect(row.x + UiTheme.Px(20f), row.y, row.width, row.height), label, _navLabel);
-                string note = nav switch
-                {
-                    Nav.Campaign => $"{done} / {missionScenes.Length}",
-                    Nav.Hangar => SavedDrone(),
-                    Nav.ProvingGround => "свободный полёт",
-                    Nav.Settings => "управление · видео",
-                    _ => ""
-                };
-                _navNote.normal.textColor = nav == Nav.Campaign ? UiTheme.Accent : UiTheme.Muted;
-                GUI.Label(new Rect(row.x, row.y, row.width - UiTheme.Px(20f), row.height), note, _navNote);
-                if (e.type == EventType.MouseMove && row.Contains(e.mousePosition) && !_inMissions) _nav = i;
-                if (e.type == EventType.MouseDown && e.button == 0 && row.Contains(e.mousePosition))
-                {
-                    _nav = i;
-                    Activate(nav);
-                    e.Use();
-                }
+                if (UiTheme.Prompts(prompts, false, ("←→↑↓", "задача"), (ok, "вылет"), (back, "назад")) == 2) _inMissions = false;
             }
-
-            float bottom = r.height - UiTheme.Px(56f);
-            UiTheme.Fill(new Rect(x, bottom - UiTheme.Px(96f), width, 1f), UiTheme.Line);
-            Line(new Rect(x, bottom - UiTheme.Px(84f), width, UiTheme.Px(30f)), "УПРАВЛЕНИЕ", DeviceSummary());
-            Line(new Rect(x, bottom - UiTheme.Px(52f), width, UiTheme.Px(30f)), "ДРОН ИЗ АНГАРА", SavedDrone());
-            UiTheme.Prompts(new Rect(x, bottom - UiTheme.Px(4f), width, UiTheme.Px(36f)), _prompt, _key,
-                _inMissions ? new[] { ("A", "вылет"), ("B", "назад"), ("←→↑↓", "задача") } : new[] { ("A", "выбрать"), ("↑↓", "пункт") });
+            else UiTheme.Prompts(prompts, false, ("↑↓", "пункт"), (ok, "выбрать"));
         }
 
-        void Line(Rect r, string label, string value)
+        void DrawCampaign(Rect main, float headerH, float cardsTop, float cardH, float gap)
         {
-            GUI.Label(r, label, _caption);
-            _navNote.normal.textColor = UiTheme.Text;
-            GUI.Label(r, value, _navNote);
-        }
+            var t = UiTheme.T;
+            var header = new Rect(main.x, main.y, main.width, headerH);
+            UiTheme.Text(header, "КАМПАНИЯ", t.heading, UiTheme.TextPrimary);
+            int done = DoneCount(), n = missionScenes.Length;
+            float segW = UiTheme.Px(220f);
+            UiTheme.Segments(new Rect(header.xMax - segW, header.center.y - UiTheme.Px(4f), segW, UiTheme.Px(8f)), n, done, UiTheme.Success);
+            UiTheme.Text(new Rect(header.x, header.y, header.width - segW - UiTheme.Px(UiTheme.S4), header.height),
+                $"выполнено {done} из {n}", t.captionRight, UiTheme.TextSecondary);
 
-        void DrawCampaign(Rect main, float cardsTop, float cardH, float gap)
-        {
-            var e = Event.current;
-            GUI.Label(new Rect(main.x, main.y, main.width, UiTheme.Px(32f)), "КАМПАНИЯ · ВЫБОР ЗАДАЧИ", _caption);
             float cw = (main.width - (GridColumns - 1) * gap) / GridColumns;
-            for (int i = 0; i < missionScenes.Length; i++)
+            for (int i = 0; i < n; i++)
             {
                 var r = new Rect(main.x + (i % GridColumns) * (cw + gap), cardsTop + (i / GridColumns) * (cardH + gap), cw, cardH);
                 bool sel = i == _mission;
-                bool done = Completed(i);
+                var state = UiTheme.StateOf(r, sel, _inMissions);
+                UiTheme.Item(r, state, raised: true, slideId: 0x6d1);
                 var p = Progress(i);
-                UiTheme.Box(r, sel && _inMissions, raised: true);
-                if (sel && !_inMissions) UiTheme.Frame(r, UiTheme.Accent);
-                var inner = new Rect(r.x + UiTheme.Px(16f), r.y + UiTheme.Px(12f), r.width - UiTheme.Px(32f), r.height - UiTheme.Px(24f));
-                string mark = done ? UiTheme.Colored($"● {i + 1:00}", UiTheme.Done) : sel ? UiTheme.Colored($"▶ {i + 1:00}", UiTheme.Accent) : $"{i + 1:00}";
-                GUI.Label(new Rect(inner.x, inner.y, inner.width, inner.height * 0.28f), mark, _caption);
-                GUI.Label(new Rect(inner.x, inner.y + inner.height * 0.28f, inner.width, inner.height * 0.42f), missionNames[i], _cardTitle);
-                string note = p == null || p.attempts == 0 ? "не начата" : done ? $"лучший: {p.bestScore}" : $"не выполнена · {p.bestScore}";
-                GUI.Label(new Rect(inner.x, inner.y + inner.height * 0.72f, inner.width, inner.height * 0.28f), note, _cardNote);
-                if (e.type == EventType.MouseDown && e.button == 0 && r.Contains(e.mousePosition))
+                var inner = UiTheme.Inset(r, UiTheme.Px(20f), UiTheme.Px(14f));
+                var top = new Rect(inner.x, inner.y, inner.width, UiTheme.Px(24f));
+                UiTheme.Text(top, $"{i + 1:00}", t.caption, sel ? UiTheme.Accent : UiTheme.TextSecondary);
+                // Status: a word with a square marker (filled = done).
+                bool attempted = p != null && p.attempts > 0;
+                if (attempted)
                 {
-                    if (_inMissions && sel && e.clickCount > 1) Launch();
+                    string status = Completed(i) ? "выполнена" : "не выполнена";
+                    Color sc = Completed(i) ? UiTheme.Success : UiTheme.Warning;
+                    float sw = UiTheme.Width(status, t.caption);
+                    UiTheme.Text(top, status, t.captionRight, sc);
+                    UiTheme.Marker(new Rect(top.xMax - sw - UiTheme.Px(18f), top.y, UiTheme.Px(10f), top.height), sc, Completed(i));
+                }
+                UiTheme.TextFit(new Rect(inner.x, inner.y + UiTheme.Px(28f), inner.width, UiTheme.Px(38f)), missionNames[i], t.heading,
+                    state == UiState.Normal ? UiTheme.TextBody : UiTheme.TextPrimary);
+                string note = attempted ? $"лучший {p.bestScore} · попыток {p.attempts}" : "не начата";
+                UiTheme.Text(new Rect(inner.x, inner.yMax - UiTheme.Px(24f), inner.width, UiTheme.Px(24f)), note, t.caption, UiTheme.TextSecondary);
+
+                if (Event.current.type == EventType.MouseDown && Event.current.button == 0 && r.Contains(Event.current.mousePosition))
+                {
+                    if (_inMissions && sel && Event.current.clickCount > 1) Launch();
                     _mission = i;
                     _inMissions = true;
-                    e.Use();
+                    Event.current.Use();
                 }
             }
         }
 
         void DrawBriefing(Rect r)
         {
-            var e = Event.current;
-            UiTheme.Box(r);
-            var inner = new Rect(r.x + UiTheme.Px(24f), r.y + UiTheme.Px(22f), r.width - UiTheme.Px(48f), r.height - UiTheme.Px(44f));
-            GUI.Label(new Rect(inner.x, inner.y, inner.width, UiTheme.Px(28f)), $"ЗАДАЧА {_mission + 1:00}", _captionAccent);
-            GUI.Label(new Rect(inner.x, inner.y + UiTheme.Px(30f), inner.width, UiTheme.Px(60f)), missionNames[_mission], _title);
-            var button = new Rect(inner.x, inner.yMax - UiTheme.Px(64f), inner.width, UiTheme.Px(64f));
-            float textTop = inner.y + UiTheme.Px(100f);
-            string briefing = _mission < missionBriefings.Length ? missionBriefings[_mission] : "";
-            var p = Progress(_mission);
-            string record = p == null || p.attempts == 0 ? "Не начата" : $"Попыток: {p.attempts} · лучший результат: {p.bestScore}";
-            GUI.Label(new Rect(inner.x, textTop, inner.width, button.y - textTop - UiTheme.Px(16f)), briefing + "\n\n" + UiTheme.Colored(record, UiTheme.Muted), _body);
-            UiTheme.Fill(button, UiTheme.Accent);
-            GUI.Label(button, "К ВЫЛЕТУ ▸", _button);
-            if (e.type == EventType.MouseDown && e.button == 0 && button.Contains(e.mousePosition))
-            {
-                Launch();
-                e.Use();
-            }
-        }
+            var t = UiTheme.T;
+            UiTheme.Panel(r);
+            var inner = UiTheme.Inset(r, UiTheme.Px(28f), UiTheme.Px(UiTheme.S5));
+            float y = inner.y;
+            UiTheme.Text(new Rect(inner.x, y, inner.width, UiTheme.Px(26f)), $"ЗАДАЧА {_mission + 1:00}", t.caption, UiTheme.Accent);
+            y += UiTheme.Px(30f);
+            float th = t.titleWrap.CalcHeight(new GUIContent(missionNames[_mission]), inner.width);
+            UiTheme.Text(new Rect(inner.x, y, inner.width, th), missionNames[_mission], t.titleWrap, UiTheme.TextPrimary);
+            y += th + UiTheme.Px(UiTheme.S3);
 
-        void EnsureStyles()
-        {
-            int size = UiTheme.FontPx(18f);
-            if (_body != null && _body.fontSize == size) return;
-            _kicker = UiTheme.Style(UiTheme.Mono, 18f, UiTheme.Accent);
-            _brand = UiTheme.Style(UiTheme.Display, 76f, UiTheme.Text);
-            _brand.fontStyle = FontStyle.Bold;
-            _navLabel = UiTheme.Style(UiTheme.Display, 30f, UiTheme.Text);
-            _navNote = UiTheme.Style(UiTheme.Mono, 18f, UiTheme.Muted, TextAnchor.MiddleRight);
-            _caption = UiTheme.Style(UiTheme.Mono, 18f, UiTheme.Muted);
-            _captionAccent = UiTheme.Style(UiTheme.Mono, 18f, UiTheme.Accent);
-            _cardTitle = UiTheme.Style(UiTheme.Display, 26f, UiTheme.Text);
-            _cardNote = UiTheme.Style(UiTheme.Mono, 18f, UiTheme.Muted);
-            _title = UiTheme.Style(UiTheme.Display, 44f, UiTheme.Text);
-            _body = UiTheme.Style(UiTheme.Mono, 18f, UiTheme.Body, TextAnchor.UpperLeft, true);
-            _button = UiTheme.Style(UiTheme.Display, 28f, UiTheme.Ground, TextAnchor.MiddleCenter);
-            _prompt = UiTheme.Style(UiTheme.Mono, 19f, UiTheme.Body);
-            _key = UiTheme.Style(UiTheme.MonoBold, 17f, UiTheme.Ground, TextAnchor.MiddleCenter);
+            var button = new Rect(inner.x, inner.yMax - UiTheme.Px(60f), inner.width, UiTheme.Px(60f));
+            // The record (attempts, best score) is on the mission card; the column is the briefing text.
+            string briefing = _mission < missionBriefings.Length ? missionBriefings[_mission] : "";
+            UiTheme.TextBlockFit(new Rect(inner.x, y, inner.width, button.y - y - UiTheme.Px(UiTheme.S5)), briefing, t.body, UiTheme.TextBody);
+
+            if (UiTheme.Button(button, "К ВЫЛЕТУ", true, _inMissions, _inMissions ? ControlInput.Key("Enter", "A") : null)) Launch();
         }
 
         static string DeviceSummary()
