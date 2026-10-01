@@ -455,8 +455,8 @@ namespace ModernDrone.Editor
 
         /// <summary>
         /// Turns separate model pieces into damage parts: every ERA_### block becomes a reactive element on its own
-        /// collider (so coverage follows the real block layout) that flies off when it fires; Hatch_* pieces blow off
-        /// when the ammunition detonates. Kontakt-type block ~6 kg, hatch ~30 kg (estimates).
+        /// collider (so coverage follows the real block layout) that flies off when it fires (hatches: VehicleKit.SetupHatches).
+        /// Kontakt-type block ~6 kg (estimate).
         /// </summary>
         static void ModelParts(VehicleKit k)
         {
@@ -469,12 +469,6 @@ namespace ModernDrone.Editor
                     armor.Configure(ArmorKind.Reactive, 0.5f);
                     armor.SetHideWhenConsumed(false);
                     t.gameObject.AddComponent<DetachablePart>().Configure(DetachCause.ReactiveFired, 6f, 18f, 1f);
-                }
-                else if (t.name.StartsWith("Hatch_"))
-                {
-                    var box = t.gameObject.AddComponent<BoxCollider>();
-                    box.enabled = false; // only as debris
-                    t.gameObject.AddComponent<DetachablePart>().Configure(DetachCause.Catastrophic, 30f, 12f, 0.7f);
                 }
             }
         }

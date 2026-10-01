@@ -73,7 +73,8 @@ namespace ModernDrone.Missions
                 Vector3 targetPos = targetAlive ? _target.transform.position : _lastKnown;
                 Vector3 targetVel = (targetPos - _lastTargetPos) / dt;
                 _lastTargetPos = targetPos;
-                bool seen = targetAlive && !Physics.Linecast(pos, targetPos, GameLayers.TerrainMask | GameLayers.EnvironmentMask, QueryTriggerInteraction.Ignore);
+                bool seen = targetAlive && !Physics.Linecast(pos, targetPos, GameLayers.TerrainMask | GameLayers.EnvironmentMask, QueryTriggerInteraction.Ignore)
+                    && SmokeVolumes.Visible(pos, targetPos);
                 if (seen)
                 {
                     _lostFor = 0f;

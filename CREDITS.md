@@ -8,7 +8,8 @@
 - **Russian T-72B3** by [42manako](https://skfb.ly/pvDGP) on Sketchfab, licensed under
   [Creative Commons Attribution 4.0 (CC BY 4.0)](http://creativecommons.org/licenses/by/4.0/).
   Used as the tank model (`Assets/_Project/Art/Models/Vehicles/T72B3/t72b3.glb`); recentred,
-  turret split out with a pivot on the turret ring.
+  turret split out with a pivot on the turret ring; the commander's, gunner's and driver's hatch lids cut out of the
+  one-piece hull and turret meshes as separate nodes in all three LODs (`Tools/Blender/t72_hatches.py`).
 - **BTR-82** by [42manako](https://sketchfab.com/3d-models/btr-82-f8da79f2c2af49ceb845f26d9454db21) on Sketchfab, licensed under
   [CC BY-NC 4.0](http://creativecommons.org/licenses/by-nc/4.0/) — non-commercial use only.
   `Assets/_Project/Art/Models/Vehicles/BTR82/btr82.glb`; re-oriented, turret split out.
@@ -87,3 +88,42 @@ downscaled for the game):
 - "Old Street Fences Pack" by YadroGames - https://sketchfab.com/3d-models/0953ef9c6e9b4a099daf53f91d29cf09
 - "Old Soviet Bus Stop" by Coozy - https://sketchfab.com/3d-models/fe4d132434c24e1c8447a6d1190e8c6d
 - "Burned-out Cars" by Renafox - https://sketchfab.com/3d-models/701066df6b914fd08318524c7ccd96a7
+
+## Sounds (Freesound, CC0 1.0 - https://creativecommons.org/publicdomain/zero/1.0/)
+
+Field recordings released into the public domain (CC0; licence checked on each sound's page). HQ previews were cut
+into the game's takes by `Tools/Audio/prepare_audio.py` (trimmed, faded, looped, normalised) into
+`Assets/_Project/Resources/Audio`. No attribution is required by CC0; listed here for provenance.
+
+- "Explosion with debris - authentic. 4kg TNT" by sidohzen - https://freesound.org/people/sidohzen/sounds/165808/ - takes: `exp_close_1`
+- "BOOMING PUNCHY EXPLOSION - close, big SCHOEPS MK41.wav" by misosound - https://freesound.org/people/misosound/sounds/251759/ - takes: `exp_close_2`
+- "Heavy explosion in forest debris tree falling.flac" by wyskoj - https://freesound.org/people/wyskoj/sounds/530163/ - takes: `exp_close_3`
+- "Big dynamite explosion in an open mine (Chile)" by felix.blume - https://freesound.org/people/felix.blume/sounds/475780/ - takes: `exp_far_1`
+- "G33-32-Distant Bomb Explosion.wav" by craigsmith - https://freesound.org/people/craigsmith/sounds/438538/ - takes: `exp_far_2`, `exp_far_3`, `exp_far_4`
+- "Light explosion near in forest.flac" by wyskoj - https://freesound.org/people/wyskoj/sounds/530162/ - takes: `exp_small_1`
+- "Firecracker Explosion" by unfa - https://freesound.org/people/unfa/sounds/609588/ - takes: `exp_small_2`
+- "EXPLODE_FIRECRACKER.wav" by keng-wai-chane-chick-te - https://freesound.org/people/keng-wai-chane-chick-te/sounds/462363/ - takes: `exp_small_3`
+- "Debris Falling on Tank 1.wav" by Richard27 - https://freesound.org/people/Richard27/sounds/530209/ - takes: `debris_metal`, `metal_2`
+- "Gravel Impacts and Falls.wav" by lolamadeus - https://freesound.org/people/lolamadeus/sounds/179341/ - takes: `debris_dirt`
+- "R30-09-Fires Burns Wood and Metal Crackling.wav" by craigsmith - https://freesound.org/people/craigsmith/sounds/483323/ - takes: `fire_large`
+- "Fire.wav" by SGAK - https://freesound.org/people/SGAK/sounds/87564/ - takes: `fire_fuel`
+- "Fire Auto - car on fire" by florianreichelt - https://freesound.org/people/florianreichelt/sounds/563765/ - takes: `fire_car`
+- "Firecracker" by j1987 - https://freesound.org/people/j1987/sounds/140711/ - takes: `pop_1`
+- "Firework Cluster" by j1987 - https://freesound.org/people/j1987/sounds/140717/ - takes: `pop_2`
+- "Chinese Fireworks - New Year Celebration" by Lenguaverde - https://freesound.org/people/Lenguaverde/sounds/381722/ - takes: `cookoff_crackle`
+- "50 Caliber MG.flac" by qubodup - https://freesound.org/people/qubodup/sounds/183656/ - takes: `mg_1`, `mg_2`, `mg_3`, `mg_4`
+- "Autocannon Three Shot Burst" by qubodup - https://freesound.org/people/qubodup/sounds/854186/ - takes: `cannon_1`, `cannon_2`, `cannon_3`
+- "Real Bullet Flyby Sound" by qubodup - https://freesound.org/people/qubodup/sounds/855248/ - takes: `crack`
+- "Heavy Metal Thud on Ground" by 7of9Designs - https://freesound.org/people/7of9Designs/sounds/640204/ - takes: `metal_1`
+- "Gas Torch Burn" by SyntaxSeed - https://freesound.org/people/SyntaxSeed/sounds/244230/ - takes: `flame_jet`
+- "Flamethrower_Weapon_Long_Bursts.wav" by AslakHostaker - https://freesound.org/people/AslakHostaker/sounds/395039/ - takes: `flame_burst`
+
+The 12.7 mm machine-gun and 25 mm autocannon recordings by qubodup (183656, 854186) were taken from US
+government video (public domain) per the uploader. The thermal camera shutter click is synthesised in code.
+
+## Effects
+
+- Smoke, fireball and flame flipbooks (`Assets/_Project/Art/VFX/Flipbooks`) are our own: Mantaflow gas simulations
+  rendered in Blender Cycles with six-way lighting by `Tools/Blender/vfx_bake.py`.
+- `Assets/_Project/Art/Shaders/Vegetation/VegetationLit.shader` is Unity's URP Lit shader (com.unity.render-pipelines.universal
+  17.6, Unity Companion License, https://unity.com/legal/licenses/unity-companion-license) with wind sway added.

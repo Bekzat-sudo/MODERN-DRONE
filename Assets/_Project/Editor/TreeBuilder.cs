@@ -13,7 +13,7 @@ namespace ModernDrone.Editor
     /// Species after Ukrainian steppe shelterbelts - oak, poplar, black locust ("acacia"), Siberian elm; mature belts
     /// reach 19-23 m (pressto.amu.edu.pl/index.php/biorc/article/view/41622; europeancorrespondent.com, windbreak
     /// forests). Per-species heights, crown sizes and branch angles are illustrative, not measured.
-    /// ponytail: no wind sway (URP Lit, no vertex animation); a foliage shader with a global wind vector comes later.
+    /// Materials use ModernDrone/Vegetation Lit (URP Lit plus sway in the scene's wind and in blast waves).
     /// </summary>
     public static class TreeBuilder
     {
@@ -427,9 +427,14 @@ namespace ModernDrone.Editor
 
         static Material Lit(string path)
         {
+            var shader = Shader.Find("ModernDrone/Vegetation Lit");
             var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
-            if (mat != null) return mat;
-            mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            if (mat != null)
+            {
+                if (mat.shader != shader) mat.shader = shader; // same properties as URP Lit
+                return mat;
+            }
+            mat = new Material(shader);
             AssetDatabase.CreateAsset(mat, path);
             return mat;
         }

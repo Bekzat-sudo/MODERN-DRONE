@@ -86,7 +86,7 @@ namespace ModernDrone.Missions
             if (Vector3.Distance(from, to) > detectionRange) return false;
             float agl = drone.Telemetry.altitudeAgl;
             if (agl >= 0f && agl < minAltitude) return false;
-            return !Physics.Linecast(from, to, GameLayers.TerrainMask | GameLayers.EnvironmentMask, QueryTriggerInteraction.Ignore);
+            return !Physics.Linecast(from, to, GameLayers.TerrainMask | GameLayers.EnvironmentMask, QueryTriggerInteraction.Ignore) && SmokeVolumes.Visible(from, to);
         }
 
         void Launch()

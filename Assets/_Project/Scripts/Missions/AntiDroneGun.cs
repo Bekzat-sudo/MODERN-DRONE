@@ -114,7 +114,9 @@ namespace ModernDrone.Missions
             Vector3 from = Muzzle;
             Vector3 target = _drone.transform.position;
             float dist = Vector3.Distance(from, target);
-            bool visible = dist <= range && !Physics.Linecast(from, target, GameLayers.TerrainMask | GameLayers.EnvironmentMask, QueryTriggerInteraction.Ignore);
+            // Smoke hides the drone from the crew's optics (thermal at night sees through most of it).
+            bool visible = dist <= range && !Physics.Linecast(from, target, GameLayers.TerrainMask | GameLayers.EnvironmentMask, QueryTriggerInteraction.Ignore)
+                && SmokeVolumes.Visible(from, target);
             if (!visible)
             {
                 _spotted = Mathf.Max(0f, _spotted - Time.deltaTime);

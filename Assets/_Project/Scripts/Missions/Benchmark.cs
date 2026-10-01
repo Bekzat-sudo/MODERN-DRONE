@@ -74,6 +74,16 @@ namespace ModernDrone.Missions
             var decals = FindObjectsByType<UnityEngine.Rendering.Universal.DecalProjector>(FindObjectsSortMode.None);
             var volumes = FindObjectsByType<UnityEngine.Rendering.Volume>(FindObjectsSortMode.None);
             var props = GameObject.Find("Props");
+            if (Array.IndexOf(Environment.GetCommandLineArgs(), "-benchmarkVeg") >= 0)
+            {
+                yield return Vegetation(drone, terrain);
+                yield break;
+            }
+            if (Array.IndexOf(Environment.GetCommandLineArgs(), "-benchmarkFx") >= 0)
+            {
+                yield return Effects(drone, terrain);
+                yield break;
+            }
             bool parts = Array.IndexOf(Environment.GetCommandLineArgs(), "-benchmarkParts") >= 0;
             bool shadows = Array.IndexOf(Environment.GetCommandLineArgs(), "-benchmarkShadows") >= 0;
             var urp = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline as UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset;
@@ -165,6 +175,129 @@ namespace ModernDrone.Missions
             System.IO.File.WriteAllText(path, sb.ToString());
             Debug.Log("[Benchmark]\n" + sb);
             Application.Quit();
+        }
+
+        /// <summary>
+        /// -benchmarkFx: the cost of a big strike. The drone watches tank No. 1 from 30 m (FPV) and from 350 m with
+        /// a narrow lens (recon zoom); the tank's ammunition is set off and the frame timings are averaged over the
+        /// fireball (0-3 s), the cook-off (3-12 s) and the long burn (20-35 s), against the same view with nothing burning.
+        /// </summary>
+        IEnumerator Effects(DroneController drone, Terrain terrain)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine($"{DateTime.Now:yyyy-MM-dd HH:mm}  {SystemInfo.graphicsDeviceName}  {Screen.width}x{Screen.height}  effects");
+            sb.AppendLine("case | frame ms | CPU main ms | CPU render ms | GPU ms | fps | particles | GPU fx ms");
+            var cam = drone.GetComponentInChildren<DroneCamera>().GetComponent<Camera>();
+            foreach (var (view, range, fov) in new[] { ("fpv 30 m", 30f, 0f), ("recon 350 m", 350f, 4f) })
+            {
+                ModernDrone.Damage.VehicleDamageModel tank = null;
+                foreach (var v in FindObjectsByType<ModernDrone.Damage.VehicleDamageModel>(FindObjectsSortMode.InstanceID))
+                    if (tank == null || v.name.Contains("1")) tank = v;
+                if (view != "fpv 30 m")
+                {
+                    // A fresh tank for the second view: the first is a wreck by now.
+                    foreach (var v in FindObjectsByType<ModernDrone.Damage.VehicleDamageModel>(FindObjectsSortMode.InstanceID))
+                        if (v.name.Contains("2")) tank = v;
+                }
+                Vector3 centre = tank.transform.position + Vector3.up * 1.4f;
+                Vector3 p = centre - tank.transform.right * range + Vector3.up * range * 0.35f;
+                drone.transform.SetPositionAndRotation(p, Quaternion.LookRotation(centre + Vector3.up * 3f - p) * Quaternion.Euler(drone.GetComponentInChildren<DroneCamera>().TiltDeg, 0f, 0f));
+                if (fov > 0f) { cam.GetComponent<DroneCamera>().enabled = false; cam.transform.rotation = Quaternion.LookRotation(centre + Vector3.up * 3f - p); cam.fieldOfView = fov; }
+                yield return new WaitForSecondsRealtime(1.5f);
+                yield return Measure(sb, view + ", idle", 4f);
+                UnityEngine.Random.InitState(1);
+                typeof(ModernDrone.Damage.VehicleDamageModel).GetMethod("Destroy", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                    .Invoke(tank, new object[] { ModernDrone.Damage.DestructionCause.AmmoDetonation });
+                yield return Measure(sb, view + ", fireball 0-3 s", 3f);
+                yield return Measure(sb, view + ", cook-off 3-12 s", 9f);
+                yield return new WaitForSeconds(8f);
+                yield return Measure(sb, view + ", burning 20-35 s", 15f);
+            }
+            string path = Arg("-benchmarkOut") ?? System.IO.Path.Combine(Application.persistentDataPath, "benchmark.txt");
+            System.IO.File.WriteAllText(path, sb.ToString());
+            Debug.Log("[Benchmark]\n" + sb);
+            Application.Quit();
+        }
+
+        /// <summary>
+        /// Averages frame timings over <paramref name="seconds"/>. The effects' renderers and lights (everything under
+        /// a "VFX_" root) are hidden every other 30 frames, so "GPU fx" is the effects' own GPU cost measured A/B in the
+        /// same view (their smoke hides scenery, so comparing with an idle view would undercount them).
+        /// </summary>
+        /// <summary>-benchmarkVeg: the swaying tree shader against plain URP Lit on the same poses.</summary>
+        IEnumerator Vegetation(DroneController drone, Terrain terrain)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine($"{DateTime.Now:yyyy-MM-dd HH:mm}  {SystemInfo.graphicsDeviceName}  {Screen.width}x{Screen.height}  vegetation");
+            sb.AppendLine("case | frame ms | CPU main ms | CPU render ms | GPU ms | fps | particles | GPU fx ms");
+            var mats = new System.Collections.Generic.List<Material>();
+            foreach (var r in FindObjectsByType<Renderer>())
+                foreach (var m in r.sharedMaterials)
+                    if (m != null && m.shader.name == "ModernDrone/Vegetation Lit" && !mats.Contains(m)) mats.Add(m);
+            var sway = Shader.Find("ModernDrone/Vegetation Lit");
+            var lit = Shader.Find("Universal Render Pipeline/Lit");
+            foreach (var c in new[] { Cases[0], Cases[2] })
+            {
+                var p = c.pos;
+                p.y = terrain.SampleHeight(p) + terrain.transform.position.y + c.height;
+                drone.transform.SetPositionAndRotation(p, Quaternion.Euler(c.euler));
+                foreach (var shader in new[] { sway, lit, sway })
+                {
+                    foreach (var m in mats) m.shader = shader;
+                    yield return new WaitForSecondsRealtime(1f);
+                    yield return Measure(sb, $"{c.name}, {(shader == sway ? "sway" : "URP Lit")}", 5f);
+                }
+            }
+            string path = Arg("-benchmarkOut") ?? System.IO.Path.Combine(Application.persistentDataPath, "benchmark.txt");
+            System.IO.File.WriteAllText(path, sb.ToString());
+            Application.Quit();
+        }
+
+        static IEnumerator Measure(StringBuilder sb, string name, float seconds)
+        {
+            var timings = new FrameTiming[1];
+            double frame = 0, main = 0, render = 0, dt = 0;
+            double[] gpu = new double[2];
+            int[] count = new int[2];
+            int n = 0, particles = 0, i = 0;
+            bool hidden = false;
+            for (float t = 0f; t < seconds; t += Time.deltaTime, i++)
+            {
+                if (i % 30 == 0)
+                {
+                    hidden = (i / 30) % 2 == 1;
+                    ShowEffects(!hidden, ref particles);
+                }
+                yield return null;
+                FrameTimingManager.CaptureFrameTimings();
+                if (FrameTimingManager.GetLatestTimings(1, timings) == 0) continue;
+                frame += timings[0].cpuFrameTime; main += timings[0].cpuMainThreadFrameTime;
+                render += timings[0].cpuRenderThreadFrameTime;
+                dt += Time.unscaledDeltaTime;
+                n++;
+                // GPU timings arrive a few frames late: skip the frames right after a switch.
+                if (i % 30 < 6) continue;
+                gpu[hidden ? 1 : 0] += timings[0].gpuFrameTime;
+                count[hidden ? 1 : 0]++;
+            }
+            ShowEffects(true, ref particles);
+            double on = count[0] > 0 ? gpu[0] / count[0] : 0, off = count[1] > 0 ? gpu[1] / count[1] : on;
+            sb.AppendLine(n == 0 ? $"{name} | no frame timings"
+                : $"{name} | {frame / n:F2} | {main / n:F2} | {render / n:F2} | {on:F2} | {n / dt:F0} | {particles} | GPU fx {on - off:F2}");
+        }
+
+        static void ShowEffects(bool show, ref int particles)
+        {
+            int total = 0;
+            foreach (var root in UnityEngine.SceneManagement.SceneManager.GetActiveScene().GetRootGameObjects())
+                foreach (var t in root.GetComponentsInChildren<Transform>(true))
+                {
+                    if (!t.name.StartsWith("VFX_")) continue;
+                    foreach (var r in t.GetComponentsInChildren<Renderer>(true)) r.forceRenderingOff = !show;
+                    foreach (var l in t.GetComponentsInChildren<Light>(true)) l.enabled = show;
+                    foreach (var ps in t.GetComponentsInChildren<ParticleSystem>(true)) total += ps.particleCount;
+                }
+            particles = Mathf.Max(particles, total);
         }
 
         static string Arg(string name)
