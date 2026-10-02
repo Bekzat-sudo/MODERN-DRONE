@@ -199,7 +199,8 @@ namespace ModernDrone.Vehicles
             {
                 var vent = _vents[i];
                 vent.Hatch.Blow(Random.Range(380f, 700f));
-                _jets.Add(Own(SimpleVfx.CookOff(vent.transform, vent.transform.position, Random.Range(5f, 10f), vent.transform.up, 1f, jet)));
+                // The torch lasts as long as the charges burn (~20 s out of a T-72's hatch in youtu.be/gbI1EAPONWs).
+                _jets.Add(Own(SimpleVfx.CookOff(vent.transform, vent.transform.position, b.fire.Remaining * Random.Range(1.2f, 2.5f), vent.transform.up, 1f, jet)));
             }
         }
 
