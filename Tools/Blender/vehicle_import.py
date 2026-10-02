@@ -5,14 +5,16 @@ plus the two decimated LODs VehicleKit.AttachModel looks for (<name>_lod1/_lod2.
 own: Unity gives them the full model's materials by node name).
 
 Run headless:
-  blender -b --factory-startup --python Tools/Blender/vehicle_import.py -- <in.glb> <out_dir> <name> <rot_z_deg> <length_m>
+  blender -b --factory-startup --python Tools/Blender/vehicle_import.py -- <in.glb> <out_dir> <name> <rot_z_deg> <length_m> [paint...]
 rot_z_deg turns the model so its front points to -Y; length_m is the real overall length it is scaled to (0 = keep).
+paint: optional "Material=r,g,b" (sRGB 0-1) repaints a material, matte (e.g. a civilian body in olive).
 """
 import bpy, sys, os, math
 from mathutils import Vector, Matrix
 
 a = sys.argv[sys.argv.index("--") + 1:]
 src, out_dir, name, rot_z, length = a[0], a[1], a[2], float(a[3]), float(a[4])
+paint = dict((k, tuple(float(c) for c in v.split(","))) for k, v in (x.split("=") for x in a[5:]))
 os.makedirs(out_dir, exist_ok=True)
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -31,6 +33,17 @@ for o in meshes:
 for o in list(bpy.context.scene.objects):
     if o.type != 'MESH':
         bpy.data.objects.remove(o)
+
+def linear(c):
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+
+for m in bpy.data.materials:
+    if m.name in paint and m.node_tree and m.node_tree.nodes.get("Principled BSDF"):
+        bsdf = m.node_tree.nodes["Principled BSDF"]
+        bsdf.inputs["Base Color"].default_value = tuple(linear(c) for c in paint[m.name]) + (1.0,)
+        bsdf.inputs["Roughness"].default_value = 0.75
+        print(f"[vehicle_import] painted {m.name} {paint[m.name]}", flush=True)
 
 # Join into one object.
 bpy.ops.object.select_all(action='DESELECT')
