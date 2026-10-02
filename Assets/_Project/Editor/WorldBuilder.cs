@@ -654,6 +654,9 @@ namespace ModernDrone.Editor
             urp.mainLightShadowmapResolution = 4096;
             urp.upscalingFilter = UpscalingFilterSelection.STP;
             urp.gpuResidentDrawerEnableOcclusionCullingInCameras = true;
+            // 64-bit HDR target: in R11G11B10 blue keeps one mantissa bit less than red and green, and the bright
+            // gradients of a fireball broke into rainbow-coloured rings (blue banding at other steps than red/green).
+            urp.hdrColorBufferPrecision = HDRColorBufferPrecision._64Bits;
             EditorUtility.SetDirty(urp);
         }
     }

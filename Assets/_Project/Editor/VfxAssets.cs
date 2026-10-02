@@ -43,8 +43,10 @@ namespace ModernDrone.Editor
             Particle("VFX_Embers", soft, true, new Color(5f, 2.8f, 1.2f));
             Particle("VFX_Clods", clods, false, Color.white);
             Particle("VFX_Leaves", leaves, false, Color.white);
-            Distortion("VFX_ShockRing", ring: true, strength: 0.035f);
-            Distortion("VFX_Haze", ring: false, strength: 0.012f);
+            // Heat shimmer bends the view by a few pixels, not tens: a 1.2 % screen shift dragged sky and trees in a band
+            // round the haze sprite that showed through a thin fireball as a rainbow arc.
+            Distortion("VFX_ShockRing", ring: true, strength: 0.016f);
+            Distortion("VFX_Haze", ring: false, strength: 0.003f);
             Lit("VFX_Debris", new Color(0.09f, 0.085f, 0.08f), 0.3f);
             Lit("VFX_HatchGlow", new Color(0.02f, 0.018f, 0.016f), 0f);
             Audio();
