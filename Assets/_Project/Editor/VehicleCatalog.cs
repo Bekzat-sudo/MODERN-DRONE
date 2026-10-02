@@ -733,6 +733,7 @@ namespace ModernDrone.Editor
             k.Plate("Track_R", v(1.9f, 0.45f, 0.3f), v(0.55f, 0.85f, 6.9f), 1f, body, mat: k.Dark);
             k.Plate("Turret", v(0, 1.9f, 0.4f), v(2.5f, 0.75f, 2.6f), 1f, body);
             k.Plate("Gun", v(0, 1.95f, 3.4f), v(0.26f, 0.26f, 4.0f), 1f, body);
+            DecoyModel(k, body, VehicleBuilder.TankModelPath, new Vector3(0f, 0f, 0.4f));
             k.Finish("Танк", decoy: true);
             k.Save(DecoyTank);
         }
@@ -742,9 +743,10 @@ namespace ModernDrone.Editor
         {
             var k = new VehicleKit("Decoy_MLRS", new Color(0.31f, 0.36f, 0.23f), "DecoyFabric", 0.55f);
             var body = k.Group("Body", Vector3.zero, rot: Quaternion.Euler(0f, 0f, -1f));
-            k.Plate("Chassis", v(0, 0.9f, 0), v(2.4f, 0.6f, 8.0f), 1f, body, mat: k.Dark);
-            k.Plate("Cab", v(0, 1.9f, 3.1f), v(2.5f, 1.8f, 1.8f), 1f, body);
-            k.Plate("Pod", v(0, 2.3f, -2.0f), v(2.1f, 1.2f, 3.2f), 1f, body, Quaternion.Euler(-12f, 0f, 0f));
+            k.Plate("Chassis", v(0, 0.9f, 0), v(2.4f, 0.6f, 7.3f), 1f, body, mat: k.Dark);
+            k.Plate("Cab", v(0, 1.8f, 1.95f), v(2.4f, 1.8f, 3.4f), 1f, body);
+            k.Plate("Pod", v(0, 2.7f, -2.05f), v(1.8f, 1.1f, 3.0f), 1f, body, Pitch(-20f));
+            DecoyModel(k, body, ModelDir + "BM21/bm21.glb", Vector3.zero);
             k.Finish("РСЗО", decoy: true);
             k.Save(DecoyMlrs);
         }
@@ -758,8 +760,35 @@ namespace ModernDrone.Editor
             k.Plate("Cab", v(0, 1.9f, 3.6f), v(2.5f, 1.8f, 1.8f), 1f, body);
             k.Plate("Module", v(0, 2.5f, -1.8f), v(2.6f, 2.0f, 3.2f), 1f, body);
             k.Plate("Radar", v(0, 4.4f, -2.2f), v(2.0f, 1.0f, 0.2f), 1f, body, mat: k.Metal);
+            DecoyModel(k, body, ModelDir + "Pantsir/pantsir_s1.glb", Vector3.zero);
             k.Finish("ЗРПК", decoy: true);
             k.Save(DecoySpaag);
+        }
+
+        /// <summary>
+        /// Inflatable decoys copy the real vehicle (Rusbal makes life-size inflatable T-72s and S-300 parts, abcnews.com/Technology/International/russias-inflatable-military/story?id=11856527): the decimated LOD 1
+        /// of its model, which reads soft and rounded like a blown-up envelope, all in one slightly glossy fabric, under the
+        /// tilted body that slumps when it is holed. The plates stay as the hit volume.
+        /// </summary>
+        static void DecoyModel(VehicleKit k, Transform body, string modelPath, Vector3 offset)
+        {
+            var asset = AssetDatabase.LoadAssetAtPath<GameObject>(modelPath.Replace(".glb", "_lod1.glb"));
+            if (asset == null) return;
+            foreach (var r in body.GetComponentsInChildren<Renderer>(true)) r.enabled = false;
+            var visual = (GameObject)Object.Instantiate(asset, body);
+            visual.name = "Visual";
+            visual.transform.localPosition = offset;
+            visual.transform.localRotation = Quaternion.identity;
+            foreach (var c in visual.GetComponentsInChildren<Collider>(true)) Object.DestroyImmediate(c);
+            // An envelope has no hatches to vent a fire through: the model's hatch lids are just more fabric.
+            foreach (var t in visual.GetComponentsInChildren<Transform>(true))
+                if (t.name.StartsWith("Hatch")) t.name = "Panel" + t.name.Substring("Hatch".Length);
+            foreach (var r in visual.GetComponentsInChildren<Renderer>(true))
+            {
+                var mats = new Material[r.sharedMaterials.Length];
+                for (int i = 0; i < mats.Length; i++) mats[i] = k.Hull;
+                r.sharedMaterials = mats;
+            }
         }
 
         /// <summary>Main battle tank with anti-drone cages over the turret roof and engine deck.</summary>

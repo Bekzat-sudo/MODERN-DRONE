@@ -16,7 +16,7 @@ namespace ModernDrone.Editor
     public static class VehicleBuilder
     {
         public const string TankPrefabPath = "Assets/_Project/Prefabs/Vehicles/Tank_Placeholder.prefab";
-        const string TankModelPath = "Assets/_Project/Art/Models/Vehicles/T72B3/t72b3.glb";
+        public const string TankModelPath = "Assets/_Project/Art/Models/Vehicles/T72B3/t72b3.glb";
         public const string EwStationPrefabPath = "Assets/_Project/Prefabs/Vehicles/EwStation_Placeholder.prefab";
         const string MatDir = "Assets/_Project/Art/Materials";
 
