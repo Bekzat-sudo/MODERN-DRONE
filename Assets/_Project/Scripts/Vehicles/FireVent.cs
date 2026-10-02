@@ -21,7 +21,9 @@ namespace ModernDrone.Vehicles
 
     /// <summary>
     /// An opening a fire inside the vehicle can burn out of. Flames are drawn here, outside the hull, never at the
-    /// burning module itself (inside the armour). Position = centre of the opening, up = its outward normal.
+    /// burning module itself (inside the armour). Position = centre of the opening, up = its outward normal. It leads into
+    /// one compartment of the vehicle (<see cref="VehicleFxProfile"/>): a fire burns out of the openings of its own
+    /// compartment and of those connected to it.
     /// </summary>
     public sealed class FireVent : MonoBehaviour
     {
@@ -31,6 +33,8 @@ namespace ModernDrone.Vehicles
         [SerializeField] Hatch hatch;
         [Tooltip("Dark plate inside the opening that glows while the vehicle burns.")]
         [SerializeField] Renderer glow;
+        [Tooltip("Compartment it opens (index in the vehicle's VehicleFxProfile; -1 = any).")]
+        [SerializeField] int compartment = -1;
 
         bool _forcedOpen;
 
@@ -38,6 +42,7 @@ namespace ModernDrone.Vehicles
         public float Area => area;
         public Hatch Hatch => hatch;
         public Renderer Glow => glow;
+        public int Compartment { get => compartment; set => compartment = value; }
 
         public bool Open => _forcedOpen || kind switch
         {
@@ -47,12 +52,13 @@ namespace ModernDrone.Vehicles
             _ => true,
         };
 
-        public void Configure(VentKind ventKind, float areaM2, Hatch lid = null, Renderer glowPlate = null)
+        public void Configure(VentKind ventKind, float areaM2, Hatch lid = null, Renderer glowPlate = null, int compartmentIndex = -1)
         {
             kind = ventKind;
             area = areaM2;
             hatch = lid;
             glow = glowPlate;
+            compartment = compartmentIndex;
         }
 
         /// <summary>Opens a vent that is shut by default (the turret ring when the turret is thrown off).</summary>
@@ -60,8 +66,23 @@ namespace ModernDrone.Vehicles
 
         public VentPicker.Vent Info => new VentPicker.Vent
         {
-            position = transform.position, normal = transform.up, area = area, open = Open, kind = kind
+            position = transform.position, normal = transform.up, area = area, open = Open, kind = kind, compartment = compartment
         };
+
+        void OnDrawGizmos()
+        {
+            Gizmos.color = kind switch
+            {
+                VentKind.Hatch => new Color(1f, 0.6f, 0.1f),
+                VentKind.TurretRing => new Color(1f, 0.2f, 0.1f),
+                VentKind.Grille => new Color(1f, 0.9f, 0.2f),
+                VentKind.Seam => new Color(0.6f, 0.6f, 0.6f),
+                _ => new Color(1f, 0.4f, 0.4f),
+            };
+            float r = Mathf.Sqrt(Mathf.Max(0.01f, area) / Mathf.PI);
+            Gizmos.DrawWireSphere(transform.position, r);
+            Gizmos.DrawLine(transform.position, transform.position + transform.up * Mathf.Max(0.5f, r * 2f));
+        }
     }
 
     /// <summary>
@@ -79,6 +100,24 @@ namespace ModernDrone.Vehicles
             public float area;
             public bool open;
             public VentKind kind;
+            /// <summary>Compartment it opens (-1 = any).</summary>
+            public int compartment;
+            /// <summary>Not reachable from the fire's compartment (closed bulkheads in between).</summary>
+            public bool blocked;
+        }
+
+        /// <summary>
+        /// Marks the vents a fire in compartment <paramref name="source"/> cannot reach: those of compartments not
+        /// connected to it (directly, or through breaches). -1 on either side means no restriction.
+        /// </summary>
+        public static void Block(int source, List<Vent> vents, System.Func<int, int, bool> connected)
+        {
+            for (int i = 0; i < vents.Count; i++)
+            {
+                var v = vents[i];
+                v.blocked = source >= 0 && v.compartment >= 0 && connected != null && !connected(source, v.compartment);
+                vents[i] = v;
+            }
         }
 
         /// <summary>Hatches within this distance of a propellant fire are blown open by its pressure (abstract).</summary>
@@ -97,7 +136,7 @@ namespace ModernDrone.Vehicles
             float total = 0f;
             for (int i = 0; i < vents.Count; i++)
             {
-                if (!vents[i].open || vents[i].kind == VentKind.Seam) continue;
+                if (!vents[i].open || vents[i].blocked || vents[i].kind == VentKind.Seam) continue;
                 float w = Weight(vents[i].area, Vector3.Distance(source, vents[i].position));
                 result.Add((i, w));
                 total += w;
@@ -115,10 +154,12 @@ namespace ModernDrone.Vehicles
         /// <summary>The nearest open vent for a fire at <paramref name="source"/> (-1 if all are shut).</summary>
         public static int Nearest(Vector3 source, IReadOnlyList<Vent> vents)
         {
-            var list = new List<(int, float)>();
-            Share(source, vents, list, 1);
-            return list.Count > 0 ? list[0].Item1 : -1;
+            _nearest.Clear();
+            Share(source, vents, _nearest, 1);
+            return _nearest.Count > 0 ? _nearest[0].Item1 : -1;
         }
+
+        static readonly List<(int, float)> _nearest = new List<(int, float)>();
 
         /// <summary>Where smoke seeps out when every opening is shut: the seam (or any vent) nearest the fire.</summary>
         public static int Seep(Vector3 source, IReadOnlyList<Vent> vents)
@@ -127,6 +168,7 @@ namespace ModernDrone.Vehicles
             float bestD = float.MaxValue;
             for (int i = 0; i < vents.Count; i++)
             {
+                if (vents[i].blocked) continue;
                 float d = Vector3.Distance(source, vents[i].position) * (vents[i].kind == VentKind.Seam ? 1f : 1.5f);
                 if (d < bestD) { bestD = d; best = i; }
             }
@@ -138,7 +180,7 @@ namespace ModernDrone.Vehicles
         {
             result.Clear();
             for (int i = 0; i < vents.Count; i++)
-                if (vents[i].kind == VentKind.Hatch && !vents[i].open && Vector3.Distance(source, vents[i].position) <= reach)
+                if (vents[i].kind == VentKind.Hatch && !vents[i].open && !vents[i].blocked && Vector3.Distance(source, vents[i].position) <= reach)
                     result.Add(i);
         }
     }

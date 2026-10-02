@@ -6,7 +6,8 @@ namespace ModernDrone.Damage
     /// <summary>
     /// Internal (or exposed) component of a vehicle with hit points. Its collider sits on the
     /// query-only Module layer: it never collides physically, only damage raycasts hit it.
-    /// Fuel tanks, ammunition and engines also carry what they would burn with (<see cref="Combustible"/>).
+    /// Fuel tanks, ammunition and engines also carry what they would burn or explode with: a <see cref="SubstanceData"/>
+    /// asset and how much of it (litres, charges, rounds, rockets), plus any explosive fill (shells beside the charges).
     /// </summary>
     [RequireComponent(typeof(Collider))]
     public sealed class VehicleModule : MonoBehaviour
@@ -19,10 +20,15 @@ namespace ModernDrone.Damage
         [SerializeField] float absorb = 25f;
 
         [Header("Contents")]
-        [SerializeField] Combustible combustible;
-        [Tooltip("Holds high explosive (shells, warheads) that a jet can detonate.")]
-        [SerializeField] bool highExplosive;
-        [Tooltip("Fill level of a fuel tank, 0..1.")]
+        [Tooltip("What burns (fuel, propellant charges, rocket motors).")]
+        [SerializeField] SubstanceData substance;
+        [Tooltip("How much of it when full, in the substance's unit (litres, charges, rounds, rockets).")]
+        [SerializeField] float amount;
+        [Tooltip("Explosive fill a jet can detonate (shells, warheads), or none.")]
+        [SerializeField] SubstanceData explosive;
+        [Tooltip("How many explosive units (shells, warheads).")]
+        [SerializeField] float explosiveCount;
+        [Tooltip("Fill level, 0..1.")]
         [SerializeField, Range(0f, 1f)] float load = 1f;
         [Tooltip("Self-sealing, foam-filled tank (aircraft).")]
         [SerializeField] bool protectedTank;
@@ -36,8 +42,16 @@ namespace ModernDrone.Damage
         public ModuleState State { get; private set; }
         public VehicleDamageModel Owner { get; internal set; }
 
-        public Combustible Combustible => combustible;
-        public bool HighExplosive => highExplosive;
+        public SubstanceData Substance => substance;
+        public SubstanceData Explosive => explosive;
+        /// <summary>Contents when full, in the substance's unit.</summary>
+        public float Amount => amount;
+        public float ExplosiveCount => explosiveCount;
+        /// <summary>Holds something burnable.</summary>
+        public bool Burnable => substance != null && substance.Burns;
+        public bool HighExplosive => explosive != null && explosive.detonates && explosiveCount > 0f;
+        /// <summary>What is left now (load times amount), in the substance's unit.</summary>
+        public float Remaining => amount * load;
         public bool ProtectedTank => protectedTank;
         /// <summary>Remaining contents, 0..1 (fuel drains when leaking and burns away when on fire).</summary>
         public float Load { get => load; internal set => load = Mathf.Clamp01(value); }
@@ -51,19 +65,28 @@ namespace ModernDrone.Damage
             this.type = type;
             this.maxHp = maxHp;
             this.absorb = absorb;
-            combustible = Combustion.DefaultFor(type);
-            highExplosive = Combustion.DefaultHighExplosive(type);
+            var lib = SubstanceLibrary.Instance;
+            substance = lib != null ? lib.DefaultContents(type) : null;
+            amount = lib != null ? lib.DefaultAmount(type) : 0f;
+            explosive = lib != null ? lib.DefaultExplosive(type) : null;
+            explosiveCount = lib != null ? lib.DefaultExplosiveCount(type) : 0f;
             load = type == ModuleType.Engine || type == ModuleType.Transmission ? 0.3f : 1f;
             _hp = maxHp;
             State = ModuleState.Operational;
             gameObject.layer = GameLayers.Module;
         }
 
-        /// <summary>Overrides what the module holds (defaults come from its type).</summary>
-        public VehicleModule SetContents(Combustible contents, bool explosive = false, float fill = 1f, bool selfSealing = false)
+        /// <summary>
+        /// Overrides what the module holds (defaults come from its type): <paramref name="units"/> of
+        /// <paramref name="contents"/> and <paramref name="explosiveUnits"/> of <paramref name="explosiveFill"/>.
+        /// </summary>
+        public VehicleModule SetContents(SubstanceData contents, float units, SubstanceData explosiveFill = null, float explosiveUnits = 0f,
+            float fill = 1f, bool selfSealing = false)
         {
-            combustible = contents;
-            highExplosive = explosive;
+            substance = contents;
+            amount = Mathf.Max(0f, units);
+            explosive = explosiveFill;
+            explosiveCount = explosiveFill != null ? Mathf.Max(0f, explosiveUnits) : 0f;
             load = Mathf.Clamp01(fill);
             protectedTank = selfSealing;
             return this;

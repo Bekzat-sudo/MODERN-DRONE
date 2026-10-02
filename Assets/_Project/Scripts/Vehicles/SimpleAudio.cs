@@ -12,7 +12,8 @@ namespace ModernDrone.Vehicles
     /// far take (low boom, rolling echo) with distance, falling debris follows, and a first echo off the terrain comes
     /// a little later. Every play picks one of several takes at a slightly different pitch.
     /// Supersonic rounds crack where they pass (they outrun their own muzzle blast: 94 ms apart at 50 m, 507 ms at
-    /// 300 m, eprints.soton.ac.uk SA80 study). The listener is the drone's microphone or the recon camera.
+    /// 300 m, eprints.soton.ac.uk SA80 study). The listener is the drone's microphone or the recon camera. Blasts,
+    /// fires and cook-offs play sound banks (<see cref="SoundBank"/> assets).
     /// </summary>
     public static class SimpleAudio
     {
@@ -34,52 +35,39 @@ namespace ModernDrone.Vehicles
             return clips.ToArray();
         }
 
-        static AudioClip[] _close, _far, _small, _mg, _cannon, _metal, _pops, _fire;
-        static AudioClip _debrisMetal, _debrisDirt, _jet, _burst, _crackle, _crack;
+        static AudioClip[] _mg, _cannon, _metal;
+        static AudioClip _crack;
 
         static void Load()
         {
-            if (_close != null) return;
-            _close = Takes("exp_close", 3);
-            _far = Takes("exp_far", 4);
-            _small = Takes("exp_small", 3);
+            if (_mg != null) return;
             _mg = Takes("mg", 4);
             _cannon = Takes("cannon", 3);
             _metal = Takes("metal", 2);
-            _pops = Takes("pop", 2);
-            _fire = new[] { Resources.Load<AudioClip>("Audio/fire_large"), Resources.Load<AudioClip>("Audio/fire_fuel"), Resources.Load<AudioClip>("Audio/fire_car") };
-            _fire = System.Array.FindAll(_fire, c => c != null);
-            _debrisMetal = Resources.Load<AudioClip>("Audio/debris_metal");
-            _debrisDirt = Resources.Load<AudioClip>("Audio/debris_dirt");
-            _jet = Resources.Load<AudioClip>("Audio/flame_jet");
-            _burst = Resources.Load<AudioClip>("Audio/flame_burst");
-            _crackle = Resources.Load<AudioClip>("Audio/cookoff_crackle");
             _crack = Resources.Load<AudioClip>("Audio/crack");
         }
 
         static AudioClip Pick(AudioClip[] clips) => clips == null || clips.Length == 0 ? null : clips[Random.Range(0, clips.Length)];
 
-        public static void Explosion(Vector3 position, float size) => Explosion(position, size, ExplosionKind.Auto);
-
-        public static void Explosion(Vector3 position, float size, ExplosionKind kind)
+        /// <summary>
+        /// A blast from <paramref name="bank"/>, layered: the near take (small events: the small takes) fades into the far
+        /// take with distance, falling debris follows, and a first echo off the ground and tree lines a couple of hundred
+        /// metres beyond (abstract reflector distance) comes a little later. Bigger events sound deeper.
+        /// </summary>
+        public static void Blast(SoundBank bank, Vector3 position, float size)
         {
-            Load();
+            if (bank == null) return;
             float k = Mathf.Pow(Mathf.Max(0.05f, size), 1f / 3f);
-            bool small = kind == ExplosionKind.Era || size < 0.7f;
-            bool big = kind == ExplosionKind.Ammo || size >= 2f;
-            // Bigger charges sound deeper.
-            float pitch = Mathf.Lerp(1.12f, 0.82f, Mathf.InverseLerp(0.3f, 3f, size)) * Random.Range(0.95f, 1.05f);
-            float min = 22f * k;
-            var near = new Layer { clip = Pick(small ? _small : _close), volume = small ? 0.8f : 1f, minDistance = min, pitch = pitch, near = true, size = size };
-            var far = new Layer { clip = Pick(_far), volume = big ? 1f : 0.85f, minDistance = min * 1.6f, pitch = pitch * 0.95f, far = true, size = size };
-            Emit(position, near);
-            Emit(position, far);
-            // Debris raining down: dirt on ground bursts, metal off a vehicle.
-            var debris = kind == ExplosionKind.Ground ? _debrisDirt : kind == ExplosionKind.Ammo || kind == ExplosionKind.Armor ? _debrisMetal : null;
+            bool small = size < bank.smallSize, big = size >= bank.bigSize;
+            float pitch = Mathf.Lerp(bank.pitchSmall, bank.pitchBig, Mathf.InverseLerp(0.3f, 3f, size)) * Random.Range(bank.pitchMin, bank.pitchMax);
+            float min = bank.minDistance * k;
+            var nearTakes = small && bank.small.Length > 0 ? bank.small : bank.near;
+            Emit(position, new Layer { clip = SoundBank.Pick(nearTakes), volume = bank.volume * (small ? 0.8f : 1f), minDistance = min, pitch = pitch, near = true, size = size });
+            Emit(position, new Layer { clip = SoundBank.Pick(bank.far), volume = big ? 1f : 0.85f, minDistance = min * 1.6f, pitch = pitch * 0.95f, far = true, size = size });
+            var debris = SoundBank.Pick(bank.debris);
             if (debris != null && !small)
-                Emit(position, new Layer { clip = debris, volume = 0.55f, minDistance = 10f * k, pitch = Random.Range(0.9f, 1.1f), extraDelay = Random.Range(0.5f, 1.2f), near = true, size = size });
-            // First echo off the ground and tree lines a couple of hundred metres beyond (abstract reflector distance).
-            Emit(position, new Layer { clip = Pick(_far), volume = 0.35f, minDistance = min * 1.6f, pitch = pitch * 0.9f, echo = Random.Range(120f, 320f), far = true, size = size });
+                Emit(position, new Layer { clip = debris, volume = bank.debrisVolume, minDistance = 10f * k, pitch = Random.Range(0.9f, 1.1f), extraDelay = Random.Range(0.5f, 1.2f), near = true, size = size });
+            Emit(position, new Layer { clip = SoundBank.Pick(bank.far), volume = bank.echoVolume, minDistance = min * 1.6f, pitch = pitch * 0.9f, echo = Random.Range(120f, 320f), far = true, size = size });
         }
 
         /// <summary>Muzzle blast of an automatic gun (one call = a group of four rounds); 23 mm and up sound deeper and slower.</summary>
@@ -117,37 +105,21 @@ namespace ModernDrone.Vehicles
 
         public static void Shot(Vector3 position) => GunShot(position, 12.7f);
 
-        /// <summary>Roaring, crackling fire loop attached to a fire effect (removed with it).</summary>
-        public static AudioSource FireLoop(Transform parent, float size)
-        {
-            Load();
-            var clip = size >= 1.2f && _fire.Length > 0 ? _fire[0] : Pick(_fire);
-            if (clip == null) return null;
-            var src = parent.gameObject.AddComponent<AudioSource>();
-            src.clip = clip;
-            src.loop = true;
-            src.volume = Mathf.Clamp01(0.45f + 0.25f * size);
-            src.pitch = Random.Range(0.92f, 1.06f);
-            Configure(src, 5f * size);
-            Follower(src);
-            src.time = Random.Range(0f, clip.length);
-            src.Play();
-            return src;
-        }
-
         /// <summary>
-        /// Propellant venting: a burst as the jet lights, a roaring torch for <paramref name="seconds"/>, and the crackle
-        /// and pops of charges and rounds cooking off (secondary bangs now and then).
+        /// A lasting sound from <paramref name="bank"/> attached to <paramref name="parent"/> (removed with it): the start
+        /// one-shot (a jet lighting), the loop (fire roar, torch), the crackle, and pops with the odd bigger bang
+        /// (rounds, primers, charges cooking off), for <paramref name="seconds"/> (0 = until the parent goes), fading out at
+        /// the end. <paramref name="strength"/> is the size of the fire or jet.
         /// </summary>
-        public static void FlameJet(Transform parent, float seconds, float strength)
+        public static void Sustain(SoundBank bank, Transform parent, float seconds, float strength)
         {
-            Load();
-            if (_burst != null)
-                Emit(parent.position, new Layer { clip = _burst, volume = 0.9f, minDistance = 12f, pitch = Random.Range(0.9f, 1.05f), near = true, size = strength });
-            var host = new GameObject("SFX_CookOff");
+            if (bank == null || parent == null) return;
+            var start = SoundBank.Pick(bank.start);
+            if (start != null)
+                Emit(parent.position, new Layer { clip = start, volume = 0.9f * bank.volume, minDistance = 12f, pitch = Random.Range(0.9f, 1.05f), near = true, size = strength });
+            var host = new GameObject("SFX_" + bank.name);
             host.transform.SetParent(parent, false);
-            var c = host.AddComponent<CookOffSound>();
-            c.Begin(seconds, strength);
+            host.AddComponent<SustainedSound>().Begin(bank, seconds, strength);
         }
 
         // ---------------------------------------------------------------- playback
@@ -277,23 +249,27 @@ namespace ModernDrone.Vehicles
             }
         }
 
-        /// <summary>Torch roar and crackle of a cook-off, with pops and the odd secondary bang, fading out at the end.</summary>
-        sealed class CookOffSound : MonoBehaviour
+        /// <summary>Loop, crackle and pops of a fire or cook-off, fading out at the end of a timed one.</summary>
+        sealed class SustainedSound : MonoBehaviour
         {
-            AudioSource _roarSrc, _crackleSrc;
-            float _left, _total, _nextPop, _strength;
+            SoundBank _bank;
+            AudioSource _loopSrc, _crackleSrc;
+            float _left, _total, _nextPop, _loopVolume;
 
-            public void Begin(float seconds, float strength)
+            public void Begin(SoundBank bank, float seconds, float strength)
             {
-                _left = _total = seconds;
-                _strength = strength;
-                _roarSrc = Loop(_jet, Mathf.Clamp01(0.55f + 0.3f * strength), 10f);
-                _crackleSrc = Loop(_crackle, 0.5f, 8f);
+                _bank = bank;
+                _left = _total = seconds > 0f ? seconds : float.PositiveInfinity;
+                var loop = strength >= 1.2f && bank.loop.Length > 0 ? bank.loop[0] : SoundBank.Pick(bank.loop);
+                _loopVolume = bank.volume * Mathf.Clamp01(0.5f + 0.28f * strength);
+                _loopSrc = Loop(loop, _loopVolume, bank.minDistance * Mathf.Max(0.5f, strength));
+                _crackleSrc = Loop(SoundBank.Pick(bank.crackle), 0.5f * bank.volume, 8f);
                 _nextPop = Random.Range(0.3f, 1.2f);
-                Follower(_roarSrc != null ? _roarSrc : _crackleSrc);
+                var main = _loopSrc != null ? _loopSrc : _crackleSrc;
+                if (main != null) Follower(main);
             }
 
-            // The host is a pooled jet: when it is pooled again the sound goes with it.
+            // The host is a pooled effect: when it is pooled again the sound goes with it.
             void OnDisable() => Destroy(gameObject);
 
             AudioSource Loop(AudioClip clip, float volume, float min)
@@ -313,20 +289,20 @@ namespace ModernDrone.Vehicles
             void Update()
             {
                 float dt = Time.deltaTime;
-                if (dt <= 0f) return;
+                if (dt <= 0f || _bank == null) return;
                 _left -= dt;
-                float fade = Mathf.Clamp01(_left / Mathf.Max(1f, _total * 0.3f));
-                if (_roarSrc != null) _roarSrc.volume = Mathf.Clamp01(0.55f + 0.3f * _strength) * fade;
-                if (_crackleSrc != null) _crackleSrc.volume = 0.5f * fade;
+                float fade = float.IsInfinity(_total) ? 1f : Mathf.Clamp01(_left / Mathf.Max(1f, _total * 0.3f));
+                if (_loopSrc != null) _loopSrc.volume = _loopVolume * fade;
+                if (_crackleSrc != null) _crackleSrc.volume = 0.5f * _bank.volume * fade;
                 _nextPop -= dt;
-                if (_nextPop <= 0f && _left > 0f)
+                if (_nextPop <= 0f && _left > 0f && (_bank.pops.Length > 0 || _bank.bangs.Length > 0))
                 {
-                    _nextPop = Random.Range(0.25f, 1.6f);
+                    _nextPop = Random.Range(0.28f, 1.78f) * _bank.popInterval;
                     // Mostly pops of rounds and primers; now and then a charge or shell goes with a bang.
-                    bool bang = Random.value < 0.12f;
+                    bool bang = _bank.bangs.Length > 0 && (_bank.pops.Length == 0 || Random.value < _bank.bangChance);
                     Emit(transform.position + Random.insideUnitSphere * 0.8f, new Layer
                     {
-                        clip = Pick(bang ? _small : _pops), volume = bang ? 0.9f : 0.6f, minDistance = bang ? 14f : 8f,
+                        clip = SoundBank.Pick(bang ? _bank.bangs : _bank.pops), volume = (bang ? 0.9f : 0.6f) * fade, minDistance = bang ? 14f : 8f,
                         pitch = Random.Range(0.85f, 1.2f), near = true, size = bang ? 0.5f : 0.1f
                     });
                 }

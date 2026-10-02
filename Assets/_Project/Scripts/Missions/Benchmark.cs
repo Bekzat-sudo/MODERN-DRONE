@@ -206,8 +206,10 @@ namespace ModernDrone.Missions
                 yield return new WaitForSecondsRealtime(1.5f);
                 yield return Measure(sb, view + ", idle", 4f);
                 UnityEngine.Random.InitState(1);
-                typeof(ModernDrone.Damage.VehicleDamageModel).GetMethod("Destroy", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                    .Invoke(tank, new object[] { ModernDrone.Damage.DestructionCause.AmmoDetonation });
+                // The shells in the rack go: the effects follow from what the tank carries (substances and amounts).
+                ModernDrone.Damage.VehicleModule rack = null;
+                foreach (var m in tank.Modules) if (m.HighExplosive) { rack = m; break; }
+                tank.Detonate(rack);
                 yield return Measure(sb, view + ", fireball 0-3 s", 3f);
                 yield return Measure(sb, view + ", cook-off 3-12 s", 9f);
                 yield return new WaitForSeconds(8f);

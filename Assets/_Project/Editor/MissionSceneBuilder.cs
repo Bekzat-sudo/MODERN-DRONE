@@ -1,4 +1,5 @@
 using ModernDrone.Missions;
+using ModernDrone.Vehicles;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -308,7 +309,7 @@ namespace ModernDrone.Editor
             var heli = TargetAt(terrain, VehicleCatalog.Helicopter, points[0], 200f, "Ми-28НМ", TargetRequirement.OutOfAction);
             heli.transform.position += Vector3.up * 35f;
             var flight = heli.GetComponent<ModernDrone.Vehicles.HelicopterFlight>();
-            flight.Configure(points, heli.transform.Find("Rotor"));
+            flight.Configure(points, heli.GetComponent<VehicleFxProfile>().rotor);
             EditorUtility.SetDirty(flight);
 
             Mog(terrain, VehicleCatalog.MogZil, new Vector3(1000f, 0f, 1720f), 200f);
