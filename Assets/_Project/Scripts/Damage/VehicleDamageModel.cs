@@ -334,6 +334,14 @@ namespace ModernDrone.Damage
                 {
                     if (fire.Source != null) fire.Source.OnFire = false;
                     FireEnded?.Invoke(this, fire);
+                    // Charges that vented through the hatches have gutted the fighting compartment by the time they are
+                    // spent: the vehicle is burnt out now (the hull fire takes over), not when the last small fire ends.
+                    if (_vented && fire.Substance != null && fire.Substance.violent)
+                    {
+                        Note("выгорел");
+                        Destroy(DestructionCause.BurnedOut);
+                        return;
+                    }
                 }
             }
 

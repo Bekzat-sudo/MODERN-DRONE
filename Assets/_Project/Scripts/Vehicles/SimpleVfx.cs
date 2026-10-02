@@ -155,7 +155,11 @@ namespace ModernDrone.Vehicles
             {
                 var p = centre + Quaternion.Euler(0f, Random.Range(0f, 360f), 0f) * Vector3.forward * Random.Range(radius * 0.4f, radius);
                 if (Physics.Raycast(p + Vector3.up * 20f, Vector3.down, out var hit, 40f, GameLayers.TerrainMask, QueryTriggerInteraction.Ignore))
-                    p = hit.point;
+                {
+                    // The terrain collider holds its trees' colliders too: a ray can stop on a crown. Debris lands on the ground.
+                    var terrain = hit.collider.GetComponent<Terrain>();
+                    p = terrain != null ? new Vector3(p.x, terrain.SampleHeight(p) + terrain.GetPosition().y, p.z) : hit.point;
+                }
                 var fire = Fire(null, p, Random.Range(0.3f, 0.55f));
                 if (fire == null) return;
                 // Burning debris lands a moment after the blast, then catches.
