@@ -121,7 +121,7 @@ namespace ModernDrone.Core
         [Header("Sound")]
         public SoundBank sound;
 
-        /// <summary>Graphics quality for effects, 0..3 (set by the graphics settings; layers above it are skipped).</summary>
+        /// <summary>Effects quality, 1..3 (ControlSettings.effectsQuality via GraphicsQuality; layers above it are skipped).</summary>
         public static int Quality = 3;
 
         public SmokeVolumes.Kind ObscurationKind => obscures switch

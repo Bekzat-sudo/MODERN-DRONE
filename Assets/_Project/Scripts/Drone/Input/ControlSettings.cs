@@ -204,6 +204,8 @@ namespace ModernDrone.Drone
         public int vegetationDetail = 3;
         [Tooltip("Grass draw distance: 0 off, 1 low, 2 medium, 3 high.")]
         public int grassQuality = 3;
+        [Tooltip("Combat effects detail (explosion and fire layers, FxRecipe.Quality): 1 low, 2 medium, 3 high.")]
+        public int effectsQuality = 3;
         [Tooltip("Index into GraphicsQuality.FrameLimits (0 = no cap); ignored with vertical sync.")]
         public int frameRateLimit;
         public bool showFps;

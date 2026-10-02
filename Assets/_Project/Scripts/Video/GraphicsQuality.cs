@@ -51,6 +51,8 @@ namespace ModernDrone.Video
 
         public static void Apply()
         {
+            // Effect layers above this level are skipped (heat shimmer, blast ring, embers, extra fireball waves).
+            FxRecipe.Quality = Mathf.Clamp(ControlSettings.Current.effectsQuality, 1, 3);
             var urp = Pipeline;
             if (urp == null) return;
             var s = ControlSettings.Current;

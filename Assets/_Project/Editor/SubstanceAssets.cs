@@ -216,13 +216,49 @@ namespace ModernDrone.Editor
             if (field == null) field = value;
         }
 
+        /// <summary>
+        /// Graphics tiers of a recipe's layers: low keeps flash, fireball, sparks, clods, smoke, flames, jets and lights;
+        /// medium adds heat shimmer, the blast ring, embers and the rolling dust skirt; high adds the extra fireball waves.
+        /// Embers stay on every tier where they are the effect itself (small-arms crackle).
+        /// </summary>
+        public static void AssignTiers(FxRecipe r)
+        {
+            bool embersOnly = r.name.StartsWith("Crackle");
+            foreach (var l in r.layers)
+            {
+                if (l == null) continue;
+                l.minQuality = l.kind switch
+                {
+                    FxLayerKind.Haze or FxLayerKind.ShockRing => 2,
+                    FxLayerKind.Embers => embersOnly ? 1 : 2,
+                    FxLayerKind.Fireball => l.delay > 0f ? 3 : 1,
+                    FxLayerKind.Smoke => l.groundRing ? 2 : 1,
+                    _ => 1,
+                };
+            }
+        }
+
+        [MenuItem("Modern Drone/Setup/Assign Effect Quality Tiers")]
+        public static void AssignAllTiers()
+        {
+            foreach (var g in AssetDatabase.FindAssets("t:FxRecipe", new[] { FxDir }))
+            {
+                var r = AssetDatabase.LoadAssetAtPath<FxRecipe>(AssetDatabase.GUIDToAssetPath(g));
+                AssignTiers(r);
+                EditorUtility.SetDirty(r);
+            }
+            AssetDatabase.SaveAssets();
+        }
+
         static T Get<T>(string dir, string name, System.Action<T> setup) where T : ScriptableObject
         {
             string path = $"{dir}/{name}.asset";
             var a = AssetDatabase.LoadAssetAtPath<T>(path);
             if (a != null) return a;
             a = ScriptableObject.CreateInstance<T>();
+            a.name = name;
             setup(a);
+            if (a is FxRecipe recipe) AssignTiers(recipe);
             AssetDatabase.CreateAsset(a, path);
             return a;
         }

@@ -289,11 +289,11 @@ namespace ModernDrone.UI
             _rows.Add(MenuRow.Slider("Моторы дрона", () => S.motorVolume, v => S.motorVolume = v, 0f, 1f, 0.05f));
         }
 
-        // Quick presets: anti-aliasing, render scale, shadows, vegetation, grass. STP at a reduced render scale keeps a
+        // Quick presets: anti-aliasing, render scale, shadows, vegetation, grass, combat effects. STP at a reduced render scale keeps a
         // cleaner image than a spatial filter at full scale on weaker GPUs.
-        static readonly (int aa, float scale, int shadows, int veg, int grass)[] Presets =
+        static readonly (int aa, float scale, int shadows, int veg, int grass, int fx)[] Presets =
         {
-            (3, 0.67f, 1, 1, 1), (3, 0.8f, 2, 2, 2), (3, 1f, 3, 3, 3),
+            (3, 0.67f, 1, 1, 1, 1), (3, 0.8f, 2, 2, 2, 2), (3, 1f, 3, 3, 3, 3),
         };
 
         void GraphicsRows()
@@ -303,7 +303,8 @@ namespace ModernDrone.UI
                 for (int i = 0; i < Presets.Length; i++)
                 {
                     var p = Presets[i];
-                    if (S.antiAliasing == p.aa && Mathf.Abs(S.renderScale - p.scale) < 0.01f && S.shadowQuality == p.shadows && S.vegetationDetail == p.veg && S.grassQuality == p.grass)
+                    if (S.antiAliasing == p.aa && Mathf.Abs(S.renderScale - p.scale) < 0.01f && S.shadowQuality == p.shadows && S.vegetationDetail == p.veg && S.grassQuality == p.grass
+                        && S.effectsQuality == p.fx)
                         return i + 1;
                 }
                 return 0;
@@ -311,7 +312,7 @@ namespace ModernDrone.UI
             {
                 if (v == 0) return;
                 var p = Presets[v - 1];
-                S.antiAliasing = p.aa; S.renderScale = p.scale; S.shadowQuality = p.shadows; S.vegetationDetail = p.veg; S.grassQuality = p.grass;
+                S.antiAliasing = p.aa; S.renderScale = p.scale; S.shadowQuality = p.shadows; S.vegetationDetail = p.veg; S.grassQuality = p.grass; S.effectsQuality = p.fx;
                 ControlSettings.NotifyChanged();
             }));
             _rows.Add(MenuRow.Header("Изображение"));
@@ -322,6 +323,8 @@ namespace ModernDrone.UI
             _rows.Add(MenuRow.Choice("Тени", ModernDrone.Video.GraphicsQuality.LevelNames, () => S.shadowQuality, v => { S.shadowQuality = v; ControlSettings.NotifyChanged(); }));
             _rows.Add(MenuRow.Choice("Деревья и кусты", new[] { "низкая", "средняя", "высокая" }, () => S.vegetationDetail - 1, v => { S.vegetationDetail = v + 1; ControlSettings.NotifyChanged(); }));
             _rows.Add(MenuRow.Choice("Трава", ModernDrone.Video.GraphicsQuality.LevelNames, () => S.grassQuality, v => { S.grassQuality = v; ControlSettings.NotifyChanged(); }));
+            _rows.Add(MenuRow.Choice("Эффекты боя", new[] { "низкие", "средние", "высокие" }, () => S.effectsQuality - 1, v => { S.effectsQuality = v + 1; ControlSettings.NotifyChanged(); }));
+            _rows[_rows.Count - 1].Note = "Ниже — без марева, кольца ударной волны, искр-угольков и повторных волн огня. Дым и вспышки остаются.";
             _rows.Add(MenuRow.Header("Кадры"));
             _rows.Add(MenuRow.Choice("Ограничение FPS", Array.ConvertAll(ModernDrone.Video.GraphicsQuality.FrameLimits, f => f == 0 ? "нет" : f.ToString()),
                 () => S.frameRateLimit, v => { S.frameRateLimit = v; ControlSettings.NotifyChanged(); }));

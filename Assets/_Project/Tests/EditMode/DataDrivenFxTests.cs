@@ -291,6 +291,23 @@ namespace ModernDrone.Tests
         }
 
         [Test]
+        public void LowerEffectsQualityDropsOnlyTheExtras()
+        {
+            var lib = FxLibrary.Instance;
+            int Drawn(FxRecipe r, int q) { int n = 0; foreach (var l in r.layers) if (l.minQuality <= q) n++; return n; }
+            // The ammunition detonation thins out with each step down, but low still has its flash, fireball and smoke.
+            Assert.Less(Drawn(lib.ammo, 1), Drawn(lib.ammo, 2));
+            Assert.Less(Drawn(lib.ammo, 2), Drawn(lib.ammo, 3));
+            foreach (var l in lib.ammo.layers)
+                if (l.kind == FxLayerKind.Flash || l.kind == FxLayerKind.Smoke || l.kind == FxLayerKind.Fireball && l.delay == 0f)
+                    Assert.AreEqual(1, l.minQuality, l.kind.ToString());
+            // Small-arms crackle is its embers: kept on every level.
+            foreach (var l in SubstanceLibrary.Instance.smallArms.fire.layers)
+                if (l.kind == FxLayerKind.Embers) Assert.AreEqual(1, l.minQuality);
+            Assert.AreEqual(3, new ModernDrone.Drone.ControlSettings().effectsQuality);
+        }
+
+        [Test]
         public void EveryVehiclePrefabPassesTheFxValidator()
         {
             var guids = AssetDatabase.FindAssets("t:Prefab", new[] { "Assets/_Project/Prefabs/Vehicles" });
