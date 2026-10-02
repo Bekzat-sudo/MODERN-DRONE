@@ -104,6 +104,9 @@ namespace ModernDrone.Editor
             model.SetDisplayName("Танк Т-72Б3");
             // 3ETs13 "Iney": 2 fast Halon 1301 bottles for the crew compartment, 2 for the engine bay (Tankograd, T-72 Firefighting Systems).
             model.SetFireSuppression(2, 2);
+            // Burning charges blow the hull (turret thrown) about half the time; otherwise they vent through the hatches
+            // and the tank burns out with the turret on (both seen in footage, e.g. youtu.be/gbI1EAPONWs). Abstract value.
+            model.SetAmmoConfinement(0.5f);
             root.AddComponent<VehicleEffects>();
             // T-72B: 705 L in the internal tanks (495 L more outside); 22 rounds in the autoloader carousel, 17 more in
             // the hull, 39 in all (ru.wikipedia.org/wiki/Т-72).
