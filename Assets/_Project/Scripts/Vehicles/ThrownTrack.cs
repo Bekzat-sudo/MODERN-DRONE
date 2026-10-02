@@ -12,9 +12,9 @@ namespace ModernDrone.Vehicles
     /// </summary>
     public static class ThrownTrack
     {
-        // Track link pitch of Soviet/Russian tracked vehicles, ~0.14-0.17 m (T-72 RMSh track: 97 links, 0.137 m,
-        // en.wikipedia.org/wiki/T-72); one look value for all.
-        const float Pitch = 0.15f;
+        // Link pitch of the T-72 track: 137 mm, 97 links, 580 mm wide (KMDB, army-guide.com/eng/product1291.html);
+        // used for every tracked vehicle here (others are close, not checked one by one).
+        const float Pitch = 0.137f;
 
         /// <summary>Breaks the track whose envelope box is <paramref name="envelope"/> (a child of the vehicle root).</summary>
         public static GameObject Break(Transform root, Transform envelope, Material linkMaterial)
