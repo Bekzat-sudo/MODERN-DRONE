@@ -121,6 +121,7 @@ namespace ModernDrone.Editor
             var jetPropellant = Get<FxRecipe>(FxDir, "Jet_Propellant", r => PropellantTorch(r, flameJet));
             // The charge in the chamber and the gas through the bore: a short tongue out of the muzzle (abstract size).
             var jetMuzzle = Get<FxRecipe>(FxDir, "Jet_Muzzle", r => MuzzleJet(r, flameJet));
+            var spallPuff = Get<FxRecipe>(FxDir, "Puff_Spall", SpallPuff);
             var jetCanister = Get<FxRecipe>(FxDir, "Jet_Canister", r => Jet(r, new Color(0.8f, 0.8f, 0.78f, 0.8f), 1.3f, flameJet));
             var jetRocket = Get<FxRecipe>(FxDir, "Jet_Rocket", r => RocketExhaust(r, rocketMotor));
             var smokeScreen = Get<FxRecipe>(FxDir, "SmokeScreen", SmokeScreen);
@@ -206,7 +207,7 @@ namespace ModernDrone.Editor
             Fill(ref fx.ground, exp[(int)ExplosionKind.Ground]); Fill(ref fx.armor, exp[(int)ExplosionKind.Armor]); Fill(ref fx.air, exp[(int)ExplosionKind.Air]);
             Fill(ref fx.era, exp[(int)ExplosionKind.Era]); Fill(ref fx.fuel, exp[(int)ExplosionKind.Fuel]); Fill(ref fx.ammo, exp[(int)ExplosionKind.Ammo]);
             Fill(ref fx.fire, fireBlack); Fill(ref fx.fireGrey, fireGrey); Fill(ref fx.seep, seepBlack); Fill(ref fx.seepGrey, seepGrey); Fill(ref fx.jet, jetPropellant);
-            Fill(ref fx.smokeScreen, smokeScreen); Fill(ref fx.muzzleJet, jetMuzzle);
+            Fill(ref fx.smokeScreen, smokeScreen); Fill(ref fx.muzzleJet, jetMuzzle); Fill(ref fx.spallPuff, spallPuff);
             EditorUtility.SetDirty(fx);
             AssetDatabase.SaveAssets();
             return lib;
@@ -439,6 +440,24 @@ namespace ModernDrone.Editor
             r.layers[0].size = 1.4f; r.layers[0].speed = 14f;
             r.layers[2].size = 1.4f; r.layers[2].rate = 3f; r.layers[2].offset = 1.5f;
             r.layers[3].size = 1.5f; r.layers[3].offset = 1.5f;
+        }
+
+        /// <summary>
+        /// A jet through the armour: the overpressure and burning spall behind the plate blow a short flash and a puff of
+        /// grey-brown smoke out of the hole and the hatch gaps, the tell-tale of a penetration in footage of ATGM and FPV
+        /// hits, before any fire takes hold (sizes abstract).
+        /// </summary>
+        public static void SpallPuff(FxRecipe r)
+        {
+            r.looping = false;
+            r.lifetime = 3.5f;
+            r.poolSize = 10;
+            r.referenceSize = 0.8f;
+            r.layers = new[]
+            {
+                L(FxLayerKind.Flash, 1.4f, 1, 0.05f, new Color(1f, 0.85f, 0.6f, 1f)),
+                new FxLayer { kind = FxLayerKind.Smoke, material = FxMaterial.Smoke, color = new Color(0.42f, 0.4f, 0.36f, 0.85f), size = 0.8f, count = 6, lifetime = 2.5f, speed = 6f, speedMin = 2.5f, spread = 22f, gravity = -0.01f, radius = 0.1f, rise = 0.6f, windDrift = true },
+            };
         }
 
         /// <summary>Exhaust of a loose rocket: a short hot jet and a white smoke trail left in the air.</summary>

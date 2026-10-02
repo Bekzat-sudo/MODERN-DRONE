@@ -20,6 +20,8 @@ namespace ModernDrone.Vehicles
         public FxRecipe fireGrey, seep, seepGrey, jet, smokeScreen;
         [Tooltip("Short tongue out of the gun's muzzle while the charges burn.")]
         public FxRecipe muzzleJet;
+        [Tooltip("Flash and smoke puff out of the entry hole and the hatches when a jet gets through the armour.")]
+        public FxRecipe spallPuff;
 
         static FxLibrary _instance;
 

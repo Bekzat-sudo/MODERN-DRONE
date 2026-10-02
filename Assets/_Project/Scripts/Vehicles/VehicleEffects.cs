@@ -132,6 +132,7 @@ namespace ModernDrone.Vehicles
             {
                 if (mark.owner != _model || mark.kind != MarkKind.JetHole || mark.surface == null) continue;
                 EnsureVents();
+                SpallPuffs(mark.point, mark.normal, CompartmentOf(mark.point - mark.normal * 0.3f));
                 var go = new GameObject("Vent_Hole");
                 go.transform.SetParent(mark.surface, true);
                 go.transform.SetPositionAndRotation(mark.point + mark.normal * 0.03f, Quaternion.FromToRotation(Vector3.up, mark.normal));
@@ -141,6 +142,31 @@ namespace ModernDrone.Vehicles
                 _vents.Add(v);
             }
         }
+
+        /// <summary>
+        /// The moment of penetration: a puff out of the entry hole, smaller ones out of the nearest hatches, seams and
+        /// grilles of the compartment the jet entered (closed hatches leak at their gaps).
+        /// </summary>
+        void SpallPuffs(Vector3 hole, Vector3 normal, int compartment)
+        {
+            var recipe = Lib != null ? Lib.spallPuff : null;
+            if (recipe == null) return;
+            // The warhead's own blast already smokes at the hole: the puffs out of the hatches are the real tell.
+            SimpleVfx.Play(recipe, hole + normal * 0.05f, Quaternion.FromToRotation(Vector3.up, normal), null, 0.6f);
+            _puffVents.Clear();
+            foreach (var v in _vents)
+                if (v != null && v.Kind != VentKind.Hole && v.Kind != VentKind.TurretRing && v.transform.IsChildOf(transform)
+                    && (compartment < 0 || v.Compartment < 0 || v.Compartment == compartment))
+                    _puffVents.Add(v);
+            _puffVents.Sort((a, b) => (a.transform.position - hole).sqrMagnitude.CompareTo((b.transform.position - hole).sqrMagnitude));
+            for (int i = 0; i < _puffVents.Count && i < 3; i++)
+            {
+                var t = _puffVents[i].transform;
+                SimpleVfx.Play(recipe, t.position, Quaternion.FromToRotation(Vector3.up, t.up), null, _puffVents[i].Open ? 0.8f : 0.5f);
+            }
+        }
+
+        readonly List<FireVent> _puffVents = new List<FireVent>();
 
         /// <summary>Every opening as seen from a fire in <paramref name="compartment"/> (unreachable ones blocked).</summary>
         List<VentPicker.Vent> VentInfo(int compartment)
