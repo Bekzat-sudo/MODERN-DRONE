@@ -28,7 +28,7 @@ namespace ModernDrone.Editor
             var leaves = Texture("leaves", 64, 2, 2, Leaf);
             AssetDatabase.Refresh();
 
-            foreach (var name in new[] { "explosion", "smoke", "flame" })
+            foreach (var name in new[] { "explosion", "smoke", "flame", "torch" })
                 foreach (var map in new[] { "A", "B" })
                     Flipbook($"{FlipbookDir}/{name}_{map}.png");
 
@@ -37,6 +37,7 @@ namespace ModernDrone.Editor
             SixWay("VFX_SmokeHot", "smoke", emission: 0f, warmth: 0.25f);
             SixWay("VFX_Dust", "smoke", emission: 0f, warmth: 0f, softFade: 2.5f);
             SixWay("VFX_Flame", "flame", emission: 4.5f, warmth: 1f, softFade: 0.6f);
+            SixWay("VFX_Torch", "torch", emission: 4.5f, warmth: 1f, softFade: 0.6f);
             Particle("VFX_Flash", soft, true, new Color(14f, 11f, 8f));
             Particle("VFX_Sparks", spark, true, new Color(7f, 4.2f, 2f));
             Particle("VFX_Embers", soft, true, new Color(5f, 2.8f, 1.2f));

@@ -119,6 +119,8 @@ namespace ModernDrone.Editor
             var seepBlack = Get<FxRecipe>(FxDir, "Seep_Black", r => Seep(r, new Color(0.09f, 0.085f, 0.08f, 0.75f), 8));
             var seepGrey = Get<FxRecipe>(FxDir, "Seep_Grey", r => Seep(r, new Color(0.55f, 0.54f, 0.52f, 0.75f), 6));
             var jetPropellant = Get<FxRecipe>(FxDir, "Jet_Propellant", r => PropellantTorch(r, flameJet));
+            // The charge in the chamber and the gas through the bore: a short tongue out of the muzzle (abstract size).
+            var jetMuzzle = Get<FxRecipe>(FxDir, "Jet_Muzzle", r => MuzzleJet(r, flameJet));
             var jetCanister = Get<FxRecipe>(FxDir, "Jet_Canister", r => Jet(r, new Color(0.8f, 0.8f, 0.78f, 0.8f), 1.3f, flameJet));
             var jetRocket = Get<FxRecipe>(FxDir, "Jet_Rocket", r => RocketExhaust(r, rocketMotor));
             var smokeScreen = Get<FxRecipe>(FxDir, "SmokeScreen", SmokeScreen);
@@ -204,7 +206,7 @@ namespace ModernDrone.Editor
             Fill(ref fx.ground, exp[(int)ExplosionKind.Ground]); Fill(ref fx.armor, exp[(int)ExplosionKind.Armor]); Fill(ref fx.air, exp[(int)ExplosionKind.Air]);
             Fill(ref fx.era, exp[(int)ExplosionKind.Era]); Fill(ref fx.fuel, exp[(int)ExplosionKind.Fuel]); Fill(ref fx.ammo, exp[(int)ExplosionKind.Ammo]);
             Fill(ref fx.fire, fireBlack); Fill(ref fx.fireGrey, fireGrey); Fill(ref fx.seep, seepBlack); Fill(ref fx.seepGrey, seepGrey); Fill(ref fx.jet, jetPropellant);
-            Fill(ref fx.smokeScreen, smokeScreen);
+            Fill(ref fx.smokeScreen, smokeScreen); Fill(ref fx.muzzleJet, jetMuzzle);
             EditorUtility.SetDirty(fx);
             AssetDatabase.SaveAssets();
             return lib;
@@ -413,18 +415,30 @@ namespace ModernDrone.Editor
         /// <summary>
         /// Burning charges venting through a hatch: a narrow vertical torch about 6-8 m high (two to three tank heights,
         /// judged from footage such as youtu.be/gbI1EAPONWs; no measured height found, abstract) under light grey
-        /// propellant smoke. Fast, thin, long-lived flame particles: the flame stays bright for about half its life, rising at
-        /// up to 8 m/s (a short jet tongue slows to 2.5) it reaches ~6-7 m in that time.
+        /// propellant smoke.
         /// </summary>
         public static void PropellantTorch(FxRecipe r, SoundBank sound)
         {
             Jet(r, new Color(0.62f, 0.61f, 0.6f, 0.7f), 1f, sound);
-            r.referenceSize = 1.1f;
+            r.referenceSize = 9f;
+            // Each sprite is the whole jet (the torch flipbook, Tools/Blender/vfx_bake.py "torch"): a few overlapping
+            // columns flickering through the simulation's frames, barely moving.
             var torch = r.layers[0];
-            torch.size = 1.1f; torch.rate = 80f; torch.lifetime = 1.6f; torch.speed = 22f; torch.speedMin = 15f;
-            torch.spread = 4f; torch.radius = 0.25f; torch.intensity = 1.2f; torch.dragLimit = 8f;
+            torch.material = FxMaterial.Torch;
+            torch.size = 9f; torch.rate = 10f; torch.lifetime = 1f; torch.speed = 0.5f; torch.speedMin = 0.2f;
+            torch.spread = 2f; torch.radius = 0.1f; torch.intensity = 1.2f;
             r.layers[2].offset = 6f; // the smoke leaves the top of the torch
             r.layers[3].offset = 5f;
+        }
+
+        /// <summary>Gas of the burning charges out of the gun's bore: a short tongue with a little smoke (abstract).</summary>
+        public static void MuzzleJet(FxRecipe r, SoundBank sound)
+        {
+            Jet(r, new Color(0.62f, 0.61f, 0.6f, 0.6f), 1f, sound);
+            r.referenceSize = 1.4f;
+            r.layers[0].size = 1.4f; r.layers[0].speed = 14f;
+            r.layers[2].size = 1.4f; r.layers[2].rate = 3f; r.layers[2].offset = 1.5f;
+            r.layers[3].size = 1.5f; r.layers[3].offset = 1.5f;
         }
 
         /// <summary>Exhaust of a loose rocket: a short hot jet and a white smoke trail left in the air.</summary>

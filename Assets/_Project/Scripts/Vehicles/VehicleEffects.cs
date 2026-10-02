@@ -202,6 +202,16 @@ namespace ModernDrone.Vehicles
                 // The torch lasts as long as the charges burn (~20 s out of a T-72's hatch in youtu.be/gbI1EAPONWs).
                 _jets.Add(Own(SimpleVfx.CookOff(vent.transform, vent.transform.position, b.fire.Remaining * Random.Range(1.2f, 2.5f), vent.transform.up, 1f, jet)));
             }
+            MuzzleFlame();
+        }
+
+        /// <summary>The pressure also finds the gun's bore: a tongue of flame out of the muzzle for a few seconds.</summary>
+        void MuzzleFlame()
+        {
+            var gun = Turret != null ? Turret.Find("Gun") : null;
+            if (gun == null || Lib == null || Lib.muzzleJet == null) return;
+            // Parented to the turret, not the gun (its transform is the barrel's non-uniform scale).
+            _jets.Add(Own(SimpleVfx.CookOff(Turret, gun.TransformPoint(0f, 0f, 0.5f), Random.Range(3f, 6f), gun.forward, 1.5f, Lib.muzzleJet)));
         }
 
         /// <summary>Puts the fire's flames on its openings (and moves them when hatches open or the turret goes).</summary>

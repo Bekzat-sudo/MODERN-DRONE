@@ -310,6 +310,7 @@ namespace ModernDrone.Vehicles
             FxMaterial.SmokeHot => FxAssets.SmokeHot,
             FxMaterial.Dust => FxAssets.Dust,
             FxMaterial.Flame => FxAssets.Flame,
+            FxMaterial.Torch => FxAssets.Torch,
             FxMaterial.Flash => FxAssets.Flash,
             FxMaterial.Sparks => FxAssets.Sparks,
             FxMaterial.Embers => FxAssets.Embers,
@@ -531,19 +532,24 @@ namespace ModernDrone.Vehicles
         {
             var ps = Emitter(root, name, Mat(l, FxAssets.Flame), Loops(l, looping), 160);
             float k = l.intensity;
-            SixWay(ps, Flipbook.Flame, heat: new[] { (0f, 1.3f * k), (0.6f, 1f * k), (1f, 0.4f * k) });
+            // A torch sprite is the whole jet (Art/VFX/Flipbooks/torch): a few tall, upright, overlapping columns.
+            bool torch = l.material == FxMaterial.Torch;
+            SixWay(ps, torch ? Flipbook.Torch : Flipbook.Flame, heat: new[] { (0f, 1.3f * k), (0.6f, 1f * k), (1f, 0.4f * k) });
             var main = ps.main;
             main.startLifetime = new ParticleSystem.MinMaxCurve(l.lifetime * 0.5f, l.lifetime);
             main.startSpeed = new ParticleSystem.MinMaxCurve(SpeedMin(l, 0.55f), l.speed);
-            main.startSize = new ParticleSystem.MinMaxCurve(l.size * 0.55f / FlameFill, l.size / FlameFill);
-            main.startRotation = new ParticleSystem.MinMaxCurve(-0.3f, 0.3f);
+            // Wide spread of size and tilt, half the tongues mirrored: a long torch otherwise shows the same sprite repeated.
+            main.startSize = new ParticleSystem.MinMaxCurve(l.size * (torch ? 0.75f : 0.35f) / FlameFill, l.size / FlameFill);
+            main.startRotation = torch ? new ParticleSystem.MinMaxCurve(-0.06f, 0.06f) : new ParticleSystem.MinMaxCurve(-0.6f, 0.6f);
             main.startColor = l.color;
+            ps.GetComponent<ParticleSystemRenderer>().flip = new Vector3(0.5f, 0f, 0f);
             if (l.count > 0) Burst(ps, l.count, l.delay);
             Continuous(ps, l);
             var em = ps.emission;
             if (l.duration > 0f) em.rateOverTime = new ParticleSystem.MinMaxCurve(l.rate, Flare);
             Spread(ps, l);
-            Grow(ps, 0.8f, 2.4f);
+            if (torch) Grow(ps, 0.9f, 1.1f);
+            else Grow(ps, 0.8f, 2.4f);
             Drag(ps, l.dragLimit > 0f ? l.dragLimit : 2.5f);
             return ps;
         }
@@ -755,7 +761,7 @@ namespace ModernDrone.Vehicles
 
         // ---------------------------------------------------------------- building blocks
 
-        enum Flipbook { Explosion, Smoke, Flame }
+        enum Flipbook { Explosion, Smoke, Flame, Torch }
 
         /// <summary>
         /// Share of the quad the simulated gas covers (the domain is larger than the cloud so nothing is cut off):
@@ -785,6 +791,8 @@ namespace ModernDrone.Vehicles
             {
                 Flipbook.Explosion => new Vector3(0.031f, -0.333f, 0f),
                 Flipbook.Smoke => new Vector3(0.002f, -0.29f, 0f),
+                // The jet's base (lowest opaque row, median over the frames), not its centroid: it stands on the hatch.
+                Flipbook.Torch => new Vector3(0.023f, -0.39f, 0f),
                 _ => new Vector3(-0.022f, -0.186f, 0f),
             });
             var sheet = ps.textureSheetAnimation;

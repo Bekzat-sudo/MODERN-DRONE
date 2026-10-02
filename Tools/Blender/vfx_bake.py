@@ -3,7 +3,8 @@ Bakes six-way lit flipbooks for MODERN DRONE's particle effects from Mantaflow g
 
 Run headless:
   blender -b --factory-startup --python Tools/Blender/vfx_bake.py -- <preset> <out_dir> [tile] [samples] [resolution]
-Presets: explosion (fireball cooling into soot), smoke (billowing puff), flame (steady fire, flickering tongues).
+Presets: explosion (fireball cooling into soot), smoke (billowing puff), flame (steady fire, flickering tongues),
+torch (burning charges venting through a hatch: a narrow jet of flame driven straight up).
 
 Output in <out_dir>: <preset>_A.png (R right, G top, B back light, A alpha), <preset>_B.png (R left, G bottom, B front,
 A emission), <preset>.json (tile count, sim frame per tile, lighting scale). Layout follows Unity's six-way lighting
@@ -34,6 +35,10 @@ P = {
     "flame": dict(D=2.4, r=0.38, z=0.32, flow="FIRE", first=1, last=10_000, vel=0.6, fuel=1.4, temp=2.0, dens=0.3,
                   sim=96, curve=1.0, vort=0.25, flame_vort=1.3, burn=0.6, flame_smoke=0.4, smoke_col=(0.1, 0.1, 0.1),
                   alpha=0.1, beta=2.6, noise=2.0, dens_mul=6.0, emit_mul=9.0, start=32, time_scale=2.0, dissolve=18),
+    # up: initial velocity straight up (m/s), the hatch jet; slow burning keeps the tongue long and narrow.
+    "torch": dict(D=3.2, r=0.14, z=0.2, flow="FIRE", first=1, last=10_000, vel=0.3, up=4.5, fuel=2.2, temp=3.0, dens=0.35,
+                  sim=96, curve=1.0, vort=0.2, flame_vort=0.8, burn=0.6, flame_smoke=0.3, smoke_col=(0.3, 0.3, 0.3),
+                  alpha=0.1, beta=3.2, noise=1.6, dens_mul=6.0, emit_mul=9.0, start=40, time_scale=2.0, dissolve=18),
 }[PRESET]
 # Tuning overrides: VFX_BAKE_PARAMS='{"vel": 7}'
 P.update(json.loads(os.environ.get("VFX_BAKE_PARAMS", "{}")))
@@ -99,6 +104,8 @@ fs.surface_distance = 0.6
 fs.use_initial_velocity = True
 fs.velocity_normal = P["vel"]
 fs.velocity_factor = 0.0
+if "up" in P:
+    fs.velocity_coord = (0.0, 0.0, P["up"])
 fs.smoke_color = P["smoke_col"] if PRESET != "smoke" else (0.75, 0.75, 0.75)
 fs.use_texture = True
 fs.noise_texture = tex
@@ -116,7 +123,7 @@ if P["last"] < P["sim"]:
     for fc in em.animation_data.action.fcurves if hasattr(em.animation_data.action, "fcurves") else []:
         for k in fc.keyframe_points:
             k.interpolation = "CONSTANT"
-if PRESET == "flame":
+if PRESET in ("flame", "torch"):
     # Gusts: the patch moves a little so the tongues lean and flicker.
     for f in range(1, P["sim"] + 1, 12):
         em.location = (0.08 * math.sin(f * 0.7), 0.08 * math.cos(f * 0.45), P["z"])
@@ -299,7 +306,7 @@ for key in PASSES:
 # particle's quad is mostly gas, not empty margin that costs fill rate.
 cover = np.zeros((TILE, TILE), bool)
 emax = max(float(np.percentile(px[..., 0], 99.5)) for px in frames_px["E"]) or 1.0
-if PRESET == "flame":
+if PRESET in ("flame", "torch"):
     # Flames are too thin to hide much by density alone; their glow is what shows: opacity follows it.
     for px, ex in zip(frames_px["A"], frames_px["E"]):
         px[..., 3] = np.maximum(px[..., 3], np.clip(ex[..., 0] / emax * 0.85, 0, 1))
@@ -345,6 +352,9 @@ e = atlas["E"][..., 0]
 escale = float(np.percentile(e[e > 1e-4], 99.8)) if np.any(e > 1e-4) else 1.0
 alpha = atlas["A"][..., 3]
 emission = atlas["E"][..., 0] / escale if P["emit_mul"] > 0 else np.zeros_like(alpha)
+if PRESET == "torch":
+    # The jet thins out as it rises: lift the faint upper flame so the whole column reads against the sky.
+    alpha, emission = alpha ** 0.5, np.clip(emission, 0, 1) ** 0.6
 outs = {"A": np.dstack([np.clip(atlas["A"][..., :3] / lscale, 0, 1), alpha]),
         "B": np.dstack([np.clip(atlas["B"][..., :3] / lscale, 0, 1), np.clip(emission, 0, 1)])}
 for key, data in outs.items():

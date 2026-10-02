@@ -30,7 +30,7 @@ namespace ModernDrone.Core
         Light
     }
 
-    public enum FxMaterial { Auto, Fireball, Smoke, SmokeHot, Dust, Flame, Flash, Sparks, Embers, Clods }
+    public enum FxMaterial { Auto, Fireball, Smoke, SmokeHot, Dust, Flame, Flash, Sparks, Embers, Clods, Torch }
 
     public enum FxLightMode { Flash, Glow, Fire }
 
