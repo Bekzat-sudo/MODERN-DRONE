@@ -79,7 +79,8 @@ namespace ModernDrone.Drone
             var b = s.Binding(action);
             string path = source == InputSource.Gamepad ? b.gamepad : source == InputSource.Joystick ? b.joystick : b.keyboard;
             if (string.IsNullOrEmpty(path)) path = b.keyboard;
-            // Prefer the device's own control name (e.g. "Menu" on Xbox) over the generic path.
+            if (source == InputSource.Gamepad && GamepadLabel(path, Gamepad.current) is string pad) return pad;
+            // Prefer the device's own control name over the generic path.
             InputDevice device = source == InputSource.Gamepad ? Gamepad.current : source == InputSource.Joystick ? (InputDevice)PreferredJoystick : Keyboard.current;
             var control = device != null && !string.IsNullOrEmpty(path) ? InputControlPath.TryFindControl(device, path) : null;
             return (control != null ? control.displayName : DisplayName(path)).ToUpperInvariant();
@@ -87,7 +88,39 @@ namespace ModernDrone.Drone
 
         public static string DisplayName(string path) => string.IsNullOrEmpty(path)
             ? "—"
-            : InputControlPath.ToHumanReadableString(path, InputControlPath.HumanReadableStringOptions.OmitDevice);
+            : GamepadLabel(path, Gamepad.current)
+              ?? InputControlPath.ToHumanReadableString(path, InputControlPath.HumanReadableStringOptions.OmitDevice);
+
+        /// <summary>
+        /// Short gamepad button label as printed on the pad: Xbox layout (A B X Y, LB RB, LT RT, Menu, View, LS RS)
+        /// by default, PlayStation names (Cross, Circle, Square, Triangle, L1 R1, L2 R2, Options, Share, L3 R3) when a
+        /// DualShock / DualSense is connected. Null for anything that is not a gamepad button.
+        /// </summary>
+        public static string GamepadLabel(string path, Gamepad pad)
+        {
+            if (string.IsNullOrEmpty(path) || !path.StartsWith("<Gamepad>/")) return null;
+            bool ps = pad is UnityEngine.InputSystem.DualShock.DualShockGamepad;
+            switch (path.Substring("<Gamepad>/".Length))
+            {
+                case "buttonSouth": return ps ? "Cross" : "A";
+                case "buttonEast": return ps ? "Circle" : "B";
+                case "buttonWest": return ps ? "Square" : "X";
+                case "buttonNorth": return ps ? "Triangle" : "Y";
+                case "leftShoulder": return ps ? "L1" : "LB";
+                case "rightShoulder": return ps ? "R1" : "RB";
+                case "leftTrigger": return ps ? "L2" : "LT";
+                case "rightTrigger": return ps ? "R2" : "RT";
+                case "startButton": return ps ? "Options" : "Menu";
+                case "selectButton": return ps ? "Share" : "View";
+                case "leftStickPress": return ps ? "L3" : "LS";
+                case "rightStickPress": return ps ? "R3" : "RS";
+                case "dpad/up": return "D-pad ↑";
+                case "dpad/down": return "D-pad ↓";
+                case "dpad/left": return "D-pad ←";
+                case "dpad/right": return "D-pad →";
+                default: return null;
+            }
+        }
 
         /// <summary>Generic binding path for a control, e.g. "&lt;Gamepad&gt;/buttonSouth", matching any device of that family.</summary>
         public static string GenericPath(InputControl control)
