@@ -90,6 +90,7 @@ namespace ModernDrone.Vehicles
             _model.Flash += OnFlash;
             _model.Destroyed += OnDestroyed;
             _model.FirstStruck += OnFirstStruck;
+            _model.ModuleChanged += OnModuleChanged;
             DamageSolver.Detonated += OnDetonated;
         }
 
@@ -101,6 +102,7 @@ namespace ModernDrone.Vehicles
             _model.Flash -= OnFlash;
             _model.Destroyed -= OnDestroyed;
             _model.FirstStruck -= OnFirstStruck;
+            _model.ModuleChanged -= OnModuleChanged;
             DamageSolver.Detonated -= OnDetonated;
         }
 
@@ -123,6 +125,17 @@ namespace ModernDrone.Vehicles
         }
 
         int CompartmentOf(Vector3 p) => _profile != null ? VehicleFxSetup.Nearest(_profile, p) : -1;
+
+        /// <summary>A destroyed track module breaks its belt: off the wheels and onto the ground (once per side).</summary>
+        void OnModuleChanged(VehicleDamageModel model, VehicleModule module, ModuleState previous)
+        {
+            if (module.Type != ModuleType.Track || module.State != ModuleState.Destroyed || previous == ModuleState.Destroyed) return;
+            var envelope = module.transform.parent;
+            if (envelope == null || !_brokenTracks.Add(envelope)) return;
+            ThrownTrack.Break(transform, envelope, FxAssets.Debris);
+        }
+
+        readonly HashSet<Transform> _brokenTracks = new HashSet<Transform>();
 
         /// <summary>Jet holes become openings the fire can burn out of (into the compartment behind the plate).</summary>
         void OnDetonated(StrikeReport report)

@@ -322,5 +322,29 @@ namespace ModernDrone.Tests
             }
             Assert.IsEmpty(errors, string.Join("\n", errors));
         }
+
+        [Test]
+        public void ThrownTrack_FindsTheBeltMaterial()
+        {
+            // Named belts (BMP-3, MT-LB), and the pair of belt materials the T-72 and 2S19 models carry under other names:
+            // never the hull or the road wheels inside the loop.
+            var expected = new Dictionary<string, string[]>
+            {
+                { "IFV_Placeholder", new[] { "bmp3-track__9" } },
+                { "MTLB_Tractor", new[] { "mt-lbm-track_2" } },
+                { "Tank_Placeholder", new[] { "a2434888-a965-4551-8959-f43d69c782d9.003", "3b8012e5-fddd-4ae8-b8bb-2ef1ebedc2ef.003" } },
+                { "SPG_Placeholder", new[] { "4f275be7-5485-41ee-a5e0-df3b708a39ed", "ed7d7ea8-3ad8-42b8-b7ac-d04bb0b1992b" } },
+            };
+            foreach (var pair in expected)
+            {
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>($"Assets/_Project/Prefabs/Vehicles/{pair.Key}.prefab");
+                Assert.IsNotNull(prefab, pair.Key);
+                var envelope = prefab.transform.Find("Track_L");
+                var mesh = envelope.GetComponent<MeshFilter>().sharedMesh;
+                var box = new Bounds(prefab.transform.InverseTransformPoint(envelope.TransformPoint(mesh.bounds.center)), Vector3.Scale(mesh.bounds.size, envelope.lossyScale));
+                var found = ThrownTrack.FindTrackMaterials(prefab.transform, box).ConvertAll(m => m.name);
+                CollectionAssert.AreEquivalent(pair.Value, found, pair.Key);
+            }
+        }
     }
 }
