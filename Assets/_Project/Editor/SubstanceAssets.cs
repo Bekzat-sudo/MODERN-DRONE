@@ -118,7 +118,7 @@ namespace ModernDrone.Editor
             });
             var seepBlack = Get<FxRecipe>(FxDir, "Seep_Black", r => Seep(r, new Color(0.09f, 0.085f, 0.08f, 0.75f), 8));
             var seepGrey = Get<FxRecipe>(FxDir, "Seep_Grey", r => Seep(r, new Color(0.55f, 0.54f, 0.52f, 0.75f), 6));
-            var jetPropellant = Get<FxRecipe>(FxDir, "Jet_Propellant", r => Jet(r, new Color(0.62f, 0.61f, 0.6f, 0.7f), 1f, flameJet));
+            var jetPropellant = Get<FxRecipe>(FxDir, "Jet_Propellant", r => PropellantTorch(r, flameJet));
             var jetCanister = Get<FxRecipe>(FxDir, "Jet_Canister", r => Jet(r, new Color(0.8f, 0.8f, 0.78f, 0.8f), 1.3f, flameJet));
             var jetRocket = Get<FxRecipe>(FxDir, "Jet_Rocket", r => RocketExhaust(r, rocketMotor));
             var smokeScreen = Get<FxRecipe>(FxDir, "SmokeScreen", SmokeScreen);
@@ -408,6 +408,23 @@ namespace ModernDrone.Editor
                 new FxLayer { kind = FxLayerKind.Haze, size = 4f, rate = 5f, lifetime = 1.4f, speed = 2f, speedMin = 1f, radius = 0.4f, color = new Color(1f, 1f, 1f, 0.8f), offset = 3f },
             };
             r.sound = sound;
+        }
+
+        /// <summary>
+        /// Burning charges venting through a hatch: a narrow vertical torch about 6-8 m high (two to three tank heights,
+        /// judged from footage such as youtu.be/gbI1EAPONWs; no measured height found, abstract) under light grey
+        /// propellant smoke. Fast, thin, long-lived flame particles: the flame stays bright for about half its life, rising at
+        /// up to 8 m/s (a short jet tongue slows to 2.5) it reaches ~6-7 m in that time.
+        /// </summary>
+        public static void PropellantTorch(FxRecipe r, SoundBank sound)
+        {
+            Jet(r, new Color(0.62f, 0.61f, 0.6f, 0.7f), 1f, sound);
+            r.referenceSize = 1.1f;
+            var torch = r.layers[0];
+            torch.size = 1.1f; torch.rate = 80f; torch.lifetime = 1.6f; torch.speed = 22f; torch.speedMin = 15f;
+            torch.spread = 4f; torch.radius = 0.25f; torch.intensity = 1.2f; torch.dragLimit = 8f;
+            r.layers[2].offset = 6f; // the smoke leaves the top of the torch
+            r.layers[3].offset = 5f;
         }
 
         /// <summary>Exhaust of a loose rocket: a short hot jet and a white smoke trail left in the air.</summary>

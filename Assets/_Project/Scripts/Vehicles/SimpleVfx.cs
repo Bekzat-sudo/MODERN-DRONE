@@ -544,7 +544,7 @@ namespace ModernDrone.Vehicles
             if (l.duration > 0f) em.rateOverTime = new ParticleSystem.MinMaxCurve(l.rate, Flare);
             Spread(ps, l);
             Grow(ps, 0.8f, 2.4f);
-            Drag(ps, 2.5f);
+            Drag(ps, l.dragLimit > 0f ? l.dragLimit : 2.5f);
             return ps;
         }
 

@@ -59,6 +59,8 @@ namespace ModernDrone.Core
         public float speedMin;
         [Tooltip("Gravity on the particles, 1 = falling like a stone, negative = lifting.")]
         public float gravity;
+        [Tooltip("Jets: speed the flame slows to, m/s (0 = 2.5, a short tongue). Higher keeps a torch rising.")]
+        public float dragLimit;
         [Tooltip("Buoyant rise of smoke and flames, m/s (smoke: on top of the wind drift).")]
         public float rise;
         [Tooltip("Height of the emitter along the effect's up axis, m.")]
