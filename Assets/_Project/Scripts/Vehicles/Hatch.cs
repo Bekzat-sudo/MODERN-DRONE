@@ -5,7 +5,9 @@ using UnityEngine;
 namespace ModernDrone.Vehicles
 {
     /// <summary>
-    /// A hatch lid on its hinge (the object's origin, opening about its local x). Pressure from burning propellant
+    /// A hatch lid on its hinge (this object: its origin is the hinge, it opens about its local x). The lid itself is a
+    /// reference to parts of the vehicle's model (one per LOD copy), moved under the hinge when the vehicle wakes, so a
+    /// new model only needs its lid parts assigned here. Pressure from burning propellant
     /// throws it open: it swings up, past vertical it falls against its stop, below vertical gravity pulls it shut
     /// again unless the push carried it over. An ammunition detonation tears lids off their hinges and throws them clear
     /// (catastrophic-kill photos show hatches open or missing; en.wikipedia.org/wiki/Cooking_off). Lid ~30 kg; the
@@ -16,8 +18,10 @@ namespace ModernDrone.Vehicles
         [SerializeField] float openStop = 115f;
         [SerializeField] float mass = 30f;
         [Range(0f, 1f)] [SerializeField] float tearChance = 0.7f;
-        [Tooltip("Rotation axis in the lid's space: the hinge line.")]
+        [Tooltip("Rotation axis in the hinge's space: the hinge line.")]
         [SerializeField] Vector3 axis = Vector3.right;
+        [Tooltip("The lid's parts in the vehicle's model (one per LOD copy); they swing with the hinge.")]
+        [SerializeField] Transform[] lid = new Transform[0];
 
         Quaternion _closed;
         float _angle, _speed, _tornAge;
@@ -31,17 +35,21 @@ namespace ModernDrone.Vehicles
         public bool IsOpen => _torn || _angle > 25f;
         public bool Torn => _torn;
         public float Angle => _angle;
+        public System.Collections.Generic.IReadOnlyList<Transform> Lid => lid;
 
-        public void Configure(float stopDeg, float kg, float tear, Vector3 hingeAxis)
+        public void Configure(float stopDeg, float kg, float tear, Vector3 hingeAxis, Transform[] lidParts = null)
         {
             openStop = stopDeg;
             mass = kg;
             tearChance = tear;
             axis = hingeAxis;
+            if (lidParts != null) lid = lidParts;
         }
 
         void Awake()
         {
+            foreach (var part in lid)
+                if (part != null && part.parent != transform) part.SetParent(transform, true);
             _closed = transform.localRotation;
             _owner = GetComponentInParent<VehicleDamageModel>();
         }

@@ -14,7 +14,8 @@ namespace ModernDrone.Editor
     /// game times to Temp/FxReview/&lt;tag&gt;/. Game time advances in fixed 1/30 s steps (Time.captureDeltaTime), so
     /// series are repeatable and independent of the editor's frame rate. Driven from the Unity CLI (eval).
     /// Scenarios: side (shaped charge on the hull side), ammo (ammunition detonation), ground (burst on the ground
-    /// beside the vehicle), fire (fuel fire), cookoff (propellant fire that blows the hatches).
+    /// beside the vehicle), fire (fuel fire), cookoff (propellant fire that blows the hatches),
+    /// flash (mist fireball of a holed fuel tank).
     /// </summary>
     public static class FxReview
     {
@@ -31,6 +32,10 @@ namespace ModernDrone.Editor
         public static bool Busy { get; private set; }
         /// <summary>Debug: render only the particle systems whose name contains this (null = all).</summary>
         public static string Only;
+        /// <summary>Target vehicle: the first whose name contains this (null = the one named "№1").</summary>
+        public static string Target;
+        /// <summary>Prefab path to stand in the target's place (null = review the scene's own vehicle).</summary>
+        public static string SpawnPrefab;
         public static string Status { get; private set; } = "idle";
 
         /// <summary>Starts a capture; returns at once (poll <see cref="Status"/>).</summary>
@@ -47,7 +52,15 @@ namespace ModernDrone.Editor
 
             _target = Object.FindAnyObjectByType<VehicleDamageModel>();
             foreach (var v in Object.FindObjectsByType<VehicleDamageModel>())
-                if (v.name.Contains("№1")) _target = v;
+                if (string.IsNullOrEmpty(Target) ? v.name.Contains("№1") : v.name.Contains(Target) || v.DisplayName.Contains(Target)) _target = v;
+            if (!string.IsNullOrEmpty(SpawnPrefab))
+            {
+                // Review a vehicle the scene lacks: it takes the found target's place.
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(SpawnPrefab);
+                var go = Object.Instantiate(prefab, _target.transform.position, _target.transform.rotation);
+                _target.gameObject.SetActive(false);
+                _target = go.GetComponent<VehicleDamageModel>();
+            }
             var mission = Object.FindAnyObjectByType<ModernDrone.Missions.MissionController>();
             if (mission != null) mission.enabled = false;
 
@@ -66,6 +79,11 @@ namespace ModernDrone.Editor
                     Vector3 p = centre + side * fpvRange + Vector3.up * fpvRange * 0.3f;
                     float tilt = drone.GetComponentInChildren<DroneCamera>().TiltDeg;
                     drone.transform.SetPositionAndRotation(p, Quaternion.LookRotation(centre - p) * Quaternion.Euler(tilt, 0f, 0f));
+                    // The operator moves with the drone: a clean feed wherever the scene's spawn is (the review is about effects).
+                    var link = drone.GetComponent<ModernDrone.Missions.DroneLink>();
+                    if (link != null)
+                        typeof(ModernDrone.Missions.DroneLink).GetField("_operator", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                            ?.SetValue(link, p + Vector3.up * 3f);
                     Views.Add(("fpv", fpvCam, true));
                 }
                 else
@@ -138,8 +156,19 @@ namespace ModernDrone.Editor
                         _scenario == "blast" ? 2.5f : 1f, _scenario == "blast" ? ExplosionKind.Ammo : ExplosionKind.Air);
                     break;
                 case "ammo":
-                    typeof(VehicleDamageModel).GetMethod("Destroy", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                        .Invoke(_target, new object[] { DestructionCause.AmmoDetonation });
+                {
+                    // What would go first: shells with explosive fill, else a violent or rocket load.
+                    VehicleModule pick = null;
+                    foreach (var m in _target.Modules) if (m.HighExplosive) { pick = m; break; }
+                    if (pick == null)
+                        foreach (var m in _target.Modules)
+                            if (m.Burnable && (m.Substance.violent || m.Substance.kind == SubstanceClass.RocketMotor || m.Substance.kind == SubstanceClass.CanisterMissile)) { pick = m; break; }
+                    if (pick == null) foreach (var m in _target.Modules) if (m.Burnable) { pick = m; break; }
+                    _target.Detonate(pick);
+                    break;
+                }
+                case "flash":
+                    foreach (var m in _target.Modules) if (m.Burnable && m.Substance.mistFireball) { _target.FlashMist(m); break; }
                     break;
                 case "fire":
                 case "cookoff":

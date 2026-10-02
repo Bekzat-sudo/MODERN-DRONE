@@ -123,6 +123,9 @@ namespace ModernDrone.Editor
             k.AttachModel(ModelDir + (era ? "BMP3M/bmp3m_era.glb" : "BMP3M/bmp3m.glb"), Vector3.zero, turret, "Turret");
             if (era) ModelParts(k);
             k.SliceHull();
+            // 100 mm: 40 rounds (22 in the autoloader); fuel ~690 L, figure not confirmed (en/ru.wikipedia.org/wiki/BMP-3).
+            k.Fill("Module_Fuel", SubstanceAssets.Diesel, 690f);
+            k.Fill("Module_AmmoRack", SubstanceAssets.Propellant, 40f, SubstanceAssets.Shells, 40f);
             k.Finish(era ? "БМП-3М с ДЗ" : "БМП-3М").SetAmmoConfinement(0.6f);
             k.Save(era ? IfvEra : Ifv);
         }
@@ -164,6 +167,9 @@ namespace ModernDrone.Editor
             k.Module("Module_Fuel", ModuleType.FuelTank, 70f, 15f, v(1.0f, 1.1f, 2.4f), v(0.7f, 0.8f, 1.0f));
             k.AttachModel(ModelDir + "Msta/msta_s.glb", Vector3.zero, turret, "Turret");
             k.SliceHull();
+            // 1300 L, 50 x 152 mm rounds (ru.wikipedia.org/wiki/2С19).
+            k.Fill("Module_Fuel", SubstanceAssets.Diesel, 1300f);
+            k.Fill("Module_AmmoRack", SubstanceAssets.Propellant, 50f, SubstanceAssets.Shells, 50f);
             k.Finish("САУ 2С19М1 «Мста-С»").SetAmmoConfinement(0.6f);
             k.Save(Spg);
         }
@@ -203,6 +209,9 @@ namespace ModernDrone.Editor
             k.Module("Module_AmmoRack", ModuleType.AmmoRack, 50f, 10f, v(0, 1.75f, 0.85f), v(0.7f, 0.5f, 0.7f));
             k.AttachModel(ModelDir + "BTR82/btr82.glb", Vector3.zero, turret, "Turret");
             k.SliceHull();
+            // 300 L; 30 mm about 300 rounds (globalsecurity.org, BTR-82 specifications).
+            k.Fill("Module_Fuel", SubstanceAssets.Diesel, 300f);
+            k.Fill("Module_AmmoRack", SubstanceAssets.SmallArms, 300f);
             k.Finish("БТР-82А").SetAmmoConfinement(0.4f);
             k.Save(Apc);
         }
@@ -244,7 +253,7 @@ namespace ModernDrone.Editor
             k.Module("Module_Engine", ModuleType.Engine, 120f, 30f, v(0, 1.5f, 2.3f), v(1.4f, 0.9f, 1.3f));
             k.Module("Module_Fuel", ModuleType.FuelTank, 60f, 10f, v(1.1f, 1.1f, 0.8f), v(0.5f, 0.6f, 1.3f));
             k.Module("Module_Generator", ModuleType.Generator, 70f, 20f, v(0, 2.0f, -3.9f), v(2.0f, 1.0f, 1.2f))
-                .GetComponent<VehicleModule>().SetContents(Combustible.Diesel, fill: 0.3f);
+                .GetComponent<VehicleModule>().SetContents(SubstanceAssets.Diesel, 100f, fill: 0.3f); // generator day tank, abstract
 
             // Combat module on the rear
             k.Plate("Module_Side_L", v(-1.3f, 3.0f, -1.6f), v(0.06f, 1.6f, 4.2f), 15f);
@@ -260,6 +269,10 @@ namespace ModernDrone.Editor
             k.Module("Module_Gun_R", ModuleType.Gun, 60f, 10f, v(0.9f, 3.3f, -0.4f), v(0.35f, 0.35f, 2.4f));
             k.AttachModel(ModelDir + "Pantsir/pantsir_s1.glb");
             k.SliceHull();
+            // 12 missiles in launch tubes, 1400 x 30 mm (ru.wikipedia.org/wiki/Панцирь-С1; en.wiki gives 700). Fuel not published: default.
+            k.Fill("Module_AmmoRack", SubstanceAssets.SmallArms, 1400f);
+            k.Fill("Module_Launcher_L", SubstanceAssets.Missiles, 6f);
+            k.Fill("Module_Launcher_R", SubstanceAssets.Missiles, 6f);
             k.Finish("ЗРПК «Панцирь-С1»").SetAmmoConfinement(0.3f);
             k.Save(Spaag);
         }
@@ -289,7 +302,7 @@ namespace ModernDrone.Editor
             k.Plate("Trailer_Shelter_L", v(-1.3f, 2.7f, 3.0f), v(0.06f, 1.4f, 2.0f), 6f);
             k.Plate("Trailer_Shelter_R", v(1.3f, 2.7f, 3.0f), v(0.06f, 1.4f, 2.0f), 6f);
             k.Module("Module_Generator", ModuleType.Generator, 70f, 15f, v(0, 2.7f, 3.0f), v(2.2f, 1.2f, 1.8f))
-                .GetComponent<VehicleModule>().SetContents(Combustible.Diesel, fill: 0.3f);
+                .GetComponent<VehicleModule>().SetContents(SubstanceAssets.Diesel, 100f, fill: 0.3f); // generator day tank, abstract
 
             // Canister pack on the erector hinge, laid out in its travel pose (lying forward along the trailer).
             var pack = k.Group("Canisters", v(0.007f, 2.134f, -6.913f));
@@ -305,6 +318,9 @@ namespace ModernDrone.Editor
                     if (t.name == "Outriggers") t.gameObject.SetActive(false);
             k.SliceHull(0.75f);
             if (erected) pack.localRotation = Quaternion.Euler(-90f, 0f, 0f);
+            // One missile per canister, 4 canisters (en.wikipedia.org/wiki/S-400_missile_system). Tractor fuel not published: default.
+            foreach (var m in k.Root.GetComponentsInChildren<VehicleModule>())
+                if (m.name.StartsWith("Module_Canister_")) m.SetContents(SubstanceAssets.Missiles, 1f);
             k.Finish(label);
             k.Save(path);
         }
@@ -328,7 +344,7 @@ namespace ModernDrone.Editor
             k.Module("Module_Engine", ModuleType.Engine, 120f, 30f, v(0, 1.6f, 4.6f), v(1.8f, 1.1f, 1.4f));
             k.Module("Module_Equipment", ModuleType.ControlStation, 70f, 15f, v(0, 2.5f, -2.5f), v(2.6f, 2.0f, 4.4f));
             k.Module("Module_Generator", ModuleType.Generator, 80f, 25f, v(0, 1.8f, -6.4f), v(1.4f, 1.2f, 1.2f))
-                .GetComponent<VehicleModule>().SetContents(Combustible.Diesel, fill: 0.3f);
+                .GetComponent<VehicleModule>().SetContents(SubstanceAssets.Diesel, 100f, fill: 0.3f); // generator day tank, abstract
             k.Module("Module_Radar", ModuleType.Radar, 90f, 10f, v(0, 7.5f, 2.6f), v(3.2f, 5.5f, 1.0f));
             k.AttachModel(ModelDir + "S400/s400_radar.glb");
             k.SliceHull();
@@ -342,8 +358,9 @@ namespace ModernDrone.Editor
             TruckBase(k, 8f, 10f);
             var pod = k.Group("RocketPod", v(0, 2.3f, -2.0f), rot: Pitch(-12f));
             k.Module("Module_Rockets", ModuleType.AmmoRack, 60f, 10f, Vector3.zero, v(1.9f, 1.1f, 3.0f), pod, visible: true, mat: k.Hull)
-                .GetComponent<VehicleModule>().SetContents(Combustible.RocketPropellant, explosive: true);
+                .GetComponent<VehicleModule>().SetContents(SubstanceAssets.Rockets, 40f, SubstanceAssets.Shells, 40f); // BM-21: 40 x 122 mm (en.wikipedia.org/wiki/BM-21_Grad)
             k.Module("Module_Launcher", ModuleType.Launcher, 70f, 20f, v(0, -0.75f, 0), v(0.8f, 0.4f, 0.8f), pod);
+            k.Fill("Module_Launcher", null, 0f); // the launcher drive holds nothing that burns
             k.Finish("РСЗО (заглушка)");
             k.Save(Mlrs);
         }
@@ -374,6 +391,7 @@ namespace ModernDrone.Editor
             k.AttachModel(ModelDir + "Ural4320/ural4320.glb");
             k.SliceHull();
             // Ammunition crates in an open, tented bed: burning propellant vents instead of building pressure.
+            k.Fill("Module_Fuel", SubstanceAssets.Diesel, 360f); // ru.wikipedia.org/wiki/Урал-4320
             k.Finish("Урал-4320 (снабжение)").SetAmmoConfinement(0.1f);
             k.Save(Truck);
         }
@@ -398,7 +416,7 @@ namespace ModernDrone.Editor
             k.Module("Module_Engine", ModuleType.Engine, 120f, 30f, v(0, 1.6f, 3.1f), v(1.2f, 0.8f, 1.1f));
             k.Module("Module_ControlStation", ModuleType.ControlStation, 60f, 10f, v(0, 2.2f, 1.55f), v(1.8f, 1.0f, 1.1f));
             k.Module("Module_Fuel", ModuleType.FuelTank, 60f, 10f, v(1.05f, 1.1f, 0.3f), v(0.5f, 0.5f, 1.0f))
-                .GetComponent<VehicleModule>().SetContents(Combustible.Diesel, fill: 0.6f);
+                .GetComponent<VehicleModule>().SetContents(SubstanceAssets.Diesel, 360f, fill: 0.6f); // Ural-4320: 360 L (ru.wikipedia.org/wiki/Урал-4320)
             k.Visual("Bed", v(0, 1.45f, -1.8f), v(2.4f, 0.6f, 4.1f), k.Hull);
             k.AttachModel(ModelDir + "Ural4320/ural4320_open.glb");
             k.SliceHull();
@@ -423,7 +441,7 @@ namespace ModernDrone.Editor
             k.Module("Module_Engine", ModuleType.Engine, 100f, 25f, v(0, 1.3f, 2.6f), v(1.0f, 0.7f, 1.0f));
             k.Module("Module_ControlStation", ModuleType.ControlStation, 50f, 8f, v(0, 1.9f, 1.4f), v(1.7f, 0.9f, 1.0f));
             k.Module("Module_Fuel", ModuleType.FuelTank, 50f, 8f, v(0.95f, 0.95f, 0.5f), v(0.4f, 0.4f, 0.9f))
-                .GetComponent<VehicleModule>().SetContents(Combustible.Gasoline, fill: 0.6f);
+                .GetComponent<VehicleModule>().SetContents(SubstanceAssets.Gasoline, 215f, fill: 0.6f); // ZIL-157: 150 + 65 L petrol (ru.wikipedia.org/wiki/ЗИЛ-157)
             k.Visual("Bed", v(0, 1.3f, -1.2f), v(2.3f, 0.5f, 3.6f), k.Hull);
             k.AttachModel(ModelDir + "ZIL157/zil157.glb");
             k.SliceHull();
@@ -449,13 +467,15 @@ namespace ModernDrone.Editor
             gun.transform.localPosition = new Vector3(bedXZ.x, floor, bedXZ.z);
             var traverse = FindDeep(gun.transform, "Traverse");
             var elevation = FindDeep(gun.transform, "Elevation");
-            k.Module("Module_Gun", ModuleType.Launcher, 50f, 5f, new Vector3(bedXZ.x, floor + moduleSize.y * 0.5f, bedXZ.z), moduleSize);
+            k.Module("Module_Gun", ModuleType.Launcher, 50f, 5f, new Vector3(bedXZ.x, floor + moduleSize.y * 0.5f, bedXZ.z), moduleSize)
+                // Ready ammunition at the gun: ZU-23-2 two 50-round boxes, DShK one 50-round box (en.wikipedia.org/wiki/ZU-23-2, /DShK).
+                .GetComponent<VehicleModule>().SetContents(SubstanceAssets.SmallArms, caliber >= 20f ? 100f : 50f);
             k.Root.AddComponent<AntiDroneGun>().Configure(traverse, elevation, elevation, caliber, rpm, velocity, burst, pause, perRound, range, optimal);
         }
 
         /// <summary>
         /// Turns separate model pieces into damage parts: every ERA_### block becomes a reactive element on its own
-        /// collider (so coverage follows the real block layout) that flies off when it fires (hatches: VehicleKit.SetupHatches).
+        /// collider (so coverage follows the real block layout) that flies off when it fires (hatches: VehicleFxSetup.SuggestHatches).
         /// Kontakt-type block ~6 kg (estimate).
         /// </summary>
         static void ModelParts(VehicleKit k)
@@ -521,6 +541,8 @@ namespace ModernDrone.Editor
             k.Module("Module_Fuel", ModuleType.FuelTank, 60f, 15f, v(1.0f, 1.3f, -1.4f), v(0.5f, 0.7f, 1.2f));
             k.AttachModel(ModelDir + "Typhoon/typhoon.glb");
             k.SliceHull();
+            // Tank size not published: ~570 L from 700 km at 81 L/100 km (ru.wikipedia.org/wiki/КамАЗ-63968), derived.
+            k.Fill("Module_Fuel", SubstanceAssets.Diesel, 570f);
             k.Finish("КамАЗ «Тайфун-К»");
             k.Save(Mrap);
         }
@@ -556,7 +578,7 @@ namespace ModernDrone.Editor
             k.Module("Module_Gearbox", ModuleType.Transmission, 150f, 40f, v(0, 3.3f, 0), v(1.0f, 0.7f, 1.2f));
             // Kerosene in fire- and explosion-resistant tanks (en.wikipedia.org/wiki/Mil_Mi-28: "fire and explosion resistant" fuel system).
             k.Module("Module_Fuel", ModuleType.FuelTank, 70f, 15f, v(0, 1.6f, -0.6f), v(1.4f, 0.8f, 2.2f))
-                .GetComponent<VehicleModule>().SetContents(Combustible.JetFuel, fill: 1f, selfSealing: true);
+                .GetComponent<VehicleModule>().SetContents(SubstanceAssets.JetFuel, 1720f, fill: 1f, selfSealing: true); // 1720 L internal (en.wikipedia.org/wiki/Mil_Mi-28)
             k.Module("Module_Gun", ModuleType.Gun, 60f, 15f, v(0, 0.8f, 5.0f), v(0.35f, 0.35f, 1.3f));
             k.Module("Module_AmmoRack", ModuleType.AmmoRack, 50f, 10f, v(0, 1.3f, 3.0f), v(0.8f, 0.6f, 1.0f));
             k.Module("Module_Launcher_L", ModuleType.Launcher, 50f, 10f, v(-2.2f, 1.9f, 0.3f), v(1.1f, 0.6f, 2.2f));
@@ -570,6 +592,10 @@ namespace ModernDrone.Editor
 
             k.AttachModel(ModelDir + "Mi28NM/mi28nm.glb", Vector3.zero, rotor, "Rotor");
             k.SliceHull();
+            // 30 mm 2A42: 250 rounds; 8 Ataka in launch tubes, typical load (en.wikipedia.org/wiki/Mil_Mi-28).
+            k.Fill("Module_AmmoRack", SubstanceAssets.SmallArms, 250f);
+            k.Fill("Module_Launcher_L", SubstanceAssets.Missiles, 4f);
+            k.Fill("Module_Launcher_R", SubstanceAssets.Missiles, 4f);
             k.Finish("Ми-28НМ").SetAmmoConfinement(0.3f);
             k.Root.AddComponent<HelicopterFlight>().Configure(new Vector3[0], rotor);
             k.Save(Helicopter);
@@ -651,6 +677,9 @@ namespace ModernDrone.Editor
             k.Module("Module_AmmoRack", ModuleType.AmmoRack, 50f, 10f, v(0, 1.2f, -1.2f), v(1.4f, 0.5f, 1.2f));
             k.AttachModel(ModelDir + "MTLBM/mtlbm.glb", Vector3.zero, turret, "Turret");
             k.SliceHull();
+            // ~450 L (figure not confirmed); PKT 2500 rounds (en.wikipedia.org/wiki/MT-LB).
+            k.Fill("Module_Fuel", SubstanceAssets.Diesel, 450f);
+            k.Fill("Module_AmmoRack", SubstanceAssets.SmallArms, 2500f);
             k.Finish("МТ-ЛБМ").SetAmmoConfinement(0.3f);
             k.Save(Mtlb);
         }

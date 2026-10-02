@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using ModernDrone.Core;
 using UnityEngine;
 
@@ -22,56 +23,85 @@ namespace ModernDrone.Vehicles
     }
 
     /// <summary>
-    /// Code-built, pooled particle effects: explosions, fires, smoke screens. Smoke and fire are lit six-way flipbooks
-    /// baked from Mantaflow gas simulations (Tools/Blender/vfx_bake.py; shader ModernDrone/Particles/SixWay): the sun,
-    /// the sky and every nearby light (flashes, burning vehicles) shade them, the ground and hulls cut them softly.
-    /// A detonation plays in phases seen on strike footage and in fireball studies: a flash brightest in the first
-    /// milliseconds with the visible fireball gone in ~100 ms for small charges (arxiv.org 2010.13537, Beirut study),
-    /// a refraction ring as the blast front leaves (en.wikipedia.org/wiki/Blast_wave), sparks of liner metal and
-    /// fragments, dirt and a brown dust skirt for ground bursts, then a column of soot that rises and drifts with the
-    /// wind (TNT-type charges are oxygen-poor and smoke black: en.wikipedia.org/wiki/Oxygen_balance). Ammunition
-    /// detonations fill the view with fire for 1.5-2 s (T-80BVM / T-72 catastrophic-kill footage), burning propellant
-    /// jets out of every opening for seconds with white-grey smoke, fuel fires burn with black smoke
-    /// (en.wikipedia.org/wiki/Cooking_off). Sizes and counts are look values (abstract), size 1 = a drone warhead.
+    /// Plays effect recipes (<see cref="FxRecipe"/> assets: layers of flash, fireball, blast ring, sparks, embers, clods,
+    /// smoke, flames, jets, haze and lights, plus what the effect does to the world and its sound) as pooled particle
+    /// effects. Smoke and fire are lit six-way flipbooks baked from Mantaflow gas simulations
+    /// (Tools/Blender/vfx_bake.py; shader ModernDrone/Particles/SixWay): the sun, the sky and every nearby light shade
+    /// them, the ground and hulls cut them softly. Effects age in game time, so a world frozen by the killcam holds them at
+    /// their first instant. The standard recipes (<see cref="FxLibrary"/>) reproduce the phases seen on strike footage and
+    /// in fireball studies: a flash brightest in the first milliseconds with the visible fireball gone in ~100 ms for small
+    /// charges (arxiv.org 2010.13537, Beirut study), a refraction ring as the blast front leaves
+    /// (en.wikipedia.org/wiki/Blast_wave), sparks of liner metal and fragments, dirt and a brown dust skirt for ground
+    /// bursts, then a column of soot that rises and drifts with the wind (TNT-type charges are oxygen-poor and smoke
+    /// black: en.wikipedia.org/wiki/Oxygen_balance). Ammunition detonations fill the view with fire for 1.5-2 s
+    /// (T-80BVM / T-72 catastrophic-kill footage), burning propellant jets out of every opening for seconds with
+    /// white-grey smoke, fuel fires burn with black smoke (en.wikipedia.org/wiki/Cooking_off). Sizes and counts in the
+    /// recipes are look values (abstract); events scale them from published relations (<see cref="FireScaling"/>).
     /// </summary>
     public static class SimpleVfx
     {
-        // ---------------------------------------------------------------- public API
+        // ---------------------------------------------------------------- recipe player
+
+        /// <summary>
+        /// Plays <paramref name="recipe"/> at the pose (up = the direction it faces: a jet's axis, an opening's normal),
+        /// optionally parented. <paramref name="scale"/> resizes it (1 = as authored), <paramref name="rateScale"/> thins or
+        /// thickens continuous emission, <paramref name="seconds"/> &gt; 0 sets how long its continuous layers emit.
+        /// </summary>
+        public static FxEffect Play(FxRecipe recipe, Vector3 position, Quaternion rotation, Transform parent = null, float scale = 1f,
+            float rateScale = 1f, float seconds = 0f)
+        {
+            if (recipe == null) return null;
+            string key = Register(recipe);
+            var fx = FxPool.Spawn(key, position, rotation, parent);
+            fx.SetScale(scale, rateScale);
+            fx.Lifetime = recipe.looping ? 0f : recipe.lifetime + Mathf.Max(0f, seconds);
+            if (_delayed.Remove(fx)) Delay(fx, 0f);
+            if (seconds > 0f) SetDurations(fx, recipe, seconds);
+            ApplyQuality(fx, recipe);
+            SetWind(fx);
+            bool sustained = recipe.looping || seconds > 0f;
+            var bank = recipe.sound;
+            if (bank != null)
+            {
+                if (sustained) fx.OnStart(f => SimpleAudio.Sustain(bank, f.transform, seconds, scale));
+                else SimpleAudio.Blast(bank, position, scale);
+            }
+            if (!sustained) fx.OnStart(f => World(recipe, position, scale));
+            return fx;
+        }
+
+        /// <summary>What a one-shot does to the world when it goes off: blast wave, obscuring cloud, flash, scorch, debris, leaves.</summary>
+        static void World(FxRecipe r, Vector3 p, float scale)
+        {
+            if (r.shockwave) Shockwaves.Emit(p, scale);
+            // Its smoke and dust hide what is behind it for a while, by kind (SmokeVolumes.Cloud).
+            if (r.obscures == FxRecipe.Obscures.Screen)
+            {
+                // Screening grenades build a wall of ~10 m clouds within 1-2 s along the wind.
+                for (int i = 0; i < 4; i++)
+                    SmokeVolumes.Add(SmokeVolumes.Kind.Screen, p + Wind.Current * (2f + i * 3f) + Vector3.up * 1.5f, scale);
+            }
+            else if (r.obscures != FxRecipe.Obscures.None)
+                SmokeVolumes.Add(r.ObscurationKind, p + Vector3.up * scale, scale);
+            // The flash whites out thermal sights looking at it.
+            if (r.dazzles) SmokeVolumes.AddFlash(p, scale);
+            if (r.scorch > 0f && GroundBelow(p, 1.5f * scale, out var hit))
+                GroundMarks.Place(hit.point, hit.normal, r.scorch * Mathf.Sqrt(Mathf.Max(0.3f, scale)));
+            if (r.debris > 0 && scale >= 0.8f) FxDebris.Throw(p, r.debris, r.debrisSpeed, r.debrisSize);
+            if (r.shakesTrees) ShakeTrees(p, scale);
+        }
+
+        // ---------------------------------------------------------------- standard effects
 
         public static void Explosion(Vector3 position, float size, ExplosionKind kind = ExplosionKind.Auto)
         {
             if (kind == ExplosionKind.Auto) kind = Classify(position);
-            SimpleAudio.Explosion(position, size, kind);
-            Register();
-            var fx = FxPool.Spawn("exp_" + kind, position, Quaternion.identity);
-            fx.SetScale(size);
-            fx.Lifetime = kind == ExplosionKind.Ammo || kind == ExplosionKind.Fuel ? 22f : 16f;
-            SetWind(fx);
-            bool ground = kind == ExplosionKind.Ground || GroundBelow(position, 1.5f * size, out _);
-            fx.OnStart(f =>
-            {
-                Shockwaves.Emit(position, size);
-                // The burst's smoke and dust hide what is behind it for a while, by kind (SmokeVolumes.Cloud), and its
-                // flash whites out thermal sights looking at it.
-                SmokeVolumes.Add(kind switch
-                {
-                    ExplosionKind.Air => SmokeVolumes.Kind.AirBurst,
-                    ExplosionKind.Era => SmokeVolumes.Kind.Era,
-                    ExplosionKind.Ground => SmokeVolumes.Kind.GroundBurst,
-                    ExplosionKind.Fuel => SmokeVolumes.Kind.Fuel,
-                    ExplosionKind.Ammo => SmokeVolumes.Kind.Fuel,
-                    _ => SmokeVolumes.Kind.VehicleBurst,
-                }, position + Vector3.up * size, size);
-                SmokeVolumes.AddFlash(position, size);
-                if (ground && kind != ExplosionKind.Air) Scorch(position, size, kind);
-                if (kind == ExplosionKind.Ammo) FxDebris.Throw(position, 6, 22f, 1.2f);
-                else if (kind == ExplosionKind.Armor && size >= 0.8f) FxDebris.Throw(position, 2, 12f, 0.6f);
-                ShakeTrees(position, size);
-            });
+            var lib = FxLibrary.Instance;
+            if (lib != null) Play(lib.Explosion(kind), position, Quaternion.identity, null, size);
         }
 
         /// <summary>Ground, vehicle or air, from what is right around the burst.</summary>
-        static ExplosionKind Classify(Vector3 p)
+        public static ExplosionKind Classify(Vector3 p)
         {
             if (Physics.CheckSphere(p, 0.9f, GameLayers.VehicleHullMask | GameLayers.ArmorMask | GameLayers.ERAMask | GameLayers.ScreenMask, QueryTriggerInteraction.Collide))
                 return ExplosionKind.Armor;
@@ -82,64 +112,40 @@ namespace ModernDrone.Vehicles
             Physics.Raycast(p + Vector3.up * 0.3f, Vector3.down, out hit, within + 0.3f, GameLayers.TerrainMask, QueryTriggerInteraction.Ignore);
 
         /// <summary>
-        /// Burning propellant venting through an opening: a roaring flame jet along <paramref name="direction"/> for
-        /// <paramref name="seconds"/>, flaring and dying back as charges burn through, with white-grey smoke.
+        /// A flame jet (<paramref name="recipe"/>, default: burning propellant) roaring along <paramref name="direction"/>
+        /// for <paramref name="seconds"/>, flaring and dying back as charges burn through.
         /// </summary>
-        public static FxEffect CookOff(Transform parent, Vector3 worldPosition, float seconds, Vector3? direction = null, float strength = 1f)
+        public static FxEffect CookOff(Transform parent, Vector3 worldPosition, float seconds, Vector3? direction = null, float strength = 1f,
+            FxRecipe recipe = null)
         {
-            Register();
+            if (recipe == null) recipe = FxLibrary.Instance != null ? FxLibrary.Instance.jet : null;
             Vector3 dir = direction ?? Vector3.up;
-            var fx = FxPool.Spawn("jet", worldPosition, Quaternion.FromToRotation(Vector3.up, dir), parent);
-            fx.SetScale(Mathf.Clamp(strength, 0.4f, 2f));
-            fx.Lifetime = seconds + 14f;
-            SetWind(fx);
-            fx.OnStart(f => SimpleAudio.FlameJet(f.transform, seconds, strength));
-            // Duration can only change on a stopped system: stop, set, restart.
-            var jet = fx.transform.Find("Jet").GetComponent<ParticleSystem>();
-            jet.Stop(false, ParticleSystemStopBehavior.StopEmittingAndClear);
-            var main = jet.main;
-            main.duration = Mathf.Max(0.5f, seconds);
-            var smoke = fx.transform.Find("Smoke").GetComponent<ParticleSystem>();
-            smoke.Stop(false, ParticleSystemStopBehavior.StopEmittingAndClear);
-            var sm = smoke.main;
-            sm.duration = Mathf.Max(0.5f, seconds + 4f);
-            jet.Play(false);
-            smoke.Play(false);
-            return fx;
+            return Play(recipe, worldPosition, Quaternion.FromToRotation(Vector3.up, dir), parent, Mathf.Clamp(strength, 0.4f, 2f), 1f,
+                Mathf.Max(0.5f, seconds));
         }
 
         /// <summary>
-        /// Looping flames with a smoke column, parented so it follows the vehicle. <paramref name="direction"/> is the
-        /// opening the fire burns out of (flames lean out of it, then rise); <paramref name="blackSmoke"/> for fuel,
-        /// rubber and paint, grey-white for propellant.
+        /// Looping flames with a smoke column (<paramref name="recipe"/>, default: black or grey), parented so it follows the
+        /// vehicle. <paramref name="direction"/> is the opening the fire burns out of (flames lean out of it, then rise).
         /// </summary>
-        public static FxEffect Fire(Transform parent, Vector3 worldPosition, float size, Vector3? direction = null, bool blackSmoke = true)
+        public static FxEffect Fire(Transform parent, Vector3 worldPosition, float size, Vector3? direction = null, bool blackSmoke = true,
+            FxRecipe recipe = null)
         {
-            Register();
+            var lib = FxLibrary.Instance;
+            if (recipe == null && lib != null) recipe = blackSmoke ? lib.fire : lib.fireGrey;
             Vector3 dir = direction ?? Vector3.up;
-            var fx = FxPool.Spawn(blackSmoke ? "fire" : "fire_grey", worldPosition, Quaternion.FromToRotation(Vector3.up, dir), parent);
-            fx.SetScale(size, Mathf.Clamp(size, 0.6f, 1.6f));
-            SetDelay(fx, 0f);
-            SetWind(fx);
-            fx.OnStart(f =>
-            {
-                var src = SimpleAudio.FireLoop(f.transform, size);
-                f.Released += _ => { if (src != null) Object.Destroy(src); };
-            });
-            return fx;
+            return Play(recipe, worldPosition, Quaternion.FromToRotation(Vector3.up, dir), parent, size, Mathf.Clamp(size, 0.6f, 1.6f));
         }
 
         /// <summary>
         /// Smoke seeping out of a closed hull (seams, vision blocks) while a fire burns inside, or the smouldering column
         /// of a burnt-out wreck: no flames.
         /// </summary>
-        public static FxEffect Seep(Transform parent, Vector3 worldPosition, bool blackSmoke, float size = 1f)
+        public static FxEffect Seep(Transform parent, Vector3 worldPosition, bool blackSmoke, float size = 1f, FxRecipe recipe = null)
         {
-            Register();
-            var fx = FxPool.Spawn(blackSmoke ? "seep" : "seep_grey", worldPosition, Quaternion.identity, parent);
-            fx.SetScale(size, Mathf.Clamp(size, 0.6f, 1.6f));
-            SetWind(fx);
-            return fx;
+            var lib = FxLibrary.Instance;
+            if (recipe == null && lib != null) recipe = blackSmoke ? lib.seep : lib.seepGrey;
+            return Play(recipe, worldPosition, Quaternion.identity, parent, size, Mathf.Clamp(size, 0.6f, 1.6f));
         }
 
         /// <summary>Debris burning on the ground around a wreck: a few small fires that die down after a while.</summary>
@@ -151,229 +157,430 @@ namespace ModernDrone.Vehicles
                 if (Physics.Raycast(p + Vector3.up * 20f, Vector3.down, out var hit, 40f, GameLayers.TerrainMask, QueryTriggerInteraction.Ignore))
                     p = hit.point;
                 var fire = Fire(null, p, Random.Range(0.3f, 0.55f));
+                if (fire == null) return;
                 // Burning debris lands a moment after the blast, then catches.
-                SetDelay(fire, Random.Range(1f, 3.5f));
-                DelayStop(fire, Random.Range(25f, 50f));
+                Delay(fire, Random.Range(1f, 3.5f));
+                StopAfter(fire, Random.Range(25f, 50f));
             }
-        }
-
-        static void SetDelay(FxEffect fx, float seconds)
-        {
-            // The delay only applies from the next Play: restart the (just spawned) systems.
-            foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>(true))
-            {
-                ps.Stop(false, ParticleSystemStopBehavior.StopEmittingAndClear);
-                var main = ps.main;
-                main.startDelay = seconds;
-                ps.Play(false);
-            }
-            foreach (var l in fx.Lights) l.SetDelay(seconds);
-        }
-
-        static void DelayStop(FxEffect fx, float after)
-        {
-            if (!fx.TryGetComponent(out FxStopAfter stopper)) stopper = fx.gameObject.AddComponent<FxStopAfter>();
-            stopper.Arm(after);
         }
 
         /// <summary>Dense grey smoke cloud laid by a vehicle's smoke grenades; drifts and thins out over about a minute.</summary>
         public static void SmokeScreen(Vector3 position)
         {
-            Register();
-            var fx = FxPool.Spawn("smokescreen", position + Vector3.up * 1.5f, Quaternion.identity);
-            fx.Lifetime = 70f;
-            SetWind(fx, 0.6f);
-            // Screening grenades build a wall of ~10 m clouds within 1-2 s along the wind (SmokeVolumes.Cloud, Screen).
-            fx.OnStart(f =>
+            var lib = FxLibrary.Instance;
+            var fx = Play(lib != null ? lib.smokeScreen : null, position + Vector3.up * 1.5f, Quaternion.identity);
+            if (fx != null) SetWind(fx, 0.6f);
+        }
+
+        /// <summary>Stops an effect's emission after <paramref name="after"/> s of game time (a fire that burns out).</summary>
+        public static void StopAfter(FxEffect fx, float after)
+        {
+            if (fx == null) return;
+            if (!fx.TryGetComponent(out FxStopAfter stopper)) stopper = fx.gameObject.AddComponent<FxStopAfter>();
+            stopper.Arm(after);
+        }
+
+        static readonly HashSet<FxEffect> _delayed = new HashSet<FxEffect>();
+
+        /// <summary>Holds the whole effect back <paramref name="seconds"/> (on top of each layer's own delay).</summary>
+        public static void Delay(FxEffect fx, float seconds)
+        {
+            if (fx == null) return;
+            if (seconds > 0f) _delayed.Add(fx);
+            // The delay only applies from the next Play: restart the (just spawned) systems.
+            foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>(true))
             {
-                for (int i = 0; i < 4; i++)
-                    SmokeVolumes.Add(SmokeVolumes.Kind.Screen, position + Wind.Current * (2f + i * 3f) + Vector3.up * 3f, 1f);
-            });
+                var layer = LayerOf(fx, ps);
+                ps.Stop(false, ParticleSystemStopBehavior.StopEmittingAndClear);
+                if (layer != null && layer.minQuality > FxRecipe.Quality) continue; // quality turned this layer off
+                var main = ps.main;
+                main.startDelay = seconds + (layer != null && layer.count == 0 ? layer.delay : 0f);
+                ps.Play(false);
+            }
+            foreach (var l in fx.Lights)
+            {
+                var layer = LayerOf(fx, l);
+                l.SetDelay(seconds + (layer != null ? layer.delay : 0f));
+            }
+        }
+
+        /// <summary>Continuous layers emit for <paramref name="seconds"/> (the longer ones keep their margin over the shortest).</summary>
+        static void SetDurations(FxEffect fx, FxRecipe recipe, float seconds)
+        {
+            float shortest = float.MaxValue;
+            foreach (var l in recipe.layers) if (l != null && l.duration > 0f) shortest = Mathf.Min(shortest, l.duration);
+            if (shortest == float.MaxValue) return;
+            foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>(true))
+            {
+                var layer = LayerOf(fx, ps);
+                if (layer == null || layer.duration <= 0f) continue;
+                // Duration can only change on a stopped system: stop, set, restart.
+                ps.Stop(false, ParticleSystemStopBehavior.StopEmittingAndClear);
+                var main = ps.main;
+                main.duration = Mathf.Max(0.5f, layer.duration - shortest + seconds);
+                ps.Play(false);
+            }
+        }
+
+        static void ApplyQuality(FxEffect fx, FxRecipe recipe)
+        {
+            int q = FxRecipe.Quality;
+            bool any = false;
+            foreach (var l in recipe.layers) if (l != null && l.minQuality > q) { any = true; break; }
+            if (!any) return;
+            foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>(true))
+            {
+                var layer = LayerOf(fx, ps);
+                if (layer != null && layer.minQuality > q) ps.Stop(false, ParticleSystemStopBehavior.StopEmittingAndClear);
+            }
+            foreach (var l in fx.Lights)
+            {
+                var layer = LayerOf(fx, l);
+                if (layer != null && layer.minQuality > q) l.Level = 0f;
+            }
         }
 
         // ---------------------------------------------------------------- templates
 
-        static void Register()
+        static readonly Dictionary<FxRecipe, string> _keys = new Dictionary<FxRecipe, string>();
+        static readonly Dictionary<string, FxRecipe> _recipes = new Dictionary<string, FxRecipe>();
+        static int _nextKey;
+
+        /// <summary>Pool key of a recipe (registered with the pool on first use; the template is built from its layers).</summary>
+        static string Register(FxRecipe recipe)
         {
+            if (!_keys.TryGetValue(recipe, out var key))
+            {
+                key = "fx" + (++_nextKey) + "_" + recipe.name;
+                _keys[recipe] = key;
+                _recipes[key] = recipe;
+            }
             // The pool forgets its kinds on entering play mode (statics survive without a domain reload).
-            if (FxPool.Has("jet")) return;
-            FxClock.Ensure();
-            foreach (ExplosionKind k in System.Enum.GetValues(typeof(ExplosionKind)))
+            if (!FxPool.Has(key))
             {
-                if (k == ExplosionKind.Auto) continue;
-                var kind = k;
-                FxPool.Register("exp_" + kind, () => BuildExplosion(kind), kind == ExplosionKind.Era ? 6 : 4);
+                FxClock.Ensure();
+                FxPool.Register(key, () => Build(recipe), recipe.poolSize);
             }
-            FxPool.Register("jet", BuildJet, 6);
-            FxPool.Register("fire", () => BuildFire(true), 14);
-            FxPool.Register("fire_grey", () => BuildFire(false), 8);
-            FxPool.Register("smokescreen", BuildSmokeScreen, 3);
-            FxPool.Register("seep", () => BuildSeep(true), 8);
-            FxPool.Register("seep_grey", () => BuildSeep(false), 6);
-            FxPool.Register("leaves", BuildLeaves, 6);
+            return key;
         }
 
-        static GameObject BuildExplosion(ExplosionKind kind)
+        /// <summary>The recipe layer a child of a pooled recipe effect was built from (null for other effects).</summary>
+        static FxLayer LayerOf(FxEffect fx, Component part)
         {
-            var root = new GameObject("VFX_Explosion_" + kind);
+            if (fx.Key == null || !_recipes.TryGetValue(fx.Key, out var recipe)) return null;
+            string n = part.name;
+            int cut = n.LastIndexOf('_');
+            if (cut < 0 || !int.TryParse(n.Substring(cut + 1), out int i) || i < 0 || i >= recipe.layers.Length) return null;
+            return recipe.layers[i];
+        }
+
+        /// <summary>Builds the particle systems and lights of a recipe, one child per layer, named "Kind_index".</summary>
+        public static GameObject Build(FxRecipe recipe)
+        {
+            var root = new GameObject("VFX_" + recipe.name);
             var t = root.transform;
-            bool ammo = kind == ExplosionKind.Ammo, fuel = kind == ExplosionKind.Fuel, era = kind == ExplosionKind.Era;
-            bool armor = kind == ExplosionKind.Armor, groundKind = kind == ExplosionKind.Ground;
-
-            // 1. Flash: a white-hot burst and its light, a few frames long.
-            Flash(t, ammo ? 9f : era ? 3.5f : fuel ? 6f : 5f, era ? 0.04f : 0.07f);
-            Light(t, "FlashLight", FxLight.Mode.Flash, ammo ? 60f : 30f, ammo ? 40f : 25f, era ? 0.06f : 0.12f, new Color(1f, 0.85f, 0.65f));
-
-            // 2. Fireball: lit, glowing gas cooling into soot (simulated flipbook).
+            for (int i = 0; i < recipe.layers.Length; i++)
             {
-                // Each flipbook frame is the whole simulated fireball: a few copies (their glow adds up), not dozens.
-                int count = ammo ? 4 : fuel ? 4 : era ? 1 : armor ? 2 : 3;
-                float life = ammo ? 3.6f : fuel ? 2.6f : era ? 0.9f : 1.6f;
-                var fb = Fireball(t, ammo ? 6.5f : fuel ? 5f : era ? 2f : 3.4f, count, life, fuel ? 0.06f : 0.2f);
-                if (ammo)
+                var l = recipe.layers[i];
+                if (l == null) continue;
+                string name = l.kind + "_" + i;
+                Component c = l.kind switch
                 {
-                    // Charges and shells go one after another: a second, rolling wave of fire.
-                    var em = fb.emission;
-                    em.SetBursts(new[] { new ParticleSystem.Burst(0f, (short)count), new ParticleSystem.Burst(0.25f, 2), new ParticleSystem.Burst(0.6f, 2) });
-                    var main = fb.main;
-                    main.duration = 0.8f;
-                }
-                Light(t, "GlowLight", FxLight.Mode.Glow, ammo ? 14f : fuel ? 10f : 6f, ammo ? 40f : 26f, ammo ? 2.2f : fuel ? 1.1f : era ? 0.15f : 0.35f, new Color(1f, 0.55f, 0.25f));
+                    FxLayerKind.Flash => Flash(t, name, l),
+                    FxLayerKind.Fireball => Fireball(t, name, l),
+                    FxLayerKind.ShockRing => ShockRing(t, name, l),
+                    FxLayerKind.Sparks => Sparks(t, name, l),
+                    FxLayerKind.Embers => Embers(t, name, l, recipe.looping),
+                    FxLayerKind.Clods => Clods(t, name, l),
+                    FxLayerKind.Smoke => Smoke(t, name, l, recipe.looping),
+                    FxLayerKind.Flames => Flames(t, name, l, recipe.looping),
+                    FxLayerKind.Jet => Jet(t, name, l, recipe.looping),
+                    FxLayerKind.Haze => Haze(t, name, l),
+                    _ => Light(t, name, (FxLight.Mode)(int)l.lightMode, l.intensity, l.size, l.lifetime, l.color, l.delay),
+                };
+                if (c != null && l.offset != 0f) c.transform.localPosition = Vector3.up * l.offset;
             }
-
-            // 3. Blast front: a ring of bent light racing out.
-            ShockRing(t, ammo ? 55f : era ? 14f : 28f, ammo ? 0.16f : 0.1f);
-
-            // 4. Fragments, molten liner metal, burning propellant grains.
-            if (!fuel) Sparks(t, armor || era ? 70 : ammo ? 110 : 45, armor);
-            if (ammo) Embers(t, 90);
-            if (groundKind) Dirt(t);
-
-            // 5. Smoke rolling out of the cooling fireball, then rising and drifting.
-            Color soot = era ? new Color(0.55f, 0.55f, 0.53f) : fuel ? new Color(0.07f, 0.065f, 0.06f) : ammo ? new Color(0.28f, 0.27f, 0.26f) : new Color(0.18f, 0.17f, 0.16f);
-            Smoke(t, "Smoke", FxAssets.SmokeHot, soot, ammo ? 6f : era ? 3f : 4.2f, ammo ? 20 : fuel ? 16 : era ? 5 : 11,
-                ammo || fuel ? 16f : era ? 7f : 12f, delay: ammo ? 0.4f : fuel ? 0.25f : 0.08f, alpha: era ? 0.6f : 0.85f);
             return root;
         }
 
-        static GameObject BuildJet()
+        static Material Mat(FxLayer l, Material fallback) => l.material switch
         {
-            var root = new GameObject("VFX_CookOff");
-            var t = root.transform;
-            var jet = Emitter(t, "Jet", FxAssets.Flame, false, 160);
-            SixWay(jet, Flipbook.Flame, heat: new[] { (0f, 1.3f), (0.6f, 1f), (1f, 0.4f) });
-            var main = jet.main;
-            main.duration = 10f;
-            main.startLifetime = new ParticleSystem.MinMaxCurve(0.35f, 0.7f);
-            main.startSpeed = new ParticleSystem.MinMaxCurve(10f, 18f);
-            main.startSize = new ParticleSystem.MinMaxCurve(1.2f / FlameFill, 2.2f / FlameFill);
-            main.startRotation = new ParticleSystem.MinMaxCurve(-0.3f, 0.3f);
-            main.startColor = new Color(1f, 1f, 1f, 1f);
-            var em = jet.emission;
-            // Uneven venting: the jet flares and dies back as charges burn through.
-            var flare = new AnimationCurve(new Keyframe(0f, 1f), new Keyframe(0.15f, 0.45f), new Keyframe(0.3f, 1f), new Keyframe(0.5f, 0.35f),
-                new Keyframe(0.65f, 0.9f), new Keyframe(0.85f, 0.4f), new Keyframe(1f, 0.1f));
-            em.rateOverTime = new ParticleSystem.MinMaxCurve(45f, flare);
-            var shape = jet.shape;
-            shape.shapeType = ParticleSystemShapeType.Cone;
-            shape.angle = 9f;
-            shape.radius = 0.3f;
-            shape.rotation = new Vector3(-90f, 0f, 0f); // cone along the effect's up = the opening's normal
-            Grow(jet, 0.8f, 2.4f);
-            Drag(jet, 2.5f);
-            Light(t, "JetLight", FxLight.Mode.Fire, 12f, 22f, 0f, new Color(1f, 0.62f, 0.3f)).transform.localPosition = Vector3.up * 2f;
-            // Burning nitrocellulose propellant smokes white-grey.
-            var smoke = Smoke(t, "Smoke", FxAssets.SmokeHot, new Color(0.62f, 0.61f, 0.6f), 3.2f, 0, 11f, alpha: 0.7f);
-            var sm = smoke.main;
-            sm.duration = 14f;
-            var sem = smoke.emission;
-            sem.rateOverTime = 5f;
-            smoke.transform.localPosition = Vector3.up * 2.5f;
-            Haze(t, 4f).transform.localPosition = Vector3.up * 3f;
-            return root;
+            FxMaterial.Fireball => FxAssets.Fireball,
+            FxMaterial.Smoke => FxAssets.Smoke,
+            FxMaterial.SmokeHot => FxAssets.SmokeHot,
+            FxMaterial.Dust => FxAssets.Dust,
+            FxMaterial.Flame => FxAssets.Flame,
+            FxMaterial.Flash => FxAssets.Flash,
+            FxMaterial.Sparks => FxAssets.Sparks,
+            FxMaterial.Embers => FxAssets.Embers,
+            FxMaterial.Clods => FxAssets.Clods,
+            _ => fallback,
+        };
+
+        static float SpeedMin(FxLayer l, float share) => l.speedMin > 0f ? l.speedMin : l.speed * share;
+
+        /// <summary>Continuous layers loop in looping recipes unless they have a set duration.</summary>
+        static bool Loops(FxLayer l, bool looping) => looping && l.rate > 0f && l.duration <= 0f;
+
+        static void Continuous(ParticleSystem ps, FxLayer l)
+        {
+            if (l.rate <= 0f) return;
+            var em = ps.emission;
+            em.rateOverTime = l.rate;
+            var main = ps.main;
+            if (l.duration > 0f) main.duration = l.duration;
+            if (l.count == 0 && l.delay > 0f) main.startDelay = l.delay;
         }
 
-        static GameObject BuildFire(bool blackSmoke)
+        // ---------------------------------------------------------------- layers
+
+        /// <summary>White-hot burst sprite.</summary>
+        static ParticleSystem Flash(Transform root, string name, FxLayer l)
         {
-            var root = new GameObject("VFX_Fire");
-            var t = root.transform;
-            var flames = Emitter(t, "Flames", FxAssets.Flame, true, 60);
-            SixWay(flames, Flipbook.Flame, heat: new[] { (0f, 1.1f), (0.5f, 1f), (1f, 0.5f) });
-            var main = flames.main;
-            main.startLifetime = new ParticleSystem.MinMaxCurve(0.6f, 1.1f);
-            main.startSpeed = new ParticleSystem.MinMaxCurve(0.8f, 2f);
-            main.startSize = new ParticleSystem.MinMaxCurve(1.4f / FlameFill, 2.4f / FlameFill);
+            var ps = Emitter(root, name, Mat(l, FxAssets.Flash), false, 4);
+            var main = ps.main;
+            main.startLifetime = l.lifetime;
+            main.startSpeed = 0f;
+            main.startSize = new ParticleSystem.MinMaxCurve(l.size * 0.8f, l.size);
+            main.startColor = l.color;
+            Burst(ps, Mathf.Max(1, l.count), l.delay);
+            FadeOut(ps, new Color(1f, 0.97f, 0.9f), new Color(1f, 0.6f, 0.25f));
+            var r = ps.GetComponent<ParticleSystemRenderer>();
+            r.sortingFudge = -40f; // drawn over the fireball
+            return ps;
+        }
+
+        /// <summary>Lit, glowing gas cooling into soot (simulated flipbook): each frame is the whole fireball, so a few copies.</summary>
+        static ParticleSystem Fireball(Transform root, string name, FxLayer l)
+        {
+            var ps = Emitter(root, name, Mat(l, FxAssets.Fireball), false, 40);
+            float k = l.intensity, s = l.soot;
+            SixWay(ps, Flipbook.Explosion, heat: new[] { (0f, 1.25f * k), (0.08f, 1.1f * k), (0.25f, 0.7f * k), (0.45f, 0.15f * k), (0.6f, 0f) },
+                soot: new[] { (0f, 0f), (0.3f, 0.5f * s), (1f, s) });
+            var main = ps.main;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(l.lifetime * 0.75f, l.lifetime);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(SpeedMin(l, 0.24f), l.speed);
+            main.startSize = new ParticleSystem.MinMaxCurve(l.size * 0.75f / ExplosionFill, l.size / ExplosionFill);
+            main.startRotation = new ParticleSystem.MinMaxCurve(-0.35f, 0.35f); // the gas rises up the tile: small roll only
+            main.startColor = l.color;
+            main.gravityModifier = l.gravity;
+            Burst(ps, l.count, l.delay);
+            Shape(ps, l.radius);
+            Grow(ps, 0.85f, 1.6f);
+            Drag(ps, 3f);
+            Alpha(ps, 1f, 0f, fadeFrom: 0.7f);
+            return ps;
+        }
+
+        /// <summary>Ring of bent light racing out with the blast front (size = radius it reaches).</summary>
+        static ParticleSystem ShockRing(Transform root, string name, FxLayer l)
+        {
+            var ps = Emitter(root, name, FxAssets.ShockRing, false, 2);
+            var main = ps.main;
+            main.startLifetime = l.lifetime;
+            main.startSpeed = 0f;
+            main.startSize = l.size * 2f;
+            main.startColor = l.color;
+            Burst(ps, Mathf.Max(1, l.count), l.delay);
+            var size = ps.sizeOverLifetime;
+            size.enabled = true;
+            // The front slows as it weakens: fast at first.
+            size.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(new Keyframe(0f, 0.05f, 0f, 3f), new Keyframe(1f, 1f, 0.5f, 0f)));
+            Alpha(ps, 1f, 0f, fadeFrom: 0.3f);
+            return ps;
+        }
+
+        /// <summary>Incandescent fragments and molten metal: streaks falling under gravity, bouncing off the ground and hulls.</summary>
+        static ParticleSystem Sparks(Transform root, string name, FxLayer l)
+        {
+            var ps = Emitter(root, name, Mat(l, FxAssets.Sparks), false, 160);
+            var main = ps.main;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(Mathf.Min(0.2f, l.lifetime), l.lifetime);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(SpeedMin(l, 0.3f), l.speed);
+            main.startSize = new ParticleSystem.MinMaxCurve(l.size * 0.4f, l.size);
+            main.startColor = new ParticleSystem.MinMaxGradient(new Color(1f, 0.9f, 0.6f), new Color(1f, 0.55f, 0.15f));
+            main.gravityModifier = l.gravity;
+            Burst(ps, l.count, l.delay);
+            Shape(ps, l.radius);
+            var r = ps.GetComponent<ParticleSystemRenderer>();
+            r.renderMode = ParticleSystemRenderMode.Stretch;
+            r.velocityScale = 0.03f;
+            r.lengthScale = 1.5f;
+            if (l.collide) Collide(ps, 0.3f);
+            FadeOut(ps, new Color(1f, 0.85f, 0.5f), new Color(1f, 0.3f, 0.05f));
+            return ps;
+        }
+
+        /// <summary>Glowing grains: burning propellant and hot debris thrown out (burst), or rising from a fire (continuous).</summary>
+        static ParticleSystem Embers(Transform root, string name, FxLayer l, bool looping)
+        {
+            var ps = Emitter(root, name, Mat(l, FxAssets.Embers), Loops(l, looping), 120);
+            var main = ps.main;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(l.lifetime * 0.4f, l.lifetime);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(SpeedMin(l, 0.33f), l.speed);
+            main.startSize = new ParticleSystem.MinMaxCurve(l.size * 0.4f, l.size);
+            main.startColor = new ParticleSystem.MinMaxGradient(new Color(1f, 0.8f, 0.4f), new Color(1f, 0.45f, 0.1f));
+            main.gravityModifier = l.gravity;
+            if (l.count > 0) Burst(ps, l.count, l.delay);
+            Continuous(ps, l);
+            Spread(ps, l);
+            if (l.rate > 0f)
+            {
+                // Carried about by the fire's turbulence.
+                var noise = ps.noise;
+                noise.enabled = true;
+                noise.strength = 1.2f;
+                noise.frequency = 0.6f;
+            }
+            if (l.collide) Collide(ps, 0.15f);
+            FadeOut(ps, new Color(1f, 0.85f, 0.5f), new Color(0.9f, 0.25f, 0.05f));
+            return ps;
+        }
+
+        /// <summary>Earth clods thrown in a cone by a ground burst, tumbling and bouncing.</summary>
+        static ParticleSystem Clods(Transform root, string name, FxLayer l)
+        {
+            var ps = Emitter(root, name, Mat(l, FxAssets.Clods), false, 90);
+            var main = ps.main;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(l.lifetime * 0.5f, l.lifetime);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(SpeedMin(l, 0.35f), l.speed);
+            main.startSize = new ParticleSystem.MinMaxCurve(l.size * 0.27f, l.size);
+            main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+            main.startColor = new ParticleSystem.MinMaxGradient(new Color(0.2f, 0.15f, 0.1f), new Color(0.32f, 0.26f, 0.18f));
+            main.gravityModifier = l.gravity;
+            Burst(ps, l.count, l.delay);
+            Spread(ps, l);
+            var sheet = ps.textureSheetAnimation;
+            sheet.enabled = true;
+            sheet.numTilesX = sheet.numTilesY = 2;
+            sheet.startFrame = new ParticleSystem.MinMaxCurve(0f, 3.99f);
+            sheet.frameOverTime = new ParticleSystem.MinMaxCurve(0f);
+            var rot = ps.rotationOverLifetime;
+            rot.enabled = true;
+            rot.z = new ParticleSystem.MinMaxCurve(-6f, 6f);
+            if (l.collide) Collide(ps, 0.1f);
+            return ps;
+        }
+
+        /// <summary>Six-way lit smoke or dust: rolls out, grows, rises and drifts with the wind (set per spawn).</summary>
+        static ParticleSystem Smoke(Transform root, string name, FxLayer l, bool looping)
+        {
+            bool loops = Loops(l, looping);
+            var ps = Emitter(root, name, Mat(l, FxAssets.SmokeHot), loops, 120);
+            SixWay(ps, Flipbook.Smoke);
+            var main = ps.main;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(l.lifetime * 0.7f, l.lifetime);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(SpeedMin(l, 0.25f), l.speed);
+            main.startSize = new ParticleSystem.MinMaxCurve(l.size * 0.75f / SmokeFill, l.size / SmokeFill);
+            main.startRotation = new ParticleSystem.MinMaxCurve(-0.35f, 0.35f); // the puff rises up the tile: small roll only
+            main.startColor = l.color;
+            main.gravityModifier = l.gravity;
+            if (l.count > 0) Burst(ps, l.count, l.delay);
+            Continuous(ps, l);
+            if (l.groundRing)
+            {
+                var shape = ps.shape;
+                shape.shapeType = ParticleSystemShapeType.Circle;
+                shape.radius = l.radius;
+                shape.rotation = new Vector3(-90f, 0f, 0f); // flat on the ground, puffs roll outward
+                Drag(ps, 0.08f, 0.4f);
+                Grow(ps, 0.7f, 3f);
+            }
+            else
+            {
+                Spread(ps, l);
+                Grow(ps, 0.7f, 3.2f);
+                // Drag slows the burst out of the cloud; the buoyant rise and the wind (velocity module) stay above it.
+                Drag(ps, loops ? 4.5f : 3f, 0.12f);
+            }
+            Alpha(ps, 1f, 0f, fadeFrom: 0.35f, fadeIn: 0.04f);
+            return ps;
+        }
+
+        /// <summary>Flame tongues leaning out of the effect's up axis, then rising (hot gas is buoyant whatever the opening's direction).</summary>
+        static ParticleSystem Flames(Transform root, string name, FxLayer l, bool looping)
+        {
+            var ps = Emitter(root, name, Mat(l, FxAssets.Flame), Loops(l, looping), 60);
+            float k = l.intensity;
+            SixWay(ps, Flipbook.Flame, heat: new[] { (0f, 1.1f * k), (0.5f, 1f * k), (1f, 0.5f * k) });
+            var main = ps.main;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(l.lifetime * 0.55f, l.lifetime);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(SpeedMin(l, 0.4f), l.speed);
+            main.startSize = new ParticleSystem.MinMaxCurve(l.size * 0.58f / FlameFill, l.size / FlameFill);
             main.startRotation = new ParticleSystem.MinMaxCurve(-0.25f, 0.25f);
-            var em = flames.emission;
-            em.rateOverTime = 14f;
-            var shape = flames.shape;
-            shape.shapeType = ParticleSystemShapeType.Cone;
-            shape.angle = 25f;
-            shape.radius = 0.45f;
-            shape.rotation = new Vector3(-90f, 0f, 0f);
-            Grow(flames, 0.8f, 1.1f);
-            // Hot gas rises (buoyancy) whatever the opening's direction.
-            var vel = flames.velocityOverLifetime;
+            main.startColor = l.color;
+            if (l.count > 0) Burst(ps, l.count, l.delay);
+            Continuous(ps, l);
+            Spread(ps, l);
+            Grow(ps, 0.8f, 1.1f);
+            var vel = ps.velocityOverLifetime;
             vel.enabled = true;
             vel.space = ParticleSystemSimulationSpace.World;
             vel.x = new ParticleSystem.MinMaxCurve(0f, 0f);
-            vel.y = new ParticleSystem.MinMaxCurve(1.2f, 2.6f);
+            vel.y = new ParticleSystem.MinMaxCurve(l.rise * 0.46f, l.rise);
             vel.z = new ParticleSystem.MinMaxCurve(0f, 0f);
-            Light(t, "FireLight", FxLight.Mode.Fire, 4.5f, 13f, 0f, new Color(1f, 0.55f, 0.25f)).transform.localPosition = Vector3.up * 1.2f;
-
-            // Burning diesel, rubber and paint: black, oily; propellant and wood: grey.
-            Color c = blackSmoke ? new Color(0.11f, 0.1f, 0.095f) : new Color(0.5f, 0.49f, 0.47f);
-            var smoke = Smoke(t, "Smoke", FxAssets.SmokeHot, c, 3.2f, 0, 12f, alpha: blackSmoke ? 0.9f : 0.75f, looping: true);
-            var sem = smoke.emission;
-            // Particle budget: a burning wreck can have several of these at once; big, see-through puffs merge into one column.
-            sem.rateOverTime = 6f;
-            smoke.transform.localPosition = Vector3.up * 1.4f;
-            Haze(t, 2.5f).transform.localPosition = Vector3.up * 2.2f;
-            var sparks = Emitter(t, "Embers", FxAssets.Embers, true, 30);
-            var sp = sparks.main;
-            sp.startLifetime = new ParticleSystem.MinMaxCurve(1.5f, 3f);
-            sp.startSpeed = new ParticleSystem.MinMaxCurve(1f, 3f);
-            sp.startSize = new ParticleSystem.MinMaxCurve(0.03f, 0.07f);
-            sp.startColor = new Color(1f, 0.6f, 0.25f);
-            sp.gravityModifier = -0.15f;
-            var spe = sparks.emission;
-            spe.rateOverTime = 5f;
-            var noise = sparks.noise;
-            noise.enabled = true;
-            noise.strength = 1.2f;
-            noise.frequency = 0.6f;
-            FadeOut(sparks, new Color(1f, 0.75f, 0.4f), new Color(0.9f, 0.25f, 0.05f));
-            return root;
+            return ps;
         }
 
-        static GameObject BuildSeep(bool black)
+        // Uneven venting: the jet flares and dies back as charges burn through.
+        static readonly AnimationCurve Flare = new AnimationCurve(new Keyframe(0f, 1f), new Keyframe(0.15f, 0.45f), new Keyframe(0.3f, 1f),
+            new Keyframe(0.5f, 0.35f), new Keyframe(0.65f, 0.9f), new Keyframe(0.85f, 0.4f), new Keyframe(1f, 0.1f));
+
+        /// <summary>Roaring flame jet along the effect's up axis.</summary>
+        static ParticleSystem Jet(Transform root, string name, FxLayer l, bool looping)
         {
-            var root = new GameObject("VFX_Seep");
-            Color c = black ? new Color(0.09f, 0.085f, 0.08f) : new Color(0.55f, 0.54f, 0.52f);
-            var smoke = Smoke(root.transform, "Smoke", FxAssets.SmokeHot, c, 2.2f, 0, 12f, alpha: 0.75f, looping: true);
-            var em = smoke.emission;
-            em.rateOverTime = 4f;
-            var main = smoke.main;
-            main.startSpeed = new ParticleSystem.MinMaxCurve(0.4f, 1.2f);
-            return root;
+            var ps = Emitter(root, name, Mat(l, FxAssets.Flame), Loops(l, looping), 160);
+            float k = l.intensity;
+            SixWay(ps, Flipbook.Flame, heat: new[] { (0f, 1.3f * k), (0.6f, 1f * k), (1f, 0.4f * k) });
+            var main = ps.main;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(l.lifetime * 0.5f, l.lifetime);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(SpeedMin(l, 0.55f), l.speed);
+            main.startSize = new ParticleSystem.MinMaxCurve(l.size * 0.55f / FlameFill, l.size / FlameFill);
+            main.startRotation = new ParticleSystem.MinMaxCurve(-0.3f, 0.3f);
+            main.startColor = l.color;
+            if (l.count > 0) Burst(ps, l.count, l.delay);
+            Continuous(ps, l);
+            var em = ps.emission;
+            if (l.duration > 0f) em.rateOverTime = new ParticleSystem.MinMaxCurve(l.rate, Flare);
+            Spread(ps, l);
+            Grow(ps, 0.8f, 2.4f);
+            Drag(ps, 2.5f);
+            return ps;
         }
 
-        static GameObject BuildSmokeScreen()
+        /// <summary>Heat shimmer over a fire.</summary>
+        static ParticleSystem Haze(Transform root, string name, FxLayer l)
         {
-            var root = new GameObject("VFX_SmokeScreen");
-            var smoke = Smoke(root.transform, "Smoke", FxAssets.Smoke, new Color(0.78f, 0.79f, 0.76f), 7f, 0, 24f, alpha: 1f);
-            var main = smoke.main;
-            // Grenades burn for a while: the cloud is fed for ~25 s and drifts off over the next half minute
-            // (it screens for up to 1-2 min in calm air, less in wind: SmokeVolumes.Cloud).
-            main.duration = 25f;
-            main.startSpeed = new ParticleSystem.MinMaxCurve(2f, 6f);
-            var emission = smoke.emission;
-            emission.rateOverTime = 3f;
-            emission.SetBursts(new[] { new ParticleSystem.Burst(0f, 16) });
-            var shape = smoke.shape;
-            shape.shapeType = ParticleSystemShapeType.Hemisphere;
-            shape.radius = 6f;
-            return root;
+            var ps = Emitter(root, name, FxAssets.Haze, l.duration <= 0f, 12);
+            var main = ps.main;
+            main.startLifetime = l.lifetime;
+            main.startSpeed = new ParticleSystem.MinMaxCurve(SpeedMin(l, 0.5f), l.speed);
+            main.startSize = new ParticleSystem.MinMaxCurve(l.size * 0.8f, l.size);
+            main.startColor = l.color;
+            Continuous(ps, l);
+            Shape(ps, l.radius);
+            Alpha(ps, 1f, 0f, fadeFrom: 0.5f, fadeIn: 0.2f);
+            return ps;
+        }
+
+        /// <summary>Emitter shape from the layer: sphere (spread 0), cone along up, or hemisphere (spread 90 and more).</summary>
+        static void Spread(ParticleSystem ps, FxLayer l)
+        {
+            var shape = ps.shape;
+            if (l.spread >= 90f)
+            {
+                shape.shapeType = ParticleSystemShapeType.Hemisphere;
+                shape.radius = l.radius;
+                shape.rotation = new Vector3(-90f, 0f, 0f);
+            }
+            else if (l.spread > 0f)
+            {
+                shape.shapeType = ParticleSystemShapeType.Cone;
+                shape.angle = l.spread;
+                shape.radius = l.radius;
+                shape.rotation = new Vector3(-90f, 0f, 0f); // cone along the effect's up = the opening's normal
+            }
+            else Shape(ps, l.radius);
         }
 
         /// <summary>Leaves and twigs stripped from a crown by the blast, fluttering down.</summary>
@@ -434,202 +641,14 @@ namespace ModernDrone.Vehicles
             return ps;
         }
 
-        // ---------------------------------------------------------------- phases
-
-        static void Flash(Transform root, float size, float life)
-        {
-            var ps = Emitter(root, "Flash", FxAssets.Flash, false, 4);
-            var main = ps.main;
-            main.startLifetime = life;
-            main.startSpeed = 0f;
-            main.startSize = new ParticleSystem.MinMaxCurve(size * 0.8f, size);
-            main.startColor = new Color(1f, 0.95f, 0.85f, 1f);
-            Burst(ps, 2);
-            FadeOut(ps, new Color(1f, 0.97f, 0.9f), new Color(1f, 0.6f, 0.25f));
-            var r = ps.GetComponent<ParticleSystemRenderer>();
-            r.sortingFudge = -40f; // drawn over the fireball
-        }
-
-        static ParticleSystem Fireball(Transform root, float size, int count, float life, float rise)
-        {
-            var ps = Emitter(root, "Fireball", FxAssets.Fireball, false, 40);
-            SixWay(ps, Flipbook.Explosion, heat: new[] { (0f, 1.25f), (0.08f, 1.1f), (0.25f, 0.7f), (0.45f, 0.15f), (0.6f, 0f) },
-                soot: new[] { (0f, 0f), (0.3f, 0.3f), (1f, 0.6f) });
-            var main = ps.main;
-            main.startLifetime = new ParticleSystem.MinMaxCurve(life * 0.75f, life);
-            main.startSpeed = new ParticleSystem.MinMaxCurve(0.6f, 2.5f);
-            main.startSize = new ParticleSystem.MinMaxCurve(size * 0.75f / ExplosionFill, size / ExplosionFill);
-            main.startRotation = new ParticleSystem.MinMaxCurve(-0.35f, 0.35f); // the gas rises up the tile: small roll only
-            main.startColor = new Color(0.32f, 0.3f, 0.28f, 1f);
-            main.gravityModifier = -rise;
-            Burst(ps, count);
-            Shape(ps, 0.4f);
-            Grow(ps, 0.85f, 1.6f);
-            Drag(ps, 3f);
-            Alpha(ps, 1f, 0f, fadeFrom: 0.7f);
-            return ps;
-        }
-
-        static void ShockRing(Transform root, float radius, float life)
-        {
-            var ps = Emitter(root, "ShockRing", FxAssets.ShockRing, false, 2);
-            var main = ps.main;
-            main.startLifetime = life;
-            main.startSpeed = 0f;
-            main.startSize = radius * 2f;
-            main.startColor = new Color(1f, 1f, 1f, 1f);
-            Burst(ps, 1);
-            var size = ps.sizeOverLifetime;
-            size.enabled = true;
-            // The front slows as it weakens: fast at first.
-            size.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(new Keyframe(0f, 0.05f, 0f, 3f), new Keyframe(1f, 1f, 0.5f, 0f)));
-            Alpha(ps, 1f, 0f, fadeFrom: 0.3f);
-        }
-
-        /// <summary>Incandescent fragments and molten metal: streaks falling under gravity, bouncing off the ground and hulls.</summary>
-        static void Sparks(Transform root, int count, bool liner)
-        {
-            var ps = Emitter(root, "Sparks", FxAssets.Sparks, false, 160);
-            var main = ps.main;
-            main.startLifetime = new ParticleSystem.MinMaxCurve(0.2f, liner ? 1.2f : 0.7f);
-            main.startSpeed = new ParticleSystem.MinMaxCurve(20f, 65f);
-            main.startSize = new ParticleSystem.MinMaxCurve(0.04f, 0.1f);
-            main.startColor = new ParticleSystem.MinMaxGradient(new Color(1f, 0.9f, 0.6f), new Color(1f, 0.55f, 0.15f));
-            main.gravityModifier = 1f;
-            Burst(ps, count);
-            Shape(ps, 0.2f);
-            var r = ps.GetComponent<ParticleSystemRenderer>();
-            r.renderMode = ParticleSystemRenderMode.Stretch;
-            r.velocityScale = 0.03f;
-            r.lengthScale = 1.5f;
-            Collide(ps, 0.3f);
-            FadeOut(ps, new Color(1f, 0.85f, 0.5f), new Color(1f, 0.3f, 0.05f));
-        }
-
-        /// <summary>Burning propellant grains and hot debris: long-lived glowing embers thrown out, landing and glowing on the ground.</summary>
-        static void Embers(Transform root, int count)
-        {
-            var ps = Emitter(root, "Embers", FxAssets.Embers, false, 120);
-            var main = ps.main;
-            main.startLifetime = new ParticleSystem.MinMaxCurve(2f, 6f);
-            main.startSpeed = new ParticleSystem.MinMaxCurve(5f, 16f);
-            main.startSize = new ParticleSystem.MinMaxCurve(0.08f, 0.2f);
-            main.startColor = new ParticleSystem.MinMaxGradient(new Color(1f, 0.8f, 0.4f), new Color(1f, 0.45f, 0.1f));
-            main.gravityModifier = 0.8f;
-            Burst(ps, count);
-            var shape = ps.shape;
-            shape.shapeType = ParticleSystemShapeType.Hemisphere;
-            shape.radius = 0.8f;
-            Collide(ps, 0.15f);
-            FadeOut(ps, new Color(1f, 0.85f, 0.5f), new Color(0.9f, 0.25f, 0.05f));
-        }
-
-        /// <summary>Ground burst: clods thrown in a cone, a brown column, and a dust skirt rolling out along the ground.</summary>
-        static void Dirt(Transform root)
-        {
-            var clods = Emitter(root, "Clods", FxAssets.Clods, false, 90);
-            var main = clods.main;
-            main.startLifetime = new ParticleSystem.MinMaxCurve(1.5f, 3f);
-            main.startSpeed = new ParticleSystem.MinMaxCurve(6f, 17f);
-            main.startSize = new ParticleSystem.MinMaxCurve(0.08f, 0.3f);
-            main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
-            main.startColor = new ParticleSystem.MinMaxGradient(new Color(0.2f, 0.15f, 0.1f), new Color(0.32f, 0.26f, 0.18f));
-            main.gravityModifier = 1f;
-            Burst(clods, 70);
-            var shape = clods.shape;
-            shape.shapeType = ParticleSystemShapeType.Cone;
-            shape.angle = 35f;
-            shape.radius = 0.3f;
-            shape.rotation = new Vector3(-90f, 0f, 0f);
-            var sheet = clods.textureSheetAnimation;
-            sheet.enabled = true;
-            sheet.numTilesX = sheet.numTilesY = 2;
-            sheet.startFrame = new ParticleSystem.MinMaxCurve(0f, 3.99f);
-            sheet.frameOverTime = new ParticleSystem.MinMaxCurve(0f);
-            var rot = clods.rotationOverLifetime;
-            rot.enabled = true;
-            rot.z = new ParticleSystem.MinMaxCurve(-6f, 6f);
-            Collide(clods, 0.1f);
-
-            // The thrown-up earth: brown, heavy, falling back as it spreads.
-            var column = Smoke(root, "DirtColumn", FxAssets.Dust, new Color(0.4f, 0.32f, 0.23f), 2.6f, 9, 4.5f, alpha: 1f);
-            var cm = column.main;
-            cm.startSpeed = new ParticleSystem.MinMaxCurve(5f, 11f);
-            cm.gravityModifier = 0.55f;
-            var cs = column.shape;
-            cs.shapeType = ParticleSystemShapeType.Cone;
-            cs.angle = 16f;
-            cs.radius = 0.4f;
-            cs.rotation = new Vector3(-90f, 0f, 0f);
-
-            var skirt = Smoke(root, "DustSkirt", FxAssets.Dust, new Color(0.55f, 0.48f, 0.38f), 2.4f, 16, 6f, alpha: 0.8f);
-            var sm = skirt.main;
-            sm.startSpeed = new ParticleSystem.MinMaxCurve(7f, 12f);
-            sm.gravityModifier = 0f;
-            var ss = skirt.shape;
-            ss.shapeType = ParticleSystemShapeType.Circle;
-            ss.radius = 0.6f;
-            ss.rotation = new Vector3(-90f, 0f, 0f); // flat on the ground, particles fly outward
-            Drag(skirt, 0.08f, 0.4f);
-            Grow(skirt, 0.7f, 3f);
-        }
-
-        /// <summary>Six-way lit smoke: rolls out, grows, rises a little and drifts with the wind (set per spawn).</summary>
-        static ParticleSystem Smoke(Transform root, string name, Material mat, Color color, float size, int count, float life,
-            float delay = 0f, float alpha = 1f, bool looping = false)
-        {
-            var ps = Emitter(root, name, mat, looping, 120);
-            SixWay(ps, Flipbook.Smoke);
-            var main = ps.main;
-            main.startLifetime = new ParticleSystem.MinMaxCurve(life * 0.7f, life);
-            main.startSpeed = new ParticleSystem.MinMaxCurve(0.6f, 2.4f);
-            main.startSize = new ParticleSystem.MinMaxCurve(size * 0.75f / SmokeFill, size / SmokeFill);
-            main.startRotation = new ParticleSystem.MinMaxCurve(-0.35f, 0.35f); // the puff rises up the tile: small roll only
-            main.startColor = new Color(color.r, color.g, color.b, alpha);
-            main.gravityModifier = -0.02f;
-            if (count > 0)
-            {
-                main.duration = delay + 0.3f;
-                ps.emission.SetBursts(new[] { new ParticleSystem.Burst(delay, (short)count) });
-            }
-            Shape(ps, 0.6f);
-            Grow(ps, 0.7f, 3.2f);
-            // Drag slows the burst out of the cloud; the buoyant rise and the wind (velocity module) stay above it.
-            Drag(ps, looping ? 4.5f : 3f, 0.12f);
-            Alpha(ps, 1f, 0f, fadeFrom: 0.35f, fadeIn: 0.04f);
-            return ps;
-        }
-
-        static ParticleSystem Haze(Transform root, float size)
-        {
-            var ps = Emitter(root, "Haze", FxAssets.Haze, true, 12);
-            var main = ps.main;
-            main.startLifetime = 1.4f;
-            main.startSpeed = new ParticleSystem.MinMaxCurve(1f, 2f);
-            main.startSize = new ParticleSystem.MinMaxCurve(size * 0.8f, size);
-            main.startColor = new Color(1f, 1f, 1f, 0.8f);
-            var em = ps.emission;
-            em.rateOverTime = 5f;
-            Shape(ps, 0.4f);
-            Alpha(ps, 1f, 0f, fadeFrom: 0.5f, fadeIn: 0.2f);
-            return ps;
-        }
-
         // ---------------------------------------------------------------- environment
-
-        /// <summary>Blackened ground under a burst (the hit-mark atlas' scorch cell, projected straight down).</summary>
-        static void Scorch(Vector3 p, float size, ExplosionKind kind)
-        {
-            if (!GroundBelow(p, 3f * size, out var hit)) return;
-            float d = (kind == ExplosionKind.Ammo ? 9f : kind == ExplosionKind.Fuel ? 6f : 3.2f) * Mathf.Sqrt(Mathf.Max(0.3f, size));
-            GroundMarks.Place(hit.point, hit.normal, d);
-        }
 
         /// <summary>Strips leaves off crowns within reach of the blast (the trees themselves sway in their shader).</summary>
         static void ShakeTrees(Vector3 p, float size)
         {
             var terrain = Terrain.activeTerrain;
             if (terrain == null) return;
+            if (!FxPool.Has("leaves")) FxPool.Register("leaves", BuildLeaves, 6);
             float reach = 18f * Mathf.Pow(Mathf.Max(0.1f, size), 1f / 3f);
             int shown = 0;
             foreach (var tree in TreesNear(terrain, p, reach))
@@ -654,12 +673,12 @@ namespace ModernDrone.Vehicles
             }
         }
 
-        static readonly System.Collections.Generic.List<Vector3> _treeHits = new System.Collections.Generic.List<Vector3>();
+        static readonly List<Vector3> _treeHits = new List<Vector3>();
         static TerrainData _treeData;
         static Vector3[] _crowns = new Vector3[0];
 
         /// <summary>Crown centres of terrain trees within <paramref name="reach"/>, nearest first (positions cached per terrain).</summary>
-        static System.Collections.Generic.List<Vector3> TreesNear(Terrain terrain, Vector3 p, float reach)
+        static List<Vector3> TreesNear(Terrain terrain, Vector3 p, float reach)
         {
             var data = terrain.terrainData;
             if (_treeData != data || _crowns.Length != data.treeInstanceCount)
@@ -683,34 +702,32 @@ namespace ModernDrone.Vehicles
         static readonly AnimationCurve WindRamp = new AnimationCurve(new Keyframe(0f, 0.15f), new Keyframe(0.25f, 0.8f), new Keyframe(1f, 1.3f));
         static readonly AnimationCurve RiseRamp = new AnimationCurve(new Keyframe(0f, 1f), new Keyframe(1f, 0.45f));
         // Per pooled effect: its drifting systems and their buoyant rise (worked out once, the effect is reused).
-        static readonly System.Collections.Generic.Dictionary<FxEffect, (ParticleSystem ps, float rise)[]> _drifting =
-            new System.Collections.Generic.Dictionary<FxEffect, (ParticleSystem, float)[]>();
+        static readonly Dictionary<FxEffect, (ParticleSystem ps, float rise)[]> _drifting = new Dictionary<FxEffect, (ParticleSystem, float)[]>();
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void ResetCaches()
         {
             _drifting.Clear();
+            _delayed.Clear();
             _treeData = null;
             UnityEngine.SceneManagement.SceneManager.sceneUnloaded -= OnSceneUnloaded;
             UnityEngine.SceneManagement.SceneManager.sceneUnloaded += OnSceneUnloaded;
         }
 
-        static void OnSceneUnloaded(UnityEngine.SceneManagement.Scene _) => _drifting.Clear();
+        static void OnSceneUnloaded(UnityEngine.SceneManagement.Scene _)
+        {
+            _drifting.Clear();
+            _delayed.Clear();
+        }
 
         static (ParticleSystem ps, float rise)[] Drifting(FxEffect fx)
         {
-            if (_drifting.TryGetValue(fx, out var list) && list.Length > 0 && list[0].ps != null) return list;
-            var found = new System.Collections.Generic.List<(ParticleSystem, float)>();
-            string root = fx.name;
+            if (_drifting.TryGetValue(fx, out var list) && (list.Length == 0 || list[0].ps != null)) return list;
+            var found = new List<(ParticleSystem, float)>();
             foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>(true))
             {
-                string n = ps.name;
-                if (!n.Contains("Smoke") && !n.Contains("Dust") && n != "DirtColumn") continue;
-                // Buoyant rise: a fire's plume climbs a few m/s (hot gas), a blast's cloud less, dust hardly (abstract).
-                float rise = n.Contains("Dust") || n == "DirtColumn" ? 0.2f
-                    : root.Contains("Fire") || root.Contains("CookOff") || root.Contains("Seep") ? 2.6f
-                    : root.Contains("Explosion") ? 1.3f : 0.5f;
-                found.Add((ps, rise));
+                var layer = LayerOf(fx, ps);
+                if (layer != null && layer.kind == FxLayerKind.Smoke && layer.windDrift) found.Add((ps, layer.rise));
             }
             return _drifting[fx] = found.ToArray();
         }
@@ -742,11 +759,11 @@ namespace ModernDrone.Vehicles
 
         /// <summary>
         /// Share of the quad the simulated gas covers (the domain is larger than the cloud so nothing is cut off):
-        /// sizes in this file are visible metres, divided by this for the quad.
+        /// sizes in recipes are visible metres, divided by this for the quad.
         /// </summary>
         const float ExplosionFill = 0.33f, SmokeFill = 0.42f, FlameFill = 0.7f;
 
-        static readonly System.Collections.Generic.List<ParticleSystemVertexStream> SixWayStreams = new System.Collections.Generic.List<ParticleSystemVertexStream>
+        static readonly List<ParticleSystemVertexStream> SixWayStreams = new List<ParticleSystemVertexStream>
         {
             ParticleSystemVertexStream.Position, ParticleSystemVertexStream.Normal, ParticleSystemVertexStream.Color,
             ParticleSystemVertexStream.UV, ParticleSystemVertexStream.UV2, ParticleSystemVertexStream.Center,
@@ -830,20 +847,23 @@ namespace ModernDrone.Vehicles
             return ps;
         }
 
-        static FxLight Light(Transform root, string name, FxLight.Mode mode, float intensity, float range, float duration, Color color)
+        static FxLight Light(Transform root, string name, FxLight.Mode mode, float intensity, float range, float duration, Color color, float delay = 0f)
         {
             var go = new GameObject(name);
             go.transform.SetParent(root, false);
             go.AddComponent<Light>();
             var l = go.AddComponent<FxLight>();
-            l.Configure(mode, intensity, range, duration, color);
+            l.Configure(mode, intensity, range, duration, color, delay);
             return l;
         }
 
-        static void Burst(ParticleSystem ps, int count)
+        static void Burst(ParticleSystem ps, int count, float delay = 0f)
         {
+            if (count <= 0) return;
             var emission = ps.emission;
-            emission.SetBursts(new[] { new ParticleSystem.Burst(0f, (short)count) });
+            emission.SetBursts(new[] { new ParticleSystem.Burst(delay, (short)count) });
+            var main = ps.main;
+            if (!main.loop) main.duration = Mathf.Max(main.duration, delay + 0.3f);
         }
 
         static void Shape(ParticleSystem ps, float radius)

@@ -104,10 +104,14 @@ namespace ModernDrone.Editor
             model.SetDisplayName("Танк Т-72Б3");
             // 3ETs13 "Iney": 2 fast Halon 1301 bottles for the crew compartment, 2 for the engine bay (Tankograd, T-72 Firefighting Systems).
             model.SetFireSuppression(2, 2);
-            var fx = root.AddComponent<VehicleEffects>();
-            var so = new SerializedObject(fx);
-            so.FindProperty("turret").objectReferenceValue = turret;
-            so.ApplyModifiedPropertiesWithoutUndo();
+            root.AddComponent<VehicleEffects>();
+            // T-72B: 705 L in the internal tanks (495 L more outside); 22 rounds in the autoloader carousel, 17 more in
+            // the hull, 39 in all (ru.wikipedia.org/wiki/Т-72).
+            VehicleKit.Fill(t, "Module_Fuel_FR", SubstanceAssets.Diesel, 350f);
+            VehicleKit.Fill(t, "Module_Fuel_RL", SubstanceAssets.Diesel, 355f);
+            VehicleKit.Fill(t, "Module_AmmoRack", SubstanceAssets.Propellant, 22f, SubstanceAssets.Shells, 22f);
+            VehicleKit.Fill(t, "Module_AmmoSpare", SubstanceAssets.Propellant, 17f, SubstanceAssets.Shells, 17f);
+            VehicleKit.SetupProfile(t, turret);
 
             var prefab = PrefabUtility.SaveAsPrefabAsset(root, TankPrefabPath);
             Object.DestroyImmediate(root);
@@ -154,7 +158,7 @@ namespace ModernDrone.Editor
             Module("Module_ControlStation", t, ModuleType.ControlStation, 60f, 10f, new Vector3(0f, 1.9f, 2.6f), new Vector3(1.8f, 0.9f, 1.0f));
             Module("Module_Fuel", t, ModuleType.FuelTank, 60f, 10f, new Vector3(1.0f, 0.85f, 0.8f), new Vector3(0.5f, 0.5f, 1.2f));
             Module("Module_Generator", t, ModuleType.Generator, 80f, 25f, new Vector3(0f, 1.8f, -2.5f), new Vector3(1.4f, 1.1f, 1.2f), visible: true)
-                .GetComponent<VehicleModule>().SetContents(Combustible.Diesel, fill: 0.3f);
+                .GetComponent<VehicleModule>().SetContents(SubstanceAssets.Diesel, 100f, fill: 0.3f); // generator day tank, abstract
             Module("Module_Electronics", t, ModuleType.ControlStation, 60f, 10f, new Vector3(0f, 2.2f, -0.4f), new Vector3(2.0f, 1.4f, 1.6f));
 
             // Mast with two antenna panels: exposed, lightly built.
@@ -168,6 +172,7 @@ namespace ModernDrone.Editor
             var model = root.AddComponent<VehicleDamageModel>();
             model.SetDisplayName("Станция РЭБ (заглушка)");
             root.AddComponent<VehicleEffects>();
+            VehicleKit.SetupProfile(t);
             var jammer = root.AddComponent<SignalJammer>();
             jammer.Configure(280f, 0.92f, JamBands.Both, antennaA.transform);
             root.AddComponent<JammerStation>();

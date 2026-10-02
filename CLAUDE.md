@@ -19,6 +19,12 @@
   the in-game settings menu (`UI/SettingsMenu.cs`). Don't hardcode keys/axes in gameplay code — use `ControlInput`.
 - Vehicles are built in `Editor/VehicleCatalog.cs` with `VehicleKit` (plates / ERA / cages / modules / wheels). When swapping in
   imported models keep the plate and module colliders; visuals are separate children.
+- Fires and detonations are data: substances (`Data/Substances`, `SubstanceData`), effect recipes (`Data/Fx`, `FxRecipe`),
+  sound banks (`Data/Sounds`) and the libraries in `Resources/` (built by `Modern Drone/Setup/Build Substance Assets`;
+  existing assets are kept). Modules hold a substance + amount (`VehicleKit.Fill`). Each vehicle root has a
+  `VehicleFxProfile` (compartments, turret/rotor refs); vents/hatches are `FireVent`/`Hatch` children linked to
+  compartments. Check with `VehicleFxSetup.Validate` (EditMode test runs it on every vehicle prefab); test bench:
+  `Modern Drone/Tools/FX Polygon`.
 - Link/video: `Video/LinkModel.cs` (pure rules), `Missions/DroneLink.cs` (per-frame sampling, failsafe, fiber spool),
   `Art/Shaders/AnalogVideo.shader` via the URP Full Screen Pass on `Assets/Settings/PC_Renderer.asset`
   (installed by `Modern Drone/Setup/Install Video Feed Effect`). EW emitters are `SignalJammer` + `JammerStation`.

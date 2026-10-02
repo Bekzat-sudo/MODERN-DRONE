@@ -181,11 +181,7 @@ namespace ModernDrone.Editor
             var lod0 = Place(root, asset, "Visual", offset, moving, movingName);
             var lod1Asset = AssetDatabase.LoadAssetAtPath<GameObject>(path.Replace(".glb", "_lod1.glb"));
             var lod2Asset = AssetDatabase.LoadAssetAtPath<GameObject>(path.Replace(".glb", "_lod2.glb"));
-            if (lod1Asset == null || lod2Asset == null)
-            {
-                SetupHatches(root);
-                return;
-            }
+            if (lod1Asset == null || lod2Asset == null) return;
 
             // Decimated copies (Blender, 25 % / 6 %, materials without images) take the full model's materials by
             // material name. The near LOD casts its shadow from LOD 1's mesh: a T-72 was 247 k triangles in every cascade.
@@ -214,68 +210,36 @@ namespace ModernDrone.Editor
             // Screen-relative: the recon zoom keeps full detail; the last LOD is never culled (targets stay visible).
             group.SetLODs(new[] { new LOD(0.15f, near), new LOD(0.04f, lod1), new LOD(0f, lod2) });
             group.RecalculateBounds();
-            SetupHatches(root);
         }
 
         /// <summary>
-        /// Model nodes named Hatch_* (one per LOD copy) become one lid on a hinge: they are gathered under a pivot on the
-        /// lid's own origin in the model, its hinge (at the hull's axes) carrying a <see cref="Hatch"/>, with a <see cref="FireVent"/> in the
-        /// opening and a dark plate inside it that glows while the vehicle burns. Lid mass ~30 kg (estimate).
+        /// Describes how the vehicle burns and blows up (<see cref="VehicleFxProfile"/>): turret and rotor by reference,
+        /// compartments fitted around the modules, openings suggested from the model (Hatch_* nodes become hinged lids)
+        /// and the hull's top. Call once every module and the model are in place.
         /// </summary>
-        static void SetupHatches(Transform root)
+        public static VehicleFxProfile SetupProfile(Transform root, Transform turret = null, Transform rotor = null)
         {
-            var groups = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<Transform>>();
-            foreach (var t in root.GetComponentsInChildren<Transform>(true))
-            {
-                if (!t.name.StartsWith("Hatch_") || t.GetComponentInParent<Hatch>(true) != null) continue;
-                if (!groups.TryGetValue(t.name, out var list)) groups[t.name] = list = new System.Collections.Generic.List<Transform>();
-                list.Add(t);
-            }
-            foreach (var kv in groups)
-            {
-                var parts = kv.Value;
-                var parent = CommonParent(parts);
-                var renderers = parts[0].GetComponentsInChildren<Renderer>(true);
-                if (renderers.Length == 0) continue;
-                // Lid outline in the hull's frame.
-                var b = new Bounds(root.InverseTransformPoint(renderers[0].bounds.center), Vector3.zero);
-                foreach (var r in renderers)
-                {
-                    var rb = r.bounds;
-                    for (int i = 0; i < 8; i++)
-                        b.Encapsulate(root.InverseTransformPoint(rb.center + Vector3.Scale(rb.extents, new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1))));
-                }
-                // The model's own origin of the lid is its hinge (Tools/Blender/t72_hatches.py puts it on the front edge).
-                var pivot = new GameObject(kv.Key + "_Hinge").transform;
-                pivot.SetParent(parent, false);
-                pivot.SetPositionAndRotation(parts[0].position, root.rotation);
-                foreach (var t in parts) t.SetParent(pivot, true);
-                pivot.gameObject.AddComponent<Hatch>().Configure(115f, 30f, 0.7f, Vector3.right);
-
-                Vector3 centre = root.TransformPoint(new Vector3(b.center.x, b.min.y, b.center.z));
-                var glow = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                glow.name = kv.Key + "_Inside";
-                Object.DestroyImmediate(glow.GetComponent<Collider>());
-                glow.transform.SetParent(parent, false);
-                glow.transform.SetPositionAndRotation(centre - root.up * 0.08f, root.rotation);
-                glow.transform.localScale = new Vector3(b.size.x * 0.85f, 0.005f, b.size.z * 0.85f);
-                var gr = glow.GetComponent<Renderer>();
-                gr.sharedMaterial = AssetDatabase.LoadAssetAtPath<Material>("Assets/_Project/Resources/VFX/VFX_HatchGlow.mat");
-                gr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-
-                var vent = new GameObject(kv.Key + "_Vent");
-                vent.transform.SetParent(parent, false);
-                vent.transform.SetPositionAndRotation(centre + root.up * 0.05f, root.rotation);
-                vent.AddComponent<FireVent>().Configure(VentKind.Hatch, Mathf.PI * 0.25f * b.size.x * b.size.z, pivot.GetComponent<Hatch>(), gr);
-            }
-        }
-
-        static Transform CommonParent(System.Collections.Generic.List<Transform> parts)
-        {
-            var p = parts[0].parent;
-            while (p != null && !parts.TrueForAll(t => t.IsChildOf(p))) p = p.parent;
+            var p = root.GetComponent<VehicleFxProfile>();
+            if (p == null) p = root.gameObject.AddComponent<VehicleFxProfile>();
+            p.turret = turret;
+            p.rotor = rotor;
+            VehicleFxSetup.FitCompartments(p);
+            VehicleFxSetup.Suggest(p, turret);
             return p;
         }
+
+        /// <summary>Sets what a module holds (substance asset and amount in its unit, explosive fill).</summary>
+        public static VehicleModule Fill(Transform root, string module, SubstanceData contents, float units, SubstanceData explosive = null,
+            float explosiveUnits = 0f, float fill = 1f, bool selfSealing = false)
+        {
+            var t = System.Array.Find(root.GetComponentsInChildren<Transform>(true), x => x.name == module);
+            var m = t != null ? t.GetComponent<VehicleModule>() : null;
+            if (m == null) throw new System.ArgumentException($"{root.name}: no module {module}");
+            return m.SetContents(contents, units, explosive, explosiveUnits, fill, selfSealing);
+        }
+
+        public VehicleModule Fill(string module, SubstanceData contents, float units, SubstanceData explosive = null, float explosiveUnits = 0f,
+            float fill = 1f, bool selfSealing = false) => Fill(T, module, contents, units, explosive, explosiveUnits, fill, selfSealing);
 
         /// <summary>The full model's materials by name (the decimated LODs carry the same names, no textures).</summary>
         public static System.Collections.Generic.Dictionary<string, Material> FullMaterials(System.Collections.Generic.IEnumerable<Renderer> renderers)
@@ -358,6 +322,8 @@ namespace ModernDrone.Editor
             model.SetDisplayName(displayName);
             model.SetDecoy(decoy);
             Root.AddComponent<VehicleEffects>();
+            // The builders name their own moving parts; the profile keeps them as references from here on.
+            SetupProfile(T, T.Find("Turret"), T.Find("Rotor"));
             if (decoy) Root.tag = "Decoy";
             return model;
         }
