@@ -71,6 +71,10 @@ namespace ModernDrone.Damage
         float _pooledFuel;
         SubstanceData _poolSubstance;
         VehicleModule _pendingModule;
+        // The charges lit but vented through the hatches instead of blowing the hull: the shells beside them then burn
+        // or go off low-order one by one, not as one mass detonation, and the turret stays on (footage of burned-out
+        // T-72s with the turret in place, e.g. youtu.be/gbI1EAPONWs; globalsecurity.org/military/world/russia/t-72-limits.htm).
+        bool _vented;
         VehicleFire _pool;
 
         public string DisplayName => displayName;
@@ -204,6 +208,10 @@ namespace ModernDrone.Damage
                 // One charge sets off the next: the pressure builds for a moment, then the hull gives way.
                 _pendingBlast = Mathf.Lerp(CookOffDelayMin, CookOffDelayMax, (float)_random.NextDouble());
                 _pendingModule = m;
+            }
+            else if (p.violent)
+            {
+                _vented = true;
             }
             else if (p.suppressible)
             {
@@ -339,7 +347,12 @@ namespace ModernDrone.Damage
         /// <summary>A module heated long enough lights (fuel, charges) or cooks off (explosive).</summary>
         void HeatUp(VehicleModule m)
         {
-            if (m.HighExplosive && m.Heat >= m.Explosive.heatToDetonate)
+            if (m.HighExplosive && m.Heat >= m.Explosive.heatToDetonate && _vented)
+            {
+                Note($"{DamageNames.Ru(m.Type)}: снаряды горят без детонации");
+                m.ExplosiveSpent = true;
+            }
+            else if (m.HighExplosive && m.Heat >= m.Explosive.heatToDetonate)
             {
                 Note($"{DamageNames.Ru(m.Type)}: подрыв от нагрева");
                 Explode(m, true);

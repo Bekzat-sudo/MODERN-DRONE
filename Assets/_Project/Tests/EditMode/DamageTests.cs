@@ -242,17 +242,18 @@ namespace ModernDrone.Tests
         }
 
         [Test]
-        public void PropellantFire_CooksOffTheShells()
+        public void VentedPropellantFire_ShellsBurnWithoutDetonating()
         {
             var ammo = Add(ModuleType.AmmoRack, 1e6f);
-            _model.SetAmmoConfinement(0f); // no immediate blast: burns, then the high explosive cooks off
+            _model.SetAmmoConfinement(0f); // the charges vent through the hatches: the turret stays on
             _model.SetRandom(new FixedRandom(0.99));
             _model.Rebuild();
             DestructionCause cause = DestructionCause.None;
             _model.Destroyed += (_, c) => cause = c;
             _model.Ignite(ammo);
             for (int i = 0; i < 200 && cause == DestructionCause.None; i++) _model.Tick(0.1f);
-            Assert.AreEqual(DestructionCause.AmmoDetonation, cause);
+            Assert.AreNotEqual(DestructionCause.AmmoDetonation, cause);
+            Assert.IsTrue(ammo.ExplosiveSpent);
         }
 
         [Test]

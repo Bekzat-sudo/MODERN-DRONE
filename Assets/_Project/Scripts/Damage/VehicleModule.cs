@@ -49,7 +49,9 @@ namespace ModernDrone.Damage
         public float ExplosiveCount => explosiveCount;
         /// <summary>Holds something burnable.</summary>
         public bool Burnable => substance != null && substance.Burns;
-        public bool HighExplosive => explosive != null && explosive.detonates && explosiveCount > 0f;
+        public bool HighExplosive => explosive != null && explosive.detonates && explosiveCount > 0f && !ExplosiveSpent;
+        /// <summary>The fill burned away in a vented fire: it can no longer detonate.</summary>
+        public bool ExplosiveSpent { get; internal set; }
         /// <summary>What is left now (load times amount), in the substance's unit.</summary>
         public float Remaining => amount * load;
         public bool ProtectedTank => protectedTank;
@@ -116,6 +118,7 @@ namespace ModernDrone.Damage
             State = ModuleState.Operational;
             Leaking = false;
             OnFire = false;
+            ExplosiveSpent = false;
             Heat = 0f;
         }
     }
