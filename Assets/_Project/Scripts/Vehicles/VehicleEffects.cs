@@ -310,6 +310,7 @@ namespace ModernDrone.Vehicles
             }
             if (cause == DestructionCause.BurnedOut)
             {
+                WreckFire(1.4f);
                 var smoke = Own(SimpleVfx.Seep(transform, transform.position + Vector3.up * 2f, true, 1.6f));
                 if (smoke != null)
                 {
@@ -365,16 +366,23 @@ namespace ModernDrone.Vehicles
             foreach (var m in _model.Modules) CookOff(m, d);
             SimpleVfx.ScatterFires(transform.position, Random.Range(3, 6), 9f);
             foreach (var b in _burning.Values) Assign(b);
-            // The hull burns out: its fuel (or paint, rubber and wiring) through the open ring.
+            WreckFire(1.8f);
+        }
+
+        /// <summary>
+        /// The hull burns out for minutes: its fuel (or paint, rubber and wiring) through the open ring or the top,
+        /// after a blast or a burn-out alike (a burnt-out vehicle is not a smouldering one: footage of burnt-out armour
+        /// shows the whole hull ablaze long after the crew compartment fire).
+        /// </summary>
+        void WreckFire(float size)
+        {
             SubstanceData fuel = null;
             foreach (var m in _model.Modules) if (m.Substance != null && m.Substance.kind == SubstanceClass.LiquidFuel && m.Load > 0f) { fuel = m.Substance; break; }
-            var wreck = Own(SimpleVfx.Fire(transform, Outlet(transform.position + Vector3.up), 1.8f, Vector3.up, recipe: FireRecipe(fuel)));
-            if (wreck != null)
-            {
-                _wreck.Add(wreck);
-                _wreckFlames.Add(wreck);
-                SimpleVfx.StopAfter(wreck, wreckBurn);
-            }
+            var wreck = Own(SimpleVfx.Fire(transform, Outlet(transform.position + Vector3.up), size, Vector3.up, recipe: FireRecipe(fuel)));
+            if (wreck == null) return;
+            _wreck.Add(wreck);
+            _wreckFlames.Add(wreck);
+            SimpleVfx.StopAfter(wreck, wreckBurn);
         }
 
         readonly List<Vector3> _jetOutlets = new List<Vector3>();
@@ -397,7 +405,8 @@ namespace ModernDrone.Vehicles
                     Vector3 at = Outlet(p);
                     if (_jetOutlets.Exists(o => (o - at).sqrMagnitude < 1f)) break;
                     _jetOutlets.Add(at);
-                    _jets.Add(Own(SimpleVfx.CookOff(transform, at, s.burnSeconds * Random.Range(1.2f, 2f), Vector3.up, 1.8f, s.ventJet)));
+                    // The same torch as out of a hatch: the ring is wider, but the sprite is the whole jet already.
+                    _jets.Add(Own(SimpleVfx.CookOff(transform, at, s.burnSeconds * Random.Range(1.2f, 2f), Vector3.up, 1.1f, s.ventJet)));
                     break;
                 }
                 case SubstanceClass.RocketMotor:
