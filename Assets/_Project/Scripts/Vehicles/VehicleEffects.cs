@@ -34,6 +34,8 @@ namespace ModernDrone.Vehicles
         [SerializeField] float charTime = 90f;
         [Tooltip("Seconds a wreck keeps burning and smoking after it is destroyed (visual only, abstract).")]
         [SerializeField] float wreckBurn = 200f;
+        [Tooltip("Thin smoke the wreck keeps giving off after its flames die, s (abstract: burnt-out armour smoulders for hours).")]
+        [SerializeField] float smoulder = 900f;
         [Tooltip("Rockets flying off a burning launcher at most (particle and physics budget).")]
         [SerializeField] int maxFlyingRockets = 6;
 
@@ -383,6 +385,21 @@ namespace ModernDrone.Vehicles
                     SimpleVfx.StopAfter(smoke, wreckBurn);
                 }
             }
+            StartCoroutine(Smoulder());
+        }
+
+        /// <summary>
+        /// When the flames die down the hull still smoulders (rubber, paint, wiring, the last of the fuel and oil): a thin
+        /// grey thread of smoke out of the top for a long while, the mark of a wreck seen from the air.
+        /// </summary>
+        IEnumerator Smoulder()
+        {
+            yield return new WaitForSeconds(wreckBurn * 0.85f);
+            // ponytail: shares the Seep_Grey pool (6): with more smouldering wrecks than that the oldest stops early.
+            var smoke = Own(SimpleVfx.Seep(transform, Outlet(transform.position + Vector3.up), false, 0.6f));
+            if (smoke == null) yield break;
+            _wreck.Add(smoke);
+            SimpleVfx.StopAfter(smoke, smoulder);
         }
 
         /// <summary>Where the blast and the burning contents leave the hull: the turret ring, else the top over the module.</summary>
