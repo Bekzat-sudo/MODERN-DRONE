@@ -129,6 +129,7 @@ namespace ModernDrone.Vehicles
         /// <summary>A destroyed track module breaks its belt: off the wheels and onto the ground (once per side).</summary>
         void OnModuleChanged(VehicleDamageModel model, VehicleModule module, ModuleState previous)
         {
+            if (module.Type == ModuleType.Engine) EngineSmoke(module);
             if (module.Type != ModuleType.Track || module.State != ModuleState.Destroyed || previous == ModuleState.Destroyed) return;
             var envelope = module.transform.parent;
             if (envelope == null || !_brokenTracks.Add(envelope)) return;
@@ -136,6 +137,31 @@ namespace ModernDrone.Vehicles
         }
 
         readonly HashSet<Transform> _brokenTracks = new HashSet<Transform>();
+
+        /// <summary>
+        /// A hit engine that does not burn still smokes: steam of the coolant and oil cooking on hot metal leave the
+        /// engine-deck grilles, grey-white, for a minute and a half (abstract), heavier once the engine is wrecked.
+        /// </summary>
+        void EngineSmoke(VehicleModule engine)
+        {
+            if (engine.State == ModuleState.Operational || engine.OnFire || _wrecked) return;
+            // Once when damaged, once more (heavier) when destroyed.
+            if (!_smokingEngines.Add((engine, engine.State))) return;
+            EnsureVents();
+            FireVent grille = null;
+            float best = float.MaxValue;
+            foreach (var v in _vents)
+            {
+                if (v == null || v.Kind != VentKind.Grille || !v.transform.IsChildOf(transform)) continue;
+                float d = (v.transform.position - engine.transform.position).sqrMagnitude;
+                if (d < best) { best = d; grille = v; }
+            }
+            var at = grille != null ? grille.transform.position : VehicleFxSetup.TopSurface(transform, engine.transform.position).point;
+            var smoke = Own(SimpleVfx.Seep(transform, at, false, engine.State == ModuleState.Destroyed ? 1.1f : 0.7f));
+            if (smoke != null) SimpleVfx.StopAfter(smoke, 90f);
+        }
+
+        readonly HashSet<(VehicleModule, ModuleState)> _smokingEngines = new HashSet<(VehicleModule, ModuleState)>();
 
         /// <summary>Jet holes become openings the fire can burn out of (into the compartment behind the plate).</summary>
         void OnDetonated(StrikeReport report)
