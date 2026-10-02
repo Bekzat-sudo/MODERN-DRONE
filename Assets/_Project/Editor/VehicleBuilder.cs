@@ -124,7 +124,9 @@ namespace ModernDrone.Editor
 
         /// <summary>
         /// Truck-mounted EW station: thin-skinned cab and shelter, generator inside, antenna panels on a mast.
-        /// Jams while an antenna and the generator survive.
+        /// Jams while an antenna and the generator survive. Ural-4320 with a shelter body, the chassis of the R-330Zh
+        /// Zhitel (Ural-43203 or KamAZ-4310, ru.wikipedia.org/wiki/Р-330); model "Russian Ural-4320 (KUNG)" by 42manako
+        /// (CC BY). The mast and its panels are this project's own.
         /// </summary>
         [MenuItem("Modern Drone/Setup/Build EW Station Prefab")]
         public static GameObject BuildEwStation()
@@ -137,35 +139,39 @@ namespace ModernDrone.Editor
             var root = new GameObject("EwStation_Placeholder") { tag = "Vehicle" };
             var t = root.transform;
 
-            // Chassis and wheels: physical hull layer (not armor).
-            Box("Chassis", t, _trackMat, GameLayers.VehicleHull, new Vector3(0f, 0.85f, 0f), new Vector3(2.3f, 0.45f, 7.2f));
-            foreach (float z in new[] { 2.4f, -1.2f, -2.6f })
-            foreach (float x in new[] { -1.05f, 1.05f })
-                Box("Wheel", t, _trackMat, GameLayers.VehicleHull, new Vector3(x, 0.55f, z), new Vector3(0.4f, 1.1f, 1.1f));
+            // Chassis and wheels: physical hull layer (not armor). Axles and outline measured on the model.
+            Box("Chassis", t, _trackMat, GameLayers.VehicleHull, new Vector3(0f, 0.85f, 0f), new Vector3(2.3f, 0.45f, 8.0f));
+            foreach (float z in new[] { 2.45f, -1.1f, -2.5f })
+            foreach (float x in new[] { -1.1f, 1.1f })
+                Box("Wheel", t, _trackMat, GameLayers.VehicleHull, new Vector3(x, 0.6f, z), new Vector3(0.4f, 1.2f, 1.2f));
 
-            // Cab (front) — thin plates.
-            Plate("Cab_Front", t, new Vector3(0f, 1.9f, 3.55f), new Vector3(2.4f, 1.8f, 0.06f), 8f);
-            Plate("Cab_Side_L", t, new Vector3(-1.2f, 1.9f, 2.7f), new Vector3(0.06f, 1.8f, 1.7f), 8f);
-            Plate("Cab_Side_R", t, new Vector3(1.2f, 1.9f, 2.7f), new Vector3(0.06f, 1.8f, 1.7f), 8f);
-            Plate("Cab_Roof", t, new Vector3(0f, 2.8f, 2.7f), new Vector3(2.4f, 0.06f, 1.7f), 8f);
-            Plate("Cab_Back", t, new Vector3(0f, 1.9f, 1.85f), new Vector3(2.4f, 1.8f, 0.06f), 8f);
+            // Bonnet and cab (front): thin plates.
+            Plate("Hood_Front", t, new Vector3(0f, 1.5f, 4.05f), new Vector3(2.2f, 1.2f, 0.06f), 8f);
+            Plate("Hood_Top", t, new Vector3(0f, 2.1f, 3.2f), new Vector3(2.2f, 0.06f, 1.7f), 8f);
+            Plate("Cab_Front", t, new Vector3(0f, 2.3f, 2.3f), new Vector3(2.4f, 0.9f, 0.06f), 8f);
+            Plate("Cab_Side_L", t, new Vector3(-1.2f, 2.0f, 1.75f), new Vector3(0.06f, 1.4f, 1.1f), 8f);
+            Plate("Cab_Side_R", t, new Vector3(1.2f, 2.0f, 1.75f), new Vector3(0.06f, 1.4f, 1.1f), 8f);
+            Plate("Cab_Roof", t, new Vector3(0f, 2.7f, 1.75f), new Vector3(2.4f, 0.06f, 1.1f), 8f);
+            Plate("Cab_Back", t, new Vector3(0f, 2.0f, 1.25f), new Vector3(2.4f, 1.4f, 0.06f), 8f);
 
             // Shelter (kung) with the electronics.
-            Plate("Shelter_Side_L", t, new Vector3(-1.25f, 2.25f, -0.9f), new Vector3(0.06f, 2.3f, 4.8f), 10f);
-            Plate("Shelter_Side_R", t, new Vector3(1.25f, 2.25f, -0.9f), new Vector3(0.06f, 2.3f, 4.8f), 10f);
-            Plate("Shelter_Front", t, new Vector3(0f, 2.25f, 1.5f), new Vector3(2.5f, 2.3f, 0.06f), 10f);
-            Plate("Shelter_Rear", t, new Vector3(0f, 2.25f, -3.3f), new Vector3(2.5f, 2.3f, 0.06f), 10f);
-            Plate("Shelter_Roof", t, new Vector3(0f, 3.4f, -0.9f), new Vector3(2.5f, 0.06f, 4.8f), 10f);
+            Plate("Shelter_Side_L", t, new Vector3(-1.27f, 2.3f, -1.45f), new Vector3(0.06f, 2.0f, 5.3f), 10f);
+            Plate("Shelter_Side_R", t, new Vector3(1.27f, 2.3f, -1.45f), new Vector3(0.06f, 2.0f, 5.3f), 10f);
+            Plate("Shelter_Front", t, new Vector3(0f, 2.3f, 1.2f), new Vector3(2.5f, 2.0f, 0.06f), 10f);
+            Plate("Shelter_Rear", t, new Vector3(0f, 2.3f, -4.08f), new Vector3(2.5f, 2.0f, 0.06f), 10f);
+            Plate("Shelter_Roof", t, new Vector3(0f, 3.27f, -1.45f), new Vector3(2.5f, 0.06f, 5.3f), 10f);
 
-            Module("Module_Engine", t, ModuleType.Engine, 120f, 30f, new Vector3(0f, 1.3f, 3.0f), new Vector3(1.4f, 0.6f, 1.0f));
-            Module("Module_ControlStation", t, ModuleType.ControlStation, 60f, 10f, new Vector3(0f, 1.9f, 2.6f), new Vector3(1.8f, 0.9f, 1.0f));
-            Module("Module_Fuel", t, ModuleType.FuelTank, 60f, 10f, new Vector3(1.0f, 0.85f, 0.8f), new Vector3(0.5f, 0.5f, 1.2f));
-            Module("Module_Generator", t, ModuleType.Generator, 80f, 25f, new Vector3(0f, 1.8f, -2.5f), new Vector3(1.4f, 1.1f, 1.2f), visible: true)
+            Module("Module_Engine", t, ModuleType.Engine, 120f, 30f, new Vector3(0f, 1.5f, 3.2f), new Vector3(1.3f, 0.7f, 1.2f));
+            Module("Module_ControlStation", t, ModuleType.ControlStation, 60f, 10f, new Vector3(0f, 2.0f, 1.75f), new Vector3(1.8f, 0.9f, 0.9f));
+            Module("Module_Fuel", t, ModuleType.FuelTank, 60f, 10f, new Vector3(1.05f, 0.9f, 0.5f), new Vector3(0.5f, 0.5f, 1.2f));
+            Module("Module_Generator", t, ModuleType.Generator, 80f, 25f, new Vector3(0f, 1.9f, -3.3f), new Vector3(1.4f, 1.1f, 1.2f), visible: true)
                 .GetComponent<VehicleModule>().SetContents(SubstanceAssets.Diesel, 100f, fill: 0.3f); // generator day tank, abstract
-            Module("Module_Electronics", t, ModuleType.ControlStation, 60f, 10f, new Vector3(0f, 2.2f, -0.4f), new Vector3(2.0f, 1.4f, 1.6f));
+            Module("Module_Electronics", t, ModuleType.ControlStation, 60f, 10f, new Vector3(0f, 2.3f, -1.0f), new Vector3(2.0f, 1.4f, 1.6f));
+            VehicleKit.AttachModel(t, "Assets/_Project/Art/Models/Vehicles/Ural4320/ural4320_kung.glb", Vector3.zero);
+            new VehicleKit(root).SliceHull();
 
-            // Mast with two antenna panels: exposed, lightly built.
-            var mast = Box("Mast", t, antennaMat, GameLayers.VehicleHull, new Vector3(0f, 6.2f, -1.4f), new Vector3(0.15f, 5.6f, 0.15f));
+            // Mast with two antenna panels on the shelter roof: exposed, lightly built (drawn: the model has none).
+            var mast = Box("Mast", t, antennaMat, GameLayers.VehicleHull, new Vector3(0f, 6.1f, -1.4f), new Vector3(0.15f, 5.6f, 0.15f));
             Object.DestroyImmediate(mast.GetComponent<Collider>()); // too thin to matter; keeps fly-through fair
             var antennaA = Box("Antenna_A", t, antennaMat, GameLayers.Module, new Vector3(0f, 9.1f, -1.4f), new Vector3(1.6f, 0.9f, 0.12f));
             antennaA.AddComponent<VehicleModule>().Configure(ModuleType.Antenna, 50f, 5f);
@@ -173,7 +179,7 @@ namespace ModernDrone.Editor
             antennaB.AddComponent<VehicleModule>().Configure(ModuleType.Antenna, 50f, 5f);
 
             var model = root.AddComponent<VehicleDamageModel>();
-            model.SetDisplayName("Станция РЭБ (заглушка)");
+            model.SetDisplayName("Станция РЭБ");
             root.AddComponent<VehicleEffects>();
             VehicleKit.SetupProfile(t);
             var jammer = root.AddComponent<SignalJammer>();

@@ -52,6 +52,15 @@
 - **2S19M1 MSTA-S SPH** by [Jeyhun1985](https://sketchfab.com/3d-models/2s19m1-msta-s-sph-a783cc3364164eda907d2fd98a8d5152) on Sketchfab,
   licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). `Assets/_Project/Art/Models/Vehicles/Msta/msta_s.glb`;
   turret split out, decimated to ~110k triangles.
+- **БМ-21 "Град" (BM-21 Grad)** by [Hsu.Pei.Ge](https://sketchfab.com/3d-models/21-bm-21-grad-c90559a30e6a414d993a0d3bdf6c5ff8) on Sketchfab,
+  licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). `Assets/_Project/Art/Models/Vehicles/BM21/bm21.glb`;
+  scaled to 7.35 m, joined into one mesh, decimated LODs (`Tools/Blender/vehicle_import.py`).
+- **Russian Ural-4320 (KUNG)** by [42manako](https://sketchfab.com/3d-models/russian-ural-4320-kung-a1f9087d0e1f4e2c9180c99be863f526) on Sketchfab,
+  licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). `Assets/_Project/Art/Models/Vehicles/Ural4320/ural4320_kung.glb`
+  (the EW station); converted from centimetres, re-oriented, joined, decimated LODs (`Tools/Blender/vehicle_import.py`).
+- **Mitsubishi L200** by [David_Holiday](https://sketchfab.com/3d-models/mitsubishi-l200-372e50454f3246239a5a1551f839f862) on Sketchfab,
+  licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). `Assets/_Project/Art/Models/Vehicles/L200/l200.glb`
+  (the interceptor-drone team's pickup); scaled to 5.0 m, joined, decimated LODs (`Tools/Blender/vehicle_import.py`).
 - **FPV-dron NonStop** by [Viktor_](https://sketchfab.com/3d-models/fpv-dron-nonstop-c75dea6e3ae441ac87f292efb17f5bae) on Sketchfab,
   licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). `Assets/_Project/Art/Models/FPV_NonStop/nonstop.glb`;
   rescaled to 10" props, re-oriented, props split out, textures reduced to 2K.

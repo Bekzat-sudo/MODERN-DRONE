@@ -352,16 +352,35 @@ namespace ModernDrone.Editor
             k.Save(SamRadar);
         }
 
+        /// <summary>
+        /// BM-21 Grad on the Ural-375D 6x6: 40 x 122 mm tubes on a traversing launcher behind the cab, 7.35 x 2.4 x 3.09 m
+        /// (en.wikipedia.org/wiki/BM-21_Grad). Model "БМ-21 Град" by Hsu.Pei.Ge (CC BY), launcher raised ~20 deg; plates
+        /// and modules follow it. Armor points are abstract.
+        /// </summary>
         static void BuildMlrs()
         {
             var k = new VehicleKit("MLRS_Placeholder", Green);
-            TruckBase(k, 8f, 10f);
-            var pod = k.Group("RocketPod", v(0, 2.3f, -2.0f), rot: Pitch(-12f));
-            k.Module("Module_Rockets", ModuleType.AmmoRack, 60f, 10f, Vector3.zero, v(1.9f, 1.1f, 3.0f), pod, visible: true, mat: k.Hull)
+            k.Visual("Chassis", v(0, 0.9f, 0), v(2.2f, 0.4f, 7.2f), k.Dark);
+            k.Wheels(new[] { 2.35f, -1.1f, -2.55f }, 1.0f, 0.55f, 0.4f);
+            k.Plate("Hood_Front", v(0, 1.45f, 3.6f), v(2.1f, 1.0f, 0.06f), 8f);
+            k.Plate("Hood_Top", v(0, 2.0f, 2.95f), v(2.1f, 0.06f, 1.3f), 8f);
+            k.Plate("Cab_Front", v(0, 2.35f, 2.25f), v(2.3f, 0.8f, 0.06f), 8f);
+            k.Plate("Cab_Side_L", v(-1.15f, 2.1f, 1.25f), v(0.06f, 1.3f, 2.0f), 8f);
+            k.Plate("Cab_Side_R", v(1.15f, 2.1f, 1.25f), v(0.06f, 1.3f, 2.0f), 8f);
+            k.Plate("Cab_Roof", v(0, 2.7f, 1.25f), v(2.3f, 0.06f, 2.0f), 8f);
+            k.Plate("Cab_Back", v(0, 2.1f, 0.25f), v(2.3f, 1.3f, 0.06f), 8f);
+            k.Module("Module_Engine", ModuleType.Engine, 120f, 30f, v(0, 1.5f, 2.95f), v(1.2f, 0.8f, 1.2f));
+            k.Module("Module_ControlStation", ModuleType.ControlStation, 60f, 10f, v(0, 2.1f, 1.25f), v(1.8f, 0.9f, 1.6f));
+            k.Module("Module_Fuel", ModuleType.FuelTank, 60f, 10f, v(1.05f, 1.1f, -0.1f), v(0.5f, 0.5f, 1.0f));
+            // Rockets leave along the pod's forward axis: tilted like the model's launcher.
+            var pod = k.Group("RocketPod", v(0, 2.7f, -2.05f), rot: Pitch(-20f));
+            k.Module("Module_Rockets", ModuleType.AmmoRack, 60f, 10f, Vector3.zero, v(1.75f, 1.0f, 3.0f), pod, visible: true, mat: k.Hull)
                 .GetComponent<VehicleModule>().SetContents(SubstanceAssets.Rockets, 40f, SubstanceAssets.Shells, 40f); // BM-21: 40 x 122 mm (en.wikipedia.org/wiki/BM-21_Grad)
-            k.Module("Module_Launcher", ModuleType.Launcher, 70f, 20f, v(0, -0.75f, 0), v(0.8f, 0.4f, 0.8f), pod);
+            k.Module("Module_Launcher", ModuleType.Launcher, 70f, 20f, v(0, -0.65f, 0.3f), v(0.8f, 0.4f, 0.8f), pod);
             k.Fill("Module_Launcher", null, 0f); // the launcher drive holds nothing that burns
-            k.Finish("РСЗО (заглушка)");
+            k.AttachModel(ModelDir + "BM21/bm21.glb");
+            k.SliceHull();
+            k.Finish("РСЗО БМ-21 «Град»");
             k.Save(Mlrs);
         }
 
@@ -608,9 +627,24 @@ namespace ModernDrone.Editor
         static void BuildInterceptorSite()
         {
             var k = new VehicleKit("InterceptorSite_Placeholder", Green);
-            TruckBase(k, 5.5f, 5f);
-            var table = k.Visual("LaunchTable", v(0, 1.35f, -1.4f), v(1.8f, 0.08f, 1.8f), k.Dark);
-            k.Module("Module_DroneStock", ModuleType.AmmoRack, 40f, 5f, v(0.6f, 1.6f, -2.3f), v(0.9f, 0.5f, 0.6f), visible: true,
+            // Mitsubishi L200 double cab: 5.0 x 1.75 x 1.78 m, 3.0 m wheelbase (auto-data.net, L200 IV Double Cab).
+            // Model "Mitsubishi L200" by David_Holiday (CC BY). Sheet metal, armor points abstract.
+            k.Wheels(new[] { 1.6f, -1.4f }, 0.74f, 0.37f, 0.25f, 50f);
+            k.Plate("Hood_Front", v(0, 0.8f, 2.45f), v(1.7f, 0.6f, 0.06f), 3f);
+            k.Plate("Hood_Top", v(0, 1.1f, 1.75f), v(1.7f, 0.06f, 1.4f), 3f);
+            k.Plate("Cab_Front", v(0, 1.45f, 1.0f), v(1.7f, 0.7f, 0.06f), 3f);
+            k.Plate("Cab_Side_L", v(-0.86f, 1.3f, 0.2f), v(0.06f, 1.0f, 1.6f), 3f);
+            k.Plate("Cab_Side_R", v(0.86f, 1.3f, 0.2f), v(0.06f, 1.0f, 1.6f), 3f);
+            k.Plate("Cab_Roof", v(0, 1.8f, 0.2f), v(1.7f, 0.06f, 1.6f), 3f);
+            k.Plate("Cab_Back", v(0, 1.3f, -0.6f), v(1.7f, 1.0f, 0.06f), 3f);
+            k.Module("Module_Engine", ModuleType.Engine, 90f, 20f, v(0, 0.8f, 1.8f), v(1.0f, 0.5f, 0.8f));
+            k.Module("Module_ControlStation", ModuleType.ControlStation, 50f, 5f, v(0, 1.25f, 0.2f), v(1.5f, 0.8f, 1.3f));
+            k.Module("Module_Fuel", ModuleType.FuelTank, 50f, 5f, v(0.45f, 0.45f, -1.2f), v(0.6f, 0.3f, 0.8f));
+            k.AttachModel(ModelDir + "L200/l200.glb");
+            k.SliceHull();
+            // On the bed: the launch table and the drone stock (the model hides placeholder boxes; these stay drawn).
+            var table = k.Visual("LaunchTable", v(0, 1.0f, -1.55f), v(1.5f, 0.06f, 1.6f), k.Dark);
+            k.Module("Module_DroneStock", ModuleType.AmmoRack, 40f, 5f, v(0.45f, 1.2f, -2.15f), v(0.7f, 0.4f, 0.5f), visible: true,
                 mat: VehicleKit.Material("CrateWood", new Color(0.42f, 0.35f, 0.22f)));
 
             // Observation mast a few metres from the truck.
@@ -625,7 +659,7 @@ namespace ModernDrone.Editor
                 k.Visual("Pole", v(x, 0.65f, z), v(0.06f, 1.3f, 0.06f), k.Dark, collider: false);
             k.Module("Module_OperatorPost", ModuleType.ControlStation, 60f, 5f, v(4.0f, 0.6f, -1.5f), v(1.6f, 1.1f, 1.6f), visible: true, mat: k.ModuleMat);
 
-            k.Finish("Расчёт перехватчиков (заглушка)");
+            k.Finish("Расчёт перехватчиков");
             var site = k.Root.AddComponent<ModernDrone.Missions.InterceptorSite>();
             site.Configure(antenna.transform, table.transform, VehicleKit.Material("InterceptorBody", new Color(0.18f, 0.18f, 0.2f)));
             k.Save(InterceptorSite);
