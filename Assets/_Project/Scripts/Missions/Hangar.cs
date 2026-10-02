@@ -46,7 +46,6 @@ namespace ModernDrone.Missions
         Stats _current, _stock;
         bool _dirty = true;
         int _model = -1, _warhead, _row;
-        GUIStyle _title, _tab, _caption, _captionAccent, _value, _option, _optionSel, _tag, _body, _statLabel, _statValue, _prompt, _key, _back;
 
         /// <summary>Called when the back button is clicked (keyboard / gamepad back is read by the owner).</summary>
         public Action Back;
@@ -267,14 +266,16 @@ namespace ModernDrone.Missions
             float d = value - reference;
             if (Mathf.Abs(d) < 0.5f) return ""; // below the shown precision
             return d > 0f
-                ? UiTheme.Colored($"▲ +{d.ToString(format)}{unit}", UiTheme.Better)
-                : UiTheme.Colored($"▼ −{(-d).ToString(format)}{unit}", UiTheme.Worse);
+                ? UiTheme.Colored($"▲ +{d.ToString(format)}{unit}", UiTheme.Info)
+                : UiTheme.Colored($"▼ −{(-d).ToString(format)}{unit}", UiTheme.Warning);
         }
 
-        static string Change(float from, float to, string format, bool higherIsBetter = true)
+        /// <summary>"21 → 18 мин ▼ хуже": the arrow and the word only when the shown values differ.</summary>
+        static string Change(float from, float to, string format, string unit, bool higherIsBetter = true)
         {
-            string arrow = Mathf.Abs(to - from) < 0.05f ? "" : (to > from) == higherIsBetter ? UiTheme.Colored(" ▲", UiTheme.Better) : UiTheme.Colored(" ▼", UiTheme.Worse);
-            return $"{from.ToString(format)} → {to.ToString(format)}{arrow}";
+            string a = from.ToString(format), b = to.ToString(format);
+            string verdict = a == b ? "" : (to > from) == higherIsBetter ? UiTheme.Colored("  ▲ лучше", UiTheme.Info) : UiTheme.Colored("  ▼ хуже", UiTheme.Warning);
+            return $"{a} → {b}{unit}{verdict}";
         }
 
         // ---- input
@@ -318,14 +319,14 @@ namespace ModernDrone.Missions
 
         static Areas Layout()
         {
-            float w = Screen.width, h = Screen.height, p = UiTheme.Px(56f), gap = UiTheme.Px(24f);
+            float w = Screen.width, h = Screen.height, p = UiTheme.Px(UiTheme.Margin), gap = UiTheme.Px(UiTheme.S5);
             float top = UiTheme.Px(40f), headerH = UiTheme.Px(64f);
-            float bodyTop = top + headerH + UiTheme.Px(28f);
-            float footerH = UiTheme.Px(76f), promptsH = UiTheme.Px(40f);
+            float bodyTop = top + headerH + UiTheme.Px(UiTheme.S5);
+            float footerH = UiTheme.Px(92f), promptsH = UiTheme.Px(36f);
             float promptsTop = h - UiTheme.Px(28f) - promptsH;
-            float footerTop = promptsTop - UiTheme.Px(16f) - footerH;
-            float bodyH = footerTop - UiTheme.Px(20f) - bodyTop;
-            float slotsW = UiTheme.Px(440f), optionsW = UiTheme.Px(500f);
+            float footerTop = promptsTop - UiTheme.Px(UiTheme.S4) - footerH;
+            float bodyH = footerTop - UiTheme.Px(UiTheme.S4) - bodyTop;
+            float slotsW = UiTheme.Px(420f), optionsW = UiTheme.Px(500f);
             return new Areas
             {
                 header = new Rect(p, top, w - 2 * p, headerH),
@@ -337,60 +338,75 @@ namespace ModernDrone.Missions
             };
         }
 
-        /// <summary>Full-screen hangar (call from OnGUI).</summary>
-        public void Draw(string title, string note, params (string key, string action)[] prompts)
+        /// <summary>Bottom-right slot for the screen's primary button (level with the prompts).</summary>
+        public static Rect ActionRect
         {
-            EnsureStyles();
+            get
+            {
+                var p = Layout().prompts;
+                float w = UiTheme.Px(300f), h = UiTheme.Px(52f);
+                return new Rect(p.xMax - w, p.yMax - h, w, h);
+            }
+        }
+
+        /// <summary>Full-screen hangar (call from OnGUI). Returns the prompt clicked, else -1.</summary>
+        public int Draw(string title, string note, params (string key, string action)[] prompts)
+        {
+            var t = UiTheme.T;
             UiTheme.Background();
             var a = Layout();
             var e = Event.current;
             bool click = e.type == EventType.MouseDown && e.button == 0;
 
-            // Header: back, title, drone tabs, note
+            // Header: back, title, drone models as tabs, note
             float x = a.header.x;
             if (Back != null)
             {
-                var back = new Rect(x, a.header.y, a.header.height, a.header.height);
-                UiTheme.Box(back);
-                GUI.Label(back, "‹", _back);
-                if (click && back.Contains(e.mousePosition)) { Back(); e.Use(); }
-                x += back.width + UiTheme.Px(24f);
+                var back = new Rect(x, a.header.y + UiTheme.Px(6f), a.header.height - UiTheme.Px(12f), a.header.height - UiTheme.Px(12f));
+                if (UiTheme.Button(back, "‹", false, false)) { Back(); }
+                x += back.width + UiTheme.Px(UiTheme.S5);
             }
-            float tw = _title.CalcSize(new GUIContent(title)).x;
-            GUI.Label(new Rect(x, a.header.y, tw, a.header.height), title, _title);
-            x += tw + UiTheme.Px(32f);
-            for (int i = 0; i < _models.Length; i++)
+            float tw = UiTheme.Width(title, t.title);
+            UiTheme.Text(new Rect(x, a.header.y, tw + 2f, a.header.height), title, t.title, UiTheme.TextPrimary);
+            x += tw + UiTheme.Px(UiTheme.S6);
+            if (_models.Length > 1)
             {
-                string label = _models[i].displayName.ToUpperInvariant();
-                var r = new Rect(x, a.header.y + UiTheme.Px(6f), _tab.CalcSize(new GUIContent(label)).x + UiTheme.Px(40f), a.header.height - UiTheme.Px(12f));
-                bool sel = i == _model;
-                UiTheme.Box(r, sel);
-                _tab.normal.textColor = sel ? UiTheme.Text : UiTheme.Muted;
-                GUI.Label(r, label, _tab);
-                if (click && r.Contains(e.mousePosition)) { SelectModel(i); e.Use(); }
-                x += r.width + UiTheme.Px(6f);
+                var names = new string[_models.Length];
+                string prev = ControlInput.Key("Q", "LB"), next = ControlInput.Key("E", "RB");
+                float stripW = UiTheme.KeyWidth(prev) + UiTheme.KeyWidth(next) + 2f * UiTheme.Px(UiTheme.S4);
+                for (int i = 0; i < names.Length; i++)
+                {
+                    names[i] = _models[i].displayName.ToUpperInvariant();
+                    stripW += UiTheme.Width(names[i], t.tab) + 2f * UiTheme.Px(UiTheme.S4);
+                }
+                stripW = Mathf.Min(stripW, a.header.xMax - x - UiTheme.Px(200f));
+                int picked = UiTheme.Tabs(new Rect(x, a.header.y + UiTheme.Px(6f), stripW, a.header.height - UiTheme.Px(12f)), names, Mathf.Max(0, _model), prev, next, 0x4a6);
+                if (picked != _model) SelectModel(picked);
+                x += stripW + UiTheme.Px(UiTheme.S6);
             }
-            GUI.Label(new Rect(x, a.header.y, a.header.xMax - x, a.header.height), note, _captionRight);
+            UiTheme.TextFit(new Rect(x, a.header.y, a.header.xMax - x, a.header.height), note, t.captionRight, UiTheme.TextSecondary);
 
-            if (Model == null) return;
+            if (Model == null) return -1;
 
             // Slots
-            GUI.Label(new Rect(a.slots.x, a.slots.y, a.slots.width, UiTheme.Px(30f)), "СЛОТЫ", _caption);
-            float sh = UiTheme.Px(92f), sy = a.slots.y + UiTheme.Px(40f);
+            UiTheme.Panel(a.slots);
+            var sp = UiTheme.Inset(a.slots, 0f, UiTheme.Px(UiTheme.S4));
+            UiTheme.Text(new Rect(sp.x + UiTheme.Px(UiTheme.S5), sp.y, sp.width, UiTheme.Px(26f)), "СЛОТЫ", t.caption, UiTheme.TextSecondary);
+            float sh = UiTheme.Px(84f), sy = sp.y + UiTheme.Px(36f);
             for (int i = 0; i < _rows.Count; i++)
             {
                 var row = _rows[i];
-                var r = new Rect(a.slots.x, sy + i * (sh + UiTheme.Px(8f)), a.slots.width, sh);
+                var r = new Rect(sp.x + 1f, sy + i * sh, sp.width - 2f, sh);
                 bool sel = i == _row;
-                UiTheme.Box(r, sel);
-                var inner = new Rect(r.x + UiTheme.Px(18f), r.y + UiTheme.Px(12f), r.width - UiTheme.Px(36f), r.height - UiTheme.Px(24f));
-                GUI.Label(new Rect(inner.x, inner.y, inner.width, inner.height * 0.42f), $"{i + 1:00} · {RowName(row).ToUpperInvariant()}", sel ? _captionAccent : _caption);
-                GUI.Label(new Rect(inner.x, inner.y + inner.height * 0.45f, inner.width, inner.height * 0.55f), OptionName(row, OptionIndex(row)), _value);
+                UiTheme.Item(r, UiTheme.StateOf(r, sel, true), slideId: 0x51a);
+                var inner = UiTheme.Inset(r, UiTheme.Px(UiTheme.S5), UiTheme.Px(14f));
+                UiTheme.Text(new Rect(inner.x, inner.y, inner.width, UiTheme.Px(24f)), $"{i + 1:00} · {RowName(row).ToUpperInvariant()}", t.caption, sel ? UiTheme.Accent : UiTheme.TextSecondary);
+                UiTheme.TextFit(new Rect(inner.x, inner.yMax - UiTheme.Px(30f), inner.width, UiTheme.Px(30f)), OptionName(row, OptionIndex(row)), sel ? t.labelBold : t.label, sel ? UiTheme.TextPrimary : UiTheme.TextBody);
                 if (click && r.Contains(e.mousePosition)) { _row = i; _dirty = true; e.Use(); }
             }
 
             // 3D view
-            UiTheme.Box(a.preview, raised: true);
+            UiTheme.Panel(a.preview);
             if (_preview != null && _preview.Texture != null)
             {
                 GUI.DrawTexture(new Rect(a.preview.x + 1, a.preview.y + 1, a.preview.width - 2, a.preview.height - 2), _preview.Texture, ScaleMode.StretchToFill, false);
@@ -400,79 +416,57 @@ namespace ModernDrone.Missions
                     e.Use();
                 }
             }
-            GUI.Label(new Rect(a.preview.x + UiTheme.Px(18f), a.preview.y + UiTheme.Px(12f), a.preview.width, UiTheme.Px(28f)), "ВИД 3D · ТЯНИТЕ ДЛЯ ПОВОРОТА", _caption);
-            GUI.Label(new Rect(a.preview.x + UiTheme.Px(18f), a.preview.yMax - UiTheme.Px(40f), a.preview.width - UiTheme.Px(36f), UiTheme.Px(28f)),
-                $"{Model.displayName.ToUpperInvariant()} · ДИАГОНАЛЬ {Model.motorDiagonal * 1000f:0} мм · РАМА {Model.airframeMass:0.00} кг", _caption);
+            var pv = UiTheme.Inset(a.preview, UiTheme.Px(UiTheme.S5), UiTheme.Px(UiTheme.S4));
+            UiTheme.Text(new Rect(pv.x, pv.y, pv.width, UiTheme.Px(26f)), Model.displayName.ToUpperInvariant(), t.caption, UiTheme.TextPrimary);
+            UiTheme.Text(new Rect(pv.x, pv.y, pv.width, UiTheme.Px(26f)), "тяните, чтобы повернуть", t.captionRight, UiTheme.TextSecondary);
+            var spec = new Rect(a.preview.x + 1f, a.preview.yMax - UiTheme.Px(44f), a.preview.width - 2f, UiTheme.Px(43f));
+            UiTheme.Fill(spec, new Color(UiTheme.Surface.r, UiTheme.Surface.g, UiTheme.Surface.b, 0.85f));
+            UiTheme.Text(new Rect(pv.x, spec.y, pv.width, spec.height),
+                $"диагональ {Model.motorDiagonal * 1000f:0} мм · рама {Model.airframeMass:0.00} кг", t.caption, UiTheme.TextBody);
 
-            // Options of the selected slot
-            UiTheme.Box(a.options);
+            // Options of the selected slot: ← → installs the next one, so the installed one is "current".
+            UiTheme.Panel(a.options);
             if (_rows.Count > 0)
             {
                 var selRow = _rows[_row];
                 int count = OptionCount(selRow), current = OptionIndex(selRow);
-                var o = new Rect(a.options.x + UiTheme.Px(18f), a.options.y + UiTheme.Px(16f), a.options.width - UiTheme.Px(36f), a.options.height - UiTheme.Px(32f));
-                GUI.Label(new Rect(o.x, o.y, o.width, UiTheme.Px(28f)), $"{RowName(selRow).ToUpperInvariant()} · {count} {Variants(count)}", _caption);
-                float oh = UiTheme.Px(66f), oy = o.y + UiTheme.Px(40f);
+                var o = UiTheme.Inset(a.options, 0f, UiTheme.Px(UiTheme.S4));
+                float ox = o.x + UiTheme.Px(UiTheme.S5), ow = o.width - 2f * UiTheme.Px(UiTheme.S5);
+                UiTheme.Text(new Rect(ox, o.y, ow, UiTheme.Px(26f)), $"{RowName(selRow).ToUpperInvariant()} · {count} {Variants(count)}", t.caption, UiTheme.TextSecondary);
+                float oh = UiTheme.Px(62f), oy = o.y + UiTheme.Px(36f);
                 for (int i = 0; i < count; i++)
                 {
-                    var r = new Rect(o.x - UiTheme.Px(6f), oy + i * (oh + UiTheme.Px(4f)), o.width + UiTheme.Px(12f), oh);
+                    var r = new Rect(o.x + 1f, oy + i * oh, o.width - 2f, oh);
                     bool sel = i == current;
-                    if (sel) UiTheme.Box(r, true);
+                    UiTheme.Item(r, UiTheme.StateOf(r, sel, false), slideId: 0x0b7);
                     string delta = i < _optionStats.Count && !sel ? Delta(_optionStats[i].minutes, _current.minutes, " мин", "0") : "";
                     // Name on top, mass and the change it makes below (before/after comparison per option)
-                    GUI.Label(new Rect(r.x + UiTheme.Px(12f), r.y + UiTheme.Px(6f), r.width - UiTheme.Px(24f), r.height * 0.5f), OptionName(selRow, i), sel ? _optionSel : _option);
-                    GUI.Label(new Rect(r.x + UiTheme.Px(12f), r.y + r.height * 0.5f, r.width - UiTheme.Px(24f), r.height * 0.42f),
-                        $"{OptionTag(selRow, i)}{(delta.Length > 0 ? "  " + delta : sel ? "  " + UiTheme.Colored("установлено", UiTheme.Accent) : "")}", _tag);
+                    UiTheme.TextFit(new Rect(ox, r.y + UiTheme.Px(8f), ow, UiTheme.Px(28f)), OptionName(selRow, i), sel ? t.labelBold : t.label, sel ? UiTheme.TextPrimary : UiTheme.TextBody);
+                    UiTheme.Text(new Rect(ox, r.y + UiTheme.Px(34f), ow, UiTheme.Px(24f)),
+                        $"{OptionTag(selRow, i)}{(delta.Length > 0 ? "   " + delta : sel ? "   " + UiTheme.Colored("установлено", UiTheme.Accent) : "")}", t.caption, UiTheme.TextSecondary);
                     if (click && r.Contains(e.mousePosition)) { SelectOption(selRow, i); e.Use(); }
                 }
-                float dy = oy + count * (oh + UiTheme.Px(4f)) + UiTheme.Px(16f);
-                UiTheme.Fill(new Rect(o.x, dy, o.width, 1f), UiTheme.Line);
-                dy += UiTheme.Px(14f);
-                string compare = $"Висение к стандарту: {Change(_stock.minutes, _current.minutes, "0")} мин\nТяга / вес к стандарту: {Change(_stock.twr, _current.twr, "0.0")}";
-                GUI.Label(new Rect(o.x, dy, o.width, o.yMax - dy), Specs(selRow) + "\n\n" + compare, _body);
+                float dy = oy + count * oh + UiTheme.Px(UiTheme.S4);
+                UiTheme.Fill(new Rect(ox, dy, ow, 1f), UiTheme.Border);
+                dy += UiTheme.Px(UiTheme.S4);
+                float lh = UiTheme.Px(28f);
+                UiTheme.Text(new Rect(ox, dy, ow, lh), "К СТАНДАРТНОЙ СБОРКЕ", t.caption, UiTheme.TextSecondary);
+                UiTheme.KeyValue(new Rect(ox, dy + lh, ow, lh), "висение", Change(_stock.minutes, _current.minutes, "0", " мин"), UiTheme.TextBody);
+                UiTheme.KeyValue(new Rect(ox, dy + 2f * lh, ow, lh), "тяга / вес", Change(_stock.twr, _current.twr, "0.0", ""), UiTheme.TextBody);
+                dy += 3f * lh + UiTheme.Px(UiTheme.S3);
+                UiTheme.Text(new Rect(ox, dy, ow, o.yMax - dy), Specs(selRow), t.body, UiTheme.TextBody);
             }
 
             // Resulting drone
-            float cw = (a.footer.width - 3 * UiTheme.Px(12f)) / 4f;
-            Stat(new Rect(a.footer.x, a.footer.y, cw, a.footer.height), "ВЗЛЁТНАЯ МАССА", $"{_current.mass:0.00} кг");
-            Stat(new Rect(a.footer.x + (cw + UiTheme.Px(12f)), a.footer.y, cw, a.footer.height), "ТЯГА / ВЕС", $"{_current.twr:0.0}");
-            Stat(new Rect(a.footer.x + 2 * (cw + UiTheme.Px(12f)), a.footer.y, cw, a.footer.height), "ВИСЕНИЕ", $"~{_current.minutes:0} мин");
-            Stat(new Rect(a.footer.x + 3 * (cw + UiTheme.Px(12f)), a.footer.y, cw, a.footer.height), "ДАЛЬНОСТЬ ВИДЕО", _current.range);
+            float g = UiTheme.Px(UiTheme.S3), cw = (a.footer.width - 3f * g) / 4f;
+            UiTheme.Stat(new Rect(a.footer.x, a.footer.y, cw, a.footer.height), "ВЗЛЁТНАЯ МАССА", $"{_current.mass:0.00} кг", UiTheme.TextPrimary);
+            UiTheme.Stat(new Rect(a.footer.x + (cw + g), a.footer.y, cw, a.footer.height), "ТЯГА / ВЕС", $"{_current.twr:0.0}", UiTheme.TextPrimary);
+            UiTheme.Stat(new Rect(a.footer.x + 2f * (cw + g), a.footer.y, cw, a.footer.height), "ВИСЕНИЕ", $"~{_current.minutes:0} мин", UiTheme.TextPrimary);
+            UiTheme.Stat(new Rect(a.footer.x + 3f * (cw + g), a.footer.y, cw, a.footer.height), "ДАЛЬНОСТЬ ВИДЕО", _current.range, UiTheme.TextPrimary);
 
-            UiTheme.Prompts(a.prompts, _prompt, _key, prompts);
+                return UiTheme.Prompts(a.prompts, false, prompts);
         }
 
         static string Variants(int n) => n % 10 == 1 && n % 100 != 11 ? "ВАРИАНТ" : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? "ВАРИАНТА" : "ВАРИАНТОВ";
-
-        void Stat(Rect r, string label, string value)
-        {
-            UiTheme.Box(r);
-            GUI.Label(new Rect(r.x + UiTheme.Px(18f), r.y, r.width * 0.55f, r.height), label, _statLabel);
-            GUI.Label(new Rect(r.x, r.y, r.width - UiTheme.Px(18f), r.height), value, _statValue);
-        }
-
-        GUIStyle _captionRight;
-
-        void EnsureStyles()
-        {
-            int size = UiTheme.FontPx(20f);
-            if (_value != null && _value.fontSize == size) return;
-            _title = UiTheme.Style(UiTheme.Display, 46f, UiTheme.Text);
-            _title.fontStyle = FontStyle.Bold;
-            _tab = UiTheme.Style(UiTheme.Display, 22f, UiTheme.Text, TextAnchor.MiddleCenter);
-            _back = UiTheme.Style(UiTheme.Display, 36f, UiTheme.Text, TextAnchor.MiddleCenter);
-            _caption = UiTheme.Style(UiTheme.Mono, 18f, UiTheme.Muted);
-            _captionAccent = UiTheme.Style(UiTheme.Mono, 18f, UiTheme.Accent);
-            _captionRight = UiTheme.Style(UiTheme.Mono, 18f, UiTheme.Muted, TextAnchor.MiddleRight);
-            _value = UiTheme.Style(UiTheme.Mono, 20f, UiTheme.Text);
-            _option = UiTheme.Style(UiTheme.Mono, 20f, UiTheme.Body);
-            _optionSel = UiTheme.Style(UiTheme.MonoBold, 20f, UiTheme.Text);
-            _tag = UiTheme.Style(UiTheme.Mono, 18f, UiTheme.Muted);
-            _body = UiTheme.Style(UiTheme.Mono, 19f, UiTheme.Body, TextAnchor.UpperLeft, true);
-            _statLabel = UiTheme.Style(UiTheme.Mono, 18f, UiTheme.Muted);
-            _statValue = UiTheme.Style(UiTheme.Display, 34f, UiTheme.Text, TextAnchor.MiddleRight);
-            _prompt = UiTheme.Style(UiTheme.Mono, 19f, UiTheme.Body);
-            _key = UiTheme.Style(UiTheme.MonoBold, 17f, UiTheme.Ground, TextAnchor.MiddleCenter);
-        }
     }
 }

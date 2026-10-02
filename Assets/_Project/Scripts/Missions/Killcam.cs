@@ -1,6 +1,8 @@
 using System;
 using System.Collections;
+using ModernDrone.Core;
 using ModernDrone.Damage;
+using ModernDrone.Drone;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -70,7 +72,7 @@ namespace ModernDrone.Missions
         readonly System.Collections.Generic.List<Renderer> _hiddenFx = new System.Collections.Generic.List<Renderer>();
         Texture2D _noise;
         Color32[] _noisePixels;
-        GUIStyle _title, _body, _legend, _legendCentered, _legendRight;
+        GUIStyle _body, _legend, _legendRight;
 
         public bool Running { get; private set; }
 
@@ -574,22 +576,31 @@ namespace ModernDrone.Missions
             if (_recon || _replay) DrawReconOverlay(w, h);
             if (_replay) DrawReplayOverlay(w, h);
 
+            // Captions, the strike summary, the X-ray legend and the prompts are game UI (UiTheme); the camera
+            // overlays above imitate the recon feed and keep their own look.
+            var t = UiTheme.T;
             if (_caption != null)
-                GUI.Label(new Rect(0, h * 0.05f, w, _title.fontSize * 1.5f), _caption, _title);
+                UiTheme.Banner(UiTheme.Px(40f), _caption, _caption == "ПРОМАХ" ? UiTheme.Warning : _caption == "ПОПАДАНИЕ" ? UiTheme.Success : UiTheme.TextPrimary);
 
             if (_showSummary)
             {
                 var summary = _report.Summary();
-                var rect = new Rect(w * 0.03f, h * 0.14f, w * 0.34f, h * 0.5f);
-                float height = _body.CalcHeight(new GUIContent(summary), rect.width);
-                Box(new Rect(rect.x - 10, rect.y - 8, rect.width + 20, height + 16));
-                GUI.Label(rect, summary, _body);
+                float pw = Mathf.Min(w * 0.34f, UiTheme.Px(600f)), pad = UiTheme.Px(UiTheme.S5);
+                float height = t.body.CalcHeight(new GUIContent(summary), pw - 2f * pad);
+                var panel = new Rect(UiTheme.Px(UiTheme.Margin), h * 0.16f, pw, height + 2f * pad + UiTheme.Px(32f));
+                UiTheme.Fill(panel, UiTheme.OverVideo);
+                UiTheme.Text(new Rect(panel.x + pad, panel.y + pad, pw - 2f * pad, UiTheme.Px(26f)), "РЕЗУЛЬТАТ УДАРА", t.caption, UiTheme.TextSecondary);
+                UiTheme.Text(new Rect(panel.x + pad, panel.y + pad + UiTheme.Px(32f), pw - 2f * pad, height), summary, t.body, UiTheme.TextPrimary);
             }
 
             if (_xray != null && _xray.Visible)
             {
-                float lx = w * 0.72f, ly = h * 0.14f, lh = _legend.fontSize * 1.5f;
-                Box(new Rect(lx - 10, ly - 8, w * 0.26f, lh * 7 + 16));
+                float lh = UiTheme.Px(32f), pad = UiTheme.Px(UiTheme.S5), lw = UiTheme.Px(380f);
+                var panel = new Rect(w - UiTheme.Px(UiTheme.Margin) - lw, h * 0.16f, lw, lh * 7f + 2f * pad + UiTheme.Px(32f));
+                UiTheme.Fill(panel, UiTheme.OverVideo);
+                float lx = panel.x + pad, ly = panel.y + pad;
+                UiTheme.Text(new Rect(lx, ly, lw, UiTheme.Px(26f)), "РЕНТГЕН · ЛЕГЕНДА", t.caption, UiTheme.TextSecondary);
+                ly += UiTheme.Px(32f);
                 Legend(lx, ly + lh * 0, lh, DamageSolver.ColorOf(TraceKind.Jet), "Струя — пробитие");
                 Legend(lx, ly + lh * 1, lh, DamageSolver.ColorOf(TraceKind.JetStopped), "Струя — остановлена");
                 Legend(lx, ly + lh * 2, lh, DamageSolver.ColorOf(TraceKind.Spall), "Заброневые осколки");
@@ -599,12 +610,20 @@ namespace ModernDrone.Missions
                 Legend(lx, ly + lh * 6, lh, Opaque(assets.moduleDestroyed), "Модуль уничтожен");
             }
 
-            GUI.Label(new Rect(0, h * 0.92f, w, _body.fontSize * 1.5f), _replay
-                ? "← → / LB RB — перемотка     ↓ / X — пауза     R / Y — с начала     SPACE / A — дальше"
-                : "SPACE / A — продолжить", _legendCentered);
+            // Two prompt rows under the replay timeline (0.905 h).
+            var camera = new Rect(0, h - UiTheme.Px(40f), w, UiTheme.Px(32f));
+            var prompts = new Rect(0, camera.y - UiTheme.Px(38f), w, UiTheme.Px(32f));
+            string next = ControlInput.Key("Space", "A");
+            if (_replay)
+            {
+                UiTheme.Prompts(prompts, true, (ControlInput.Key("← →", "LB RB"), "перемотка"), (ControlInput.Key("↓", "X"), "пауза"),
+                    (ControlInput.Key("R", "Y"), "с начала"), (next, "дальше"));
+            }
+            else UiTheme.Prompts(prompts, true, (next, "продолжить"));
             if (_replay || _recon)
-                GUI.Label(new Rect(0, h * 0.955f, w, _body.fontSize * 1.5f),
-                    "WASD / левый стик — облёт     ПКМ + мышь / правый стик — поворот     колесо, + − / LT RT — зум     C / R3 — сброс камеры", _legendCentered);
+                UiTheme.Prompts(camera, true,
+                    (ControlInput.Key("WASD", "L"), "облёт"), (ControlInput.Key("ПКМ", "R"), "поворот"),
+                    (ControlInput.Key("колесо", "LT RT"), "зум"), (ControlInput.Key("C", "R3"), "сброс камеры"));
         }
 
         /// <summary>Analog static with a bright vertical band, the last frames of an FPV feed at impact.</summary>
@@ -692,24 +711,14 @@ namespace ModernDrone.Missions
             GUI.color = prev;
         }
 
-        void Legend(float x, float y, float lh, Color color, string text)
+        static void Legend(float x, float y, float lh, Color color, string text)
         {
-            var prev = GUI.color;
-            GUI.color = color;
-            GUI.DrawTexture(new Rect(x, y + lh * 0.25f, lh * 0.5f, lh * 0.5f), Texture2D.whiteTexture);
-            GUI.color = prev;
-            GUI.Label(new Rect(x + lh * 0.8f, y, 400, lh), text, _legend);
+            float s = UiTheme.Px(14f);
+            UiTheme.Fill(new Rect(x, y + (lh - s) * 0.5f, s, s), color);
+            UiTheme.Text(new Rect(x + s + UiTheme.Px(UiTheme.S3), y, UiTheme.Px(320f), lh), text, UiTheme.T.label, UiTheme.TextBody);
         }
 
         static Color Opaque(Color c) => new Color(c.r, c.g, c.b, 1f);
-
-        static void Box(Rect r)
-        {
-            var prev = GUI.color;
-            GUI.color = new Color(0f, 0f, 0f, 0.55f);
-            GUI.DrawTexture(r, Texture2D.whiteTexture);
-            GUI.color = prev;
-        }
 
         void EnsureStyles()
         {
@@ -718,9 +727,6 @@ namespace ModernDrone.Missions
             _body = new GUIStyle(GUI.skin.label) { fontSize = size, fontStyle = FontStyle.Bold, wordWrap = true };
             _body.normal.textColor = Color.white;
             _legend = new GUIStyle(_body) { wordWrap = false, fontSize = Mathf.RoundToInt(size * 0.85f) };
-            _title = new GUIStyle(_body) { fontSize = Mathf.RoundToInt(size * 1.8f), alignment = TextAnchor.MiddleCenter, wordWrap = false };
-            _legendCentered = new GUIStyle(_legend) { alignment = TextAnchor.MiddleCenter };
-            _legendCentered.normal.textColor = new Color(1f, 1f, 1f, 0.7f);
             _legendRight = new GUIStyle(_legend) { alignment = TextAnchor.UpperRight };
         }
     }
