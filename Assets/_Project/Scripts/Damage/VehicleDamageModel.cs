@@ -203,7 +203,8 @@ namespace ModernDrone.Damage
             Note($"{DamageNames.Ru(m.Type)}: {(p.violent ? "воспламенение зарядов" : "пожар")}");
             FireStarted?.Invoke(this, fire);
 
-            if (p.violent && Roll(ammoDetonationChance))
+            // One roll per vehicle: once the charges have vented through blown hatches, the next rack vents too.
+            if (p.violent && !_vented && Roll(ammoDetonationChance))
             {
                 // One charge sets off the next: the pressure builds for a moment, then the hull gives way.
                 _pendingBlast = Mathf.Lerp(CookOffDelayMin, CookOffDelayMax, (float)_random.NextDouble());
