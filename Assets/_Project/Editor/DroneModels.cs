@@ -81,7 +81,10 @@ namespace ModernDrone.Editor
             c.spoolMount = new Vector3(0f, -0.08f, -0.1f);
             c.motorKv = 900f; // 3115 900 KV class for 10" (Hobbywing / DarwinFPV listings)
             c.propBlades = 3;
-            c.airframeMass = 0.68f; // 10" frame, 3115 motors, ESC, FC, props (~1.6 kg AUW with a 6S2P 21700 pack)
+            // 10" frame 0.22-0.27 kg (GEPRC Mark4 10"), four 3115 motors 4 x 116 g (T-Motor V3115), 10" props 4 x 23 g,
+            // ESC, FC, wiring: ~0.86 kg, as the SkyCraft RMD-10 without its battery (865 g). Thrust follows (TWR 6.5 on
+            // the stock build): ~2.9 kgf per motor, inside the 3.5-4.6 kgf a 3115 900 KV gives on 10" props (T-Motor).
+            c.airframeMass = 0.86f;
             c.motorDiagonal = 0.495f;
             c.inertia = new Vector3(0.03f, 0.05f, 0.03f);
             c.colliderSize = new Vector3(0.45f, 0.2f, 0.45f);

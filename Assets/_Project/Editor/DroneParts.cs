@@ -18,7 +18,8 @@ namespace ModernDrone.Editor
     ///   (unmannedtechshop.co.uk prop guide; uavmodel.com prop selection);
     /// - video: free-space loss at 1 km 107.7 dB at 5.8 GHz vs 94.0 dB at 1.2 GHz (oscarliang.com/fpv-frequency);
     ///   range ~ 10^(dB/20), doubling power = x1.41 range;
-    /// - fiber: 5-20 km spools, 24-130 g per km of cable (en.wikipedia.org/wiki/Fiber-optic_drone; United UAV listings).
+    /// - fiber: 5-20 km spools; 0.28 mm single fibre ~80 g per km (store.uniteduav.com, UOF10 10 km spool), plus the
+    ///   spool and housing (~0.15-0.3 kg, estimate; 10 km canisters list 0.95-1.03 kg).
     /// Masses marked "оценка" are estimates for the part class; the prop scales are abstract gameplay values following
     /// the trends above.
     /// </summary>
@@ -45,8 +46,8 @@ namespace ModernDrone.Editor
             // ---- Cameras (thermal cores are offered for night missions; the first one is the night default)
             new Def { id = "Cam_Analog", set = p => Camera(p, "Аналоговая starlight 1200TVL", "5.9 г, 165°, 8 мс", 0.006f, false, Vector2Int.zero, 0f) },
             new Def { id = "Cam_Thermal384", set = p => Camera(p, "Тепловизор 384×288, 4 мм", "73.5 г, поле 60°, стандарт ночных FPV", 0.0735f, true, new Vector2Int(384, 288), 60f) },
-            new Def { id = "Cam_Thermal256", set = p => Camera(p, "Тепловизор 256×192, 4 мм", "~35 г (оценка), поле 42°, крупное зерно", 0.035f, true, new Vector2Int(256, 192), 42f) },
-            new Def { id = "Cam_Thermal640", set = p => Camera(p, "Тепловизор 640×512, 9 мм", "~100 г (оценка), поле 49°, детально издали", 0.1f, true, new Vector2Int(640, 512), 49f) },
+            new Def { id = "Cam_Thermal256", set = p => Camera(p, "Тепловизор 256×192, 4 мм", "60 г (Caddx IRC-256SL), поле 42°, крупное зерно", 0.06f, true, new Vector2Int(256, 192), 42f) },
+            new Def { id = "Cam_Thermal640", set = p => Camera(p, "Тепловизор 640×512, 9 мм", "60.5 г (Caddx IRC-640CA), поле 49°, детально издали", 0.0605f, true, new Vector2Int(640, 512), 49f) },
 
             // ---- Propellers
             new Def { id = "Prop_3Blade", set = p => Props(p, "Трёхлопастные (стандарт)", "баланс тяги и отклика", 1f, 1f, 1f, 1f) },
@@ -58,9 +59,9 @@ namespace ModernDrone.Editor
             new Def { id = "Vtx_58_2500", set = p => Radio(p, "5.8 ГГц 2.5 Вт", "дальность ×1.8, листва всё так же гасит (масса — оценка)", 0.035f, 1.77f, 0.8f) },
             new Def { id = "Vtx_33_2000", set = p => Radio(p, "3.3 ГГц 2 Вт", "дальность ×2.8, лучше проходит листву (масса — оценка)", 0.045f, 2.8f, 0.87f) },
             new Def { id = "Vtx_12_1500", set = p => Radio(p, "1.2 ГГц 1.5 Вт", "дальность ×6.6, почти не теряется в листве (масса — оценка)", 0.06f, 6.6f, 0.93f) },
-            new Def { id = "Fiber_5", set = p => Fiber(p, "Оптоволокно 5 км", "не глушится; катушка 0.35 кг", 0.35f, 5000f) },
-            new Def { id = "Fiber_10", set = p => Fiber(p, "Оптоволокно 10 км", "не глушится; катушка 0.6 кг (оценка)", 0.6f, 10000f) },
-            new Def { id = "Fiber_20", set = p => Fiber(p, "Оптоволокно 20 км", "не глушится; катушка 1.1 кг (оценка)", 1.1f, 20000f) },
+            new Def { id = "Fiber_5", set = p => Fiber(p, "Оптоволокно 5 км", "не глушится; катушка 0.55 кг", 0.55f, 5000f) },
+            new Def { id = "Fiber_10", set = p => Fiber(p, "Оптоволокно 10 км", "не глушится; катушка 1.0 кг", 1.0f, 10000f) },
+            new Def { id = "Fiber_20", set = p => Fiber(p, "Оптоволокно 20 км", "не глушится; катушка 1.9 кг", 1.9f, 20000f) },
         };
 
         public const string Fpv7Battery = "Bat_LiIon18650_2P";

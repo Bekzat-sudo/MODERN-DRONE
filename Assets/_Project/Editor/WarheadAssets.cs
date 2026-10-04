@@ -19,7 +19,7 @@ namespace ModernDrone.Editor
             {
                 w.displayName = "Кумулятивная";
                 w.kind = WarheadKind.ShapedCharge;
-                w.mass = 0.5f;
+                w.mass = 2.2f; // PG-7 grenade on an FPV, 2.2 kg (war-sanctions.gur.gov.ua/en/uav/486, KVN)
                 w.length = 0.3f;
             });
             Ensure(TandemPath, w =>
@@ -28,7 +28,7 @@ namespace ModernDrone.Editor
                 w.kind = WarheadKind.ShapedCharge;
                 w.tandem = true;
                 w.penetration = 300f;
-                w.mass = 0.8f;
+                w.mass = 4.5f; // PG-7VR tandem, 4.5 kg (en.wikipedia.org/wiki/RPG-7): a load for 10" and up
                 w.length = 0.4f;
             });
             Ensure(FragmentationPath, w =>
@@ -38,7 +38,7 @@ namespace ModernDrone.Editor
                 w.blastRadius = 6f;
                 w.blastDamage = 90f;
                 w.fragmentPenetration = 25f;
-                w.mass = 0.4f;
+                w.mass = 1.35f; // OG-7V fragmentation grenade, 1.35 kg (vmz.bg, OG-7V)
                 w.length = 0.2f;
             });
             AssetDatabase.SaveAssets();
@@ -55,12 +55,15 @@ namespace ModernDrone.Editor
             return w;
         }
 
+        /// <summary>Creates the preset if needed and (re)applies its values, so they stay defined in code.</summary>
         static void Ensure(string path, System.Action<WarheadData> setup)
         {
-            if (AssetDatabase.LoadAssetAtPath<WarheadData>(path) != null) return;
-            var w = ScriptableObject.CreateInstance<WarheadData>();
+            var w = AssetDatabase.LoadAssetAtPath<WarheadData>(path);
+            bool created = w == null;
+            if (created) w = ScriptableObject.CreateInstance<WarheadData>();
             setup(w);
-            AssetDatabase.CreateAsset(w, path);
+            if (created) AssetDatabase.CreateAsset(w, path);
+            else EditorUtility.SetDirty(w);
         }
     }
 }
