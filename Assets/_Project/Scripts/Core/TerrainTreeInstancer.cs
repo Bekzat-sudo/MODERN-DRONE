@@ -53,7 +53,7 @@ namespace ModernDrone.Core
             var protos = data.treePrototypes;
             if (protos.Length == 0) return;
 
-            // Render-only templates: the prefabs without their colliders, under an inactive holder.
+            // Render templates under an inactive holder (each placed tree is a copy of one).
             var holder = new GameObject("TreeTemplates");
             holder.SetActive(false);
             holder.transform.SetParent(transform, false);
@@ -62,7 +62,8 @@ namespace ModernDrone.Core
             {
                 if (protos[i].prefab == null) continue;
                 templates[i] = Instantiate(protos[i].prefab, holder.transform);
-                foreach (var c in templates[i].GetComponentsInChildren<Collider>(true)) DestroyImmediate(c);
+                // The root capsule (the trunk) stays with the terrain collider; child colliders (a crown) go with each tree.
+                foreach (var c in templates[i].GetComponents<Collider>()) DestroyImmediate(c);
                 if (templates[i].GetComponent<LODGroup>() == null) AddCull(templates[i]);
             }
 

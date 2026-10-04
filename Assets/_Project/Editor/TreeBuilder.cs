@@ -343,11 +343,21 @@ namespace ModernDrone.Editor
         {
             var lods = Generate(sp, variant);
             var b0 = lods[0].bounds;
-            return SaveLodPrefab($"{sp.kind}_{variant}", lods, bark, leaves, Mathf.Min(b0.extents.x, b0.extents.z) * 0.6f);
+            // Trunk as Generate builds it (1.25 % of the height, flared at the foot); the crown from the leaf cards'
+            // extent, a little inside it (the outer twigs do not stop a drone, the branches behind them do).
+            float height = b0.size.y;
+            return SaveLodPrefab($"{sp.kind}_{variant}", lods, bark, leaves, height * 0.0125f * 1.3f,
+                Mathf.Min(b0.extents.x, b0.extents.z) * 0.8f, height * sp.crownBase);
         }
 
-        /// <summary>Prefab with a cross-fading LOD group over three meshes and a capsule collider on the root.</summary>
-        static GameObject SaveLodPrefab(string name, Mesh[] lods, Material bark, Material leaves, float colliderRadius)
+        /// <summary>
+        /// Prefab with a cross-fading LOD group over three meshes, the trunk capsule on the root (the one collider a
+        /// terrain tree may have: the terrain collider keeps it) and, for a tree with leaves, the crown as a capsule on a
+        /// child (TerrainTreeInstancer gives each placed tree that one). One capsule for both had put a ~2 m wall around a
+        /// 25 cm trunk at drone height and left the crown's edge open.
+        /// </summary>
+        static GameObject SaveLodPrefab(string name, Mesh[] lods, Material bark, Material leaves, float trunkRadius,
+            float crownRadius = 0f, float crownBase = 0f)
         {
             foreach (var m in lods) EditorUtility.SetDirty(m);
             var root = new GameObject(name);
@@ -382,12 +392,20 @@ namespace ModernDrone.Editor
             group.SetLODs(new[] { new LOD(0.25f, new[] { renderers[0], proxies[0] }), new LOD(0.08f, new[] { renderers[1], proxies[1] }), new LOD(0.004f, new[] { renderers[2] }) });
             group.RecalculateBounds();
 
-            // Drone-stopping crown or trunk (terrain tree colliders must be one capsule on the root).
             var b = lods[0].bounds;
             var col = root.AddComponent<CapsuleCollider>();
-            col.radius = colliderRadius;
+            col.radius = trunkRadius;
             col.height = b.size.y;
-            col.center = new Vector3(0f, b.center.y, 0f);
+            col.center = new Vector3(0f, b.size.y * 0.5f, 0f);
+            if (crownRadius > 0f)
+            {
+                var crown = new GameObject("Crown").AddComponent<CapsuleCollider>();
+                crown.transform.SetParent(root.transform, false);
+                float h = Mathf.Max(b.size.y - crownBase, crownRadius * 2f);
+                crown.radius = crownRadius;
+                crown.height = h;
+                crown.center = new Vector3(0f, b.size.y - h * 0.5f, 0f);
+            }
 
             root.layer = ModernDrone.Core.GameLayers.Environment;
             foreach (Transform t in root.transform) t.gameObject.layer = root.layer;
