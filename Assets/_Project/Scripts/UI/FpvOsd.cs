@@ -111,7 +111,7 @@ namespace ModernDrone.UI
                 }
             }
 
-            if (osd.crosshair) DrawCrosshair(f.center.x, f.center.y, h * 0.02f);
+            if (osd.crosshair) Crosshair.Draw(new Vector2(f.center.x, f.center.y + osd.crosshairOffset * 0.01f * h), h * 0.02f, osd);
             if (osd.chargeAxis) DrawChargeAxis(h);
             if (t.armed && !t.crashed) DrawThreat(f.width, h, f.x);
             if (osd.horizon) DrawHorizon(f, t);
@@ -225,14 +225,6 @@ namespace ModernDrone.UI
             Vector2 side = new Vector2(-dir.y, dir.x) * size * 0.7f;
             Line(tip, tip - dir * size * 1.4f + side, 3f);
             Line(tip, tip - dir * size * 1.4f - side, 3f);
-        }
-
-        void DrawCrosshair(float cx, float cy, float size)
-        {
-            float thick = Mathf.Max(2f, size * 0.12f);
-            Line(new Vector2(cx - size * 2f, cy), new Vector2(cx - size * 0.6f, cy), thick);
-            Line(new Vector2(cx + size * 0.6f, cy), new Vector2(cx + size * 2f, cy), thick);
-            Line(new Vector2(cx, cy - size * 0.6f), new Vector2(cx, cy - size * 0.2f), thick);
         }
 
         /// <summary>

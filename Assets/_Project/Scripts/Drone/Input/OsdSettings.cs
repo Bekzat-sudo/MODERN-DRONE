@@ -50,11 +50,33 @@ namespace ModernDrone.Drone
     /// Betaflight-style layout and a minimal one as seen on strike-drone feeds (flight mode top centre, artificial
     /// horizon, crosshair, throttle at the right, craft name at the bottom).
     /// </summary>
+    /// <summary>Shape of the aiming mark (see UI.Crosshair).</summary>
+    public enum CrosshairStyle { Classic, Cross, Dot, Circle, CircleDot, Chevron, Brackets }
+
     [Serializable]
     public sealed class OsdSettings
     {
         public List<OsdEntry> entries = Minimal();
         public bool crosshair = true;
+        public CrosshairStyle crosshairStyle = CrosshairStyle.Classic;
+        [UnityEngine.Tooltip("Size, line weight and centre gap: multiples of the default mark.")]
+        public float crosshairSize = 1f, crosshairThickness = 1f, crosshairGap = 1f;
+        [UnityEngine.Tooltip("Index into UI.Crosshair.ColorNames: white, green, yellow, cyan, red, black.")]
+        public int crosshairColor;
+        public bool crosshairOutline = true;
+        public float crosshairOpacity = 1f;
+        [UnityEngine.Tooltip("Vertical shift of the mark, % of the screen height (down is positive): aim where the charge goes on a tilted camera.")]
+        public float crosshairOffset;
+
+        /// <summary>Back to the stock mark (style, size, colour, offset).</summary>
+        public void ResetCrosshair()
+        {
+            crosshairStyle = CrosshairStyle.Classic;
+            crosshairSize = crosshairThickness = crosshairGap = crosshairOpacity = 1f;
+            crosshairColor = 0;
+            crosshairOutline = true;
+            crosshairOffset = 0f;
+        }
         public bool horizon = true;
         [UnityEngine.Tooltip("Betaflight horizon sidebars: short vertical scales left and right of the centre.")]
         public bool sidebars;

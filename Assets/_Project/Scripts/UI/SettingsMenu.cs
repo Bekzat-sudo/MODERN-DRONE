@@ -383,7 +383,17 @@ namespace ModernDrone.UI
             _rows.Add(MenuRow.Text("Текст позывного", () => osd.craftName, v => osd.craftName = v, 16, CraftNameChar));
             _rows[_rows.Count - 1].Note = "Enter — редактировать. Латиница, цифры и « -_.!», до 16 символов: шрифт аналогового OSD (MAX7456) другого не умеет.";
             _rows.Add(MenuRow.Header("Графика"));
-            _rows.Add(MenuRow.Toggle("Прицельный крест", () => osd.crosshair, v => osd.crosshair = v));
+            _rows.Add(MenuRow.Toggle("Прицел", () => osd.crosshair, v => osd.crosshair = v));
+            _rows.Add(MenuRow.Choice("  Форма", Crosshair.StyleNames, () => (int)osd.crosshairStyle, v => osd.crosshairStyle = (CrosshairStyle)v));
+            _rows.Add(MenuRow.Slider("  Размер", () => osd.crosshairSize, v => osd.crosshairSize = v, 0.4f, 2.5f, 0.1f, "0.0"));
+            _rows.Add(MenuRow.Slider("  Толщина линий", () => osd.crosshairThickness, v => osd.crosshairThickness = v, 0.4f, 3f, 0.1f, "0.0"));
+            _rows.Add(MenuRow.Slider("  Разрыв в центре", () => osd.crosshairGap, v => osd.crosshairGap = v, 0f, 2.5f, 0.1f, "0.0"));
+            _rows.Add(MenuRow.Choice("  Цвет", Crosshair.ColorNames, () => osd.crosshairColor, v => osd.crosshairColor = v));
+            _rows.Add(MenuRow.Toggle("  Обводка", () => osd.crosshairOutline, v => osd.crosshairOutline = v));
+            _rows.Add(MenuRow.Slider("  Непрозрачность", () => osd.crosshairOpacity, v => osd.crosshairOpacity = v, 0.2f, 1f, 0.05f, "0.00"));
+            _rows.Add(MenuRow.Slider("  Смещение вниз, % экрана", () => osd.crosshairOffset, v => osd.crosshairOffset = v, -10f, 10f, 0.5f, "0.0"));
+            _rows[_rows.Count - 1].Note = "Опустите прицел туда, куда уходит струя заряда: у камеры, наклонённой вверх, это ниже центра (ориентир — «Ось заряда»).";
+            _rows.Add(MenuRow.Button("  Сбросить прицел", () => { osd.ResetCrosshair(); BuildRows(); }));
             _rows.Add(MenuRow.Toggle("Искусственный горизонт", () => osd.horizon, v => osd.horizon = v));
             _rows.Add(MenuRow.Toggle("Боковые шкалы горизонта", () => osd.sidebars, v => osd.sidebars = v));
             _rows.Add(MenuRow.Toggle("Ось заряда", () => osd.chargeAxis, v => osd.chargeAxis = v));
@@ -459,6 +469,17 @@ namespace ModernDrone.UI
             {
                 int newTab = UiTheme.Tabs(tabs, Tabs, _tab, ControlInput.Key("Q", "LB"), ControlInput.Key("E", "RB"), 0x5e7);
                 if (newTab != _tab) SwitchTab(newTab);
+                if (_tab == 7)
+                {
+                    // OSD tab: a live preview of the aiming mark over a dark "video" square at the right.
+                    float size = Mathf.Min(UiTheme.Px(300f), body.height * 0.6f);
+                    var preview = new Rect(body.xMax - size, body.y + UiTheme.Px(UiTheme.S2), size, size);
+                    body.width -= size + UiTheme.Px(UiTheme.S5);
+                    UiTheme.Fill(preview, new Color(0.16f, 0.18f, 0.16f));
+                    UiTheme.Fill(new Rect(preview.x, preview.center.y + size * 0.12f, preview.width, preview.height * 0.38f), new Color(0.22f, 0.2f, 0.15f));
+                    var osd = S.osd;
+                    if (osd.crosshair) Crosshair.Draw(new Vector2(preview.center.x, preview.center.y + osd.crosshairOffset * 0.01f * Screen.height), Screen.height * 0.02f, osd);
+                }
                 _gui.DrawRows(body, _rows, ref _selected, focused: _capture == null);
 
                 string text = MenuGui.FocusedNote(_rows, _selected);
