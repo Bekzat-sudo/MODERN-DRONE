@@ -346,7 +346,8 @@ namespace ModernDrone.Drone
             }
 
             // Motors: command is sqrt of desired thrust fraction (thrust ~ rpm^2), first-order lag on speed.
-            float available = maxThrust * _battery.ThrustFactor;
+            float sag = _battery.ThrustFactor;
+            float available = maxThrust * sag;
             float axialSpeed = Vector3.Dot(_rb.linearVelocity, up);
             float inflow = Mathf.Clamp(1f - Mathf.Max(0f, axialSpeed) / config.propPitchSpeed, 0.05f, 1f);
             float current = 0f;
@@ -363,7 +364,8 @@ namespace ModernDrone.Drone
                 _rb.AddForceAtPosition(up * thrust, transform.TransformPoint(QuadMixer.MotorPosition(i, config.ArmOffset)));
 
                 yawTorque += config.yawTorqueCoefficient * QuadMixer.Spin[i] * thrust;
-                current += config.maxCurrentPerMotor * _spin[i] * _spin[i] * _spin[i];
+                // Prop power ~ rpm^3 and rpm ~ V * command, so I = P / V ~ V^2 * command^3: a sagging pack draws less.
+                current += config.maxCurrentPerMotor * _spin[i] * _spin[i] * _spin[i] * sag;
             }
             _rb.AddRelativeTorque(0f, yawTorque, 0f);
 

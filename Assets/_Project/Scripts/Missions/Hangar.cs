@@ -231,7 +231,7 @@ namespace ModernDrone.Missions
                 minutes = DroneBuild.HoverMinutes(cfg, payload),
                 range = link == null ? "—" : link.fiber ? $"{link.spoolLength / 1000f:0} км кабель" : $"{RadioParams.Default.videoRangeEnd * link.videoRangeScale / 1000f:0.0} км"
             };
-            s.twr = cfg.frameMass * cfg.thrustToWeight / s.mass;
+            s.twr = cfg.LoadedThrustToWeight(s.mass); // under load: what the pilot gets, not the motor rating
             if (cfg != Model) UnityEngine.Object.Destroy(cfg);
             return s;
         }
@@ -460,7 +460,8 @@ namespace ModernDrone.Missions
             // Resulting drone
             float g = UiTheme.Px(UiTheme.S3), cw = (a.footer.width - 3f * g) / 4f;
             UiTheme.Stat(new Rect(a.footer.x, a.footer.y, cw, a.footer.height), "ВЗЛЁТНАЯ МАССА", $"{_current.mass:0.00} кг", UiTheme.TextPrimary);
-            UiTheme.Stat(new Rect(a.footer.x + (cw + g), a.footer.y, cw, a.footer.height), "ТЯГА / ВЕС", $"{_current.twr:0.0}", UiTheme.TextPrimary);
+            UiTheme.Stat(new Rect(a.footer.x + (cw + g), a.footer.y, cw, a.footer.height), "ТЯГА / ВЕС", _current.twr < 1f ? "не взлетит" : $"{_current.twr:0.0}",
+                _current.twr < 1f ? UiTheme.Danger : _current.twr < 1.3f ? UiTheme.Warning : UiTheme.TextPrimary);
             UiTheme.Stat(new Rect(a.footer.x + 2f * (cw + g), a.footer.y, cw, a.footer.height), "ВИСЕНИЕ", $"~{_current.minutes:0} мин", UiTheme.TextPrimary);
             UiTheme.Stat(new Rect(a.footer.x + 3f * (cw + g), a.footer.y, cw, a.footer.height), "ДАЛЬНОСТЬ ВИДЕО", _current.range, UiTheme.TextPrimary);
 

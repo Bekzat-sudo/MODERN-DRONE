@@ -102,8 +102,12 @@ namespace ModernDrone.Tests
             float bare = cfg.HoverThrottleFor(cfg.frameMass);
             float loaded = cfg.HoverThrottleFor(cfg.frameMass + 0.5f);
             Assert.Greater(loaded, bare);
-            // thrust = throttle^2 * max must equal the loaded weight
-            Assert.AreEqual((cfg.frameMass + 0.5f) * 9.81f, loaded * loaded * thrust * QuadMixer.MotorCount, 0.05f);
+            // thrust under voltage sag at the hover throttle must equal the loaded weight
+            Assert.AreEqual((cfg.frameMass + 0.5f) * 9.81f, cfg.LoadedThrustFraction(loaded) * thrust * QuadMixer.MotorCount, 0.05f);
+            Assert.Greater(loaded, Mathf.Sqrt((cfg.frameMass + 0.5f) / (cfg.frameMass * cfg.thrustToWeight))); // sag costs throttle
+            // A 7" with a 2.2 kg PG-7 still lifts off; the 4.5 kg tandem is beyond it
+            Assert.Greater(cfg.LoadedThrustToWeight(cfg.frameMass + 2.2f), 1.3f);
+            Assert.Less(cfg.LoadedThrustToWeight(cfg.frameMass + 4.5f), 1f);
             Assert.AreEqual(thrust, cfg.MaxThrustPerMotor);
             var add = cfg.PayloadInertia(0.5f, 0.3f);
             Assert.Greater(add.x, add.z); // a long payload along the frame axis resists pitch more than roll

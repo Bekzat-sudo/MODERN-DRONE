@@ -98,10 +98,38 @@ namespace ModernDrone.Drone
         public float MaxThrustPerMotor => frameMass * Core.SimConstants.Gravity * thrustToWeight / QuadMixer.MotorCount;
         public float ArmOffset => motorDiagonal / (2f * Mathf.Sqrt(2f));
 
-        /// <summary>Throttle that hovers the bare airframe at full battery with thrust = throttle^2 * max.</summary>
+        /// <summary>Throttle that hovers the bare airframe on a full pack, voltage sag included.</summary>
         public float HoverThrottle => HoverThrottleFor(frameMass);
 
-        public float HoverThrottleFor(float mass) => Mathf.Sqrt(Mathf.Min(1f, mass / (frameMass * thrustToWeight)));
+        /// <summary>Throttle that hovers <paramref name="mass"/> on a full pack under load (1 if it cannot).</summary>
+        public float HoverThrottleFor(float mass)
+        {
+            float need = mass / (frameMass * thrustToWeight);
+            if (need >= LoadedThrustFraction(1f)) return 1f;
+            float lo = 0f, hi = 1f; // thrust rises with throttle over 0..1 for any realistic pack (sag k < ~1)
+            for (int i = 0; i < 20; i++)
+            {
+                float mid = 0.5f * (lo + hi);
+                if (LoadedThrustFraction(mid) < need) lo = mid; else hi = mid;
+            }
+            return 0.5f * (lo + hi);
+        }
+
+        /// <summary>Thrust-to-weight with <paramref name="mass"/> at full throttle on a full pack, voltage sag included.</summary>
+        public float LoadedThrustToWeight(float mass) => frameMass * thrustToWeight * LoadedThrustFraction(1f) / mass;
+
+        /// <summary>
+        /// Fraction of the configured maximum thrust at motor command <paramref name="throttle"/> on a full pack under
+        /// load: thrust ~ rpm^2 ~ (V * throttle)^2. Motor current follows prop power ~ rpm^3 (P = Cp rho n^3 D^5), so
+        /// I ~ V^2 * throttle^3, and the loaded voltage fraction x solves x = 1 - k * throttle^3 * x^2.
+        /// </summary>
+        public float LoadedThrustFraction(float throttle)
+        {
+            float a = internalResistance * maxCurrentPerMotor * QuadMixer.MotorCount / (BatteryModel.FullCellVoltage * cells)
+                      * throttle * throttle * throttle;
+            float x = a < 1e-6f ? 1f : (Mathf.Sqrt(1f + 4f * a) - 1f) / (2f * a);
+            return throttle * throttle * x * x;
+        }
 
         /// <summary>
         /// Payload modelled as a uniform rod along the frame axis hanging <see cref="payloadDepth"/> below the centre

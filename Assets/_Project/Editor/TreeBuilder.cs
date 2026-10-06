@@ -342,22 +342,84 @@ namespace ModernDrone.Editor
         static GameObject BuildPrefab(Species sp, int variant, Material bark, Material leaves)
         {
             var lods = Generate(sp, variant);
-            var b0 = lods[0].bounds;
-            // Trunk as Generate builds it (1.25 % of the height, flared at the foot); the crown from the leaf cards'
-            // extent, a little inside it (the outer twigs do not stop a drone, the branches behind them do).
-            float height = b0.size.y;
-            return SaveLodPrefab($"{sp.kind}_{variant}", lods, bark, leaves, height * 0.0125f * 1.3f,
-                Mathf.Min(b0.extents.x, b0.extents.z) * 0.8f, height * sp.crownBase);
+            // Trunk as Generate builds it (1.25 % of the height, flared at the foot); the crown hull from the leaf cards.
+            string name = $"{sp.kind}_{variant}";
+            return SaveLodPrefab(name, lods, bark, leaves, lods[0].bounds.size.y * 0.0125f * 1.3f, CrownHull(lods[0], name));
+        }
+
+        /// <summary>
+        /// Crown hitbox: in each of 10 height bands a ring at the radius holding 70 % of the leaf cards' centres there,
+        /// lofted from the lowest to the highest card into a spindle (a convex collider). It sits ~0.4 m inside the
+        /// bulk of the leaves (the outer twigs do not stop a drone, the branches behind them do) and follows the
+        /// crown's taper: the capsule it replaces was a cylinder that stood up to 1.2 m clear of a poplar's or a
+        /// locust's top and bottom (measured on the LOD0 meshes against the cards' 80th-percentile radius).
+        /// </summary>
+        static Mesh CrownHull(Mesh mesh, string name)
+        {
+            const int Bands = 10, Sides = 8;
+            var verts = mesh.vertices;
+            var tris = mesh.GetTriangles(1); // submesh 1: leaf cards
+            var centres = new Vector3[tris.Length / 3];
+            float lo = float.MaxValue, hi = float.MinValue;
+            for (int i = 0; i < centres.Length; i++)
+            {
+                var c = (verts[tris[3 * i]] + verts[tris[3 * i + 1]] + verts[tris[3 * i + 2]]) / 3f;
+                centres[i] = c;
+                lo = Mathf.Min(lo, c.y);
+                hi = Mathf.Max(hi, c.y);
+            }
+            var radii = new List<float>[Bands];
+            for (int b = 0; b < Bands; b++) radii[b] = new List<float>();
+            foreach (var c in centres)
+                radii[Mathf.Clamp((int)((c.y - lo) / (hi - lo) * Bands), 0, Bands - 1)].Add(new Vector2(c.x, c.z).magnitude);
+
+            var points = new List<Vector3> { new Vector3(0f, lo, 0f) };
+            int rings = 0;
+            for (int b = 0; b < Bands; b++)
+            {
+                if (radii[b].Count < 8) continue;
+                radii[b].Sort();
+                float r = radii[b][(int)(0.7f * (radii[b].Count - 1))], y = lo + (b + 0.5f) * (hi - lo) / Bands;
+                for (int s = 0; s < Sides; s++)
+                {
+                    float a = s * Mathf.PI * 2f / Sides;
+                    points.Add(new Vector3(Mathf.Cos(a) * r, y, Mathf.Sin(a) * r));
+                }
+                rings++;
+            }
+            points.Add(new Vector3(0f, hi, 0f));
+            int top = points.Count - 1;
+            var idx = new List<int>();
+            for (int s = 0; s < Sides; s++)
+            {
+                int n = (s + 1) % Sides;
+                idx.AddRange(new[] { 0, 1 + n, 1 + s });
+                for (int k = 0; k < rings - 1; k++)
+                {
+                    int a0 = 1 + k * Sides, a1 = a0 + Sides;
+                    idx.AddRange(new[] { a0 + s, a0 + n, a1 + n, a0 + s, a1 + n, a1 + s });
+                }
+                int last = 1 + (rings - 1) * Sides;
+                idx.AddRange(new[] { top, last + s, last + n });
+            }
+            var hull = MeshAsset(name + "_Crown");
+            hull.Clear();
+            hull.SetVertices(points);
+            hull.SetTriangles(idx, 0);
+            hull.RecalculateBounds();
+            hull.RecalculateNormals();
+            EditorUtility.SetDirty(hull);
+            return hull;
         }
 
         /// <summary>
         /// Prefab with a cross-fading LOD group over three meshes, the trunk capsule on the root (the one collider a
-        /// terrain tree may have: the terrain collider keeps it) and, for a tree with leaves, the crown as a capsule on a
-        /// child (TerrainTreeInstancer gives each placed tree that one). One capsule for both had put a ~2 m wall around a
+        /// terrain tree may have: the terrain collider keeps it) and, for a tree with leaves, the crown hull as a convex
+        /// mesh collider on a child (TerrainTreeInstancer gives each placed tree that one). One capsule for both had put a ~2 m wall around a
         /// 25 cm trunk at drone height and left the crown's edge open.
         /// </summary>
         static GameObject SaveLodPrefab(string name, Mesh[] lods, Material bark, Material leaves, float trunkRadius,
-            float crownRadius = 0f, float crownBase = 0f)
+            Mesh crownHull = null)
         {
             foreach (var m in lods) EditorUtility.SetDirty(m);
             var root = new GameObject(name);
@@ -397,14 +459,12 @@ namespace ModernDrone.Editor
             col.radius = trunkRadius;
             col.height = b.size.y;
             col.center = new Vector3(0f, b.size.y * 0.5f, 0f);
-            if (crownRadius > 0f)
+            if (crownHull != null)
             {
-                var crown = new GameObject("Crown").AddComponent<CapsuleCollider>();
+                var crown = new GameObject("Crown").AddComponent<MeshCollider>();
                 crown.transform.SetParent(root.transform, false);
-                float h = Mathf.Max(b.size.y - crownBase, crownRadius * 2f);
-                crown.radius = crownRadius;
-                crown.height = h;
-                crown.center = new Vector3(0f, b.size.y - h * 0.5f, 0f);
+                crown.sharedMesh = crownHull;
+                crown.convex = true;
             }
 
             root.layer = ModernDrone.Core.GameLayers.Environment;

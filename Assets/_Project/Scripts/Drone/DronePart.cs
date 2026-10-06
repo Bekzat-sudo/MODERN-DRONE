@@ -95,11 +95,12 @@ namespace ModernDrone.Drone
             return cfg;
         }
 
-        /// <summary>Hover endurance on 80% of the pack, minutes (motor current follows the flight model: spin^3).</summary>
+        /// <summary>Hover endurance on 80% of the pack, minutes (motor current follows the flight model: V^2 * spin^3).</summary>
         public static float HoverMinutes(DroneConfig cfg, float payloadKg)
         {
             float spin = cfg.HoverThrottleFor(cfg.frameMass + payloadKg);
-            float amps = cfg.maxCurrentPerMotor * QuadMixer.MotorCount * spin * spin * spin;
+            // spin^3 * (V/Vfull)^2 = spin * thrust fraction
+            float amps = cfg.maxCurrentPerMotor * QuadMixer.MotorCount * spin * cfg.LoadedThrustFraction(spin);
             return amps <= 0f ? 0f : cfg.capacityMah / 1000f * 0.8f / amps * 60f;
         }
     }
