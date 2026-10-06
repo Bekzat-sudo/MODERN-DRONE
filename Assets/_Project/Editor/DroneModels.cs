@@ -82,14 +82,16 @@ namespace ModernDrone.Editor
             c.motorKv = 900f; // 3115 900 KV class for 10" (Hobbywing / DarwinFPV listings)
             c.propBlades = 3;
             // 10" frame 0.22-0.27 kg (GEPRC Mark4 10"), four 3115 motors 4 x 116 g (T-Motor V3115), 10" props 4 x 23 g,
-            // ESC, FC, wiring: ~0.86 kg, as the SkyCraft RMD-10 without its battery (865 g). Thrust follows (TWR 6.5 on
-            // the stock build): ~2.9 kgf per motor, inside the 3.5-4.6 kgf a 3115 900 KV gives on 10" props (T-Motor).
+            // ESC, FC, wiring: ~0.86 kg, as the SkyCraft RMD-10 without its battery (865 g). Thrust: ~4.0 kgf per motor,
+            // mid-range of the 3.5-4.6 kgf a 3115 900 KV gives on 10" props (T-Motor) - TWR 9 on the 1.79 kg stock build.
+            // With pack sag that lifts the 4.5 kg PG-7VR at ~1.45, as 10" strike drones carry it ("Piranha 10": payload
+            // up to 4.5 kg, PG-7VR; www1.ru 2024-02-29). The earlier 2.9 kgf left it at 1.05 (30 km/h top speed).
             c.airframeMass = 0.86f;
             c.motorDiagonal = 0.495f;
             c.inertia = new Vector3(0.03f, 0.05f, 0.03f);
             c.colliderSize = new Vector3(0.45f, 0.2f, 0.45f);
             c.payloadDepth = 0.06f;
-            c.thrustToWeight = 6.5f;
+            c.thrustToWeight = 9f;
             c.motorTauUp = 0.04f;
             c.motorTauDown = 0.06f;
             c.yawTorqueCoefficient = 0.02f;
