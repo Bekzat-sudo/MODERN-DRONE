@@ -170,6 +170,7 @@ namespace ModernDrone.Missions
         {
             Phase = MissionPhase.Flying;
             _input.Suspended = false;
+            drone.Launch(); // an aeroplane is released at cruise speed
             if (killcam != null) killcam.BeginRecording(drone.transform);
         }
 
@@ -237,7 +238,8 @@ namespace ModernDrone.Missions
             }
             if (_link != null)
             {
-                if (link != null) _link.ApplyPart(link);
+                if (drone.Config.satelliteLink) _link.SetType(LinkType.Satellite);
+                else if (link != null) _link.ApplyPart(link);
                 else _link.SetType(fiber ? LinkType.Fiber : LinkType.Radio);
             }
             if (!_convoysStarted)
@@ -393,7 +395,7 @@ namespace ModernDrone.Missions
         void DrawStatusStrip(float w)
         {
             var t = UiTheme.T;
-            string kind = _link != null && _link.Type == LinkType.Fiber ? "оптоволокно" : "радио";
+            string kind = _link == null ? "радио" : _link.Type == LinkType.Fiber ? "оптоволокно" : _link.Type == LinkType.Satellite ? "спутник" : "радио";
             int done = TargetsDone;
             string Val(string v, Color c) => UiTheme.Colored(v, c);
             string text = $"ДРОН {Val($"{_sortiesFlown + 1}/{Sorties}", UiTheme.TextPrimary)} {Val(kind, UiTheme.TextBody)}     "

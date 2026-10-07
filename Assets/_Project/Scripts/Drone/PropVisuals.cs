@@ -23,9 +23,13 @@ namespace ModernDrone.Drone
         {
             if (drone == null) return;
             var spin = drone.MotorSpin;
+            bool pusher = drone.Config != null && drone.Config.fixedWing; // one prop on the flight axis
             for (int i = 0; i < props.Length && i < spin.Length; i++)
                 if (props[i] != null)
-                    props[i].Rotate(0f, QuadMixer.Spin[i] * spin[i] * maxVisualSpin * Time.deltaTime, 0f, Space.Self);
+                {
+                    var axis = pusher ? props[i].InverseTransformDirection(drone.transform.forward) : Vector3.up;
+                    props[i].Rotate(axis, QuadMixer.Spin[i] * spin[i] * maxVisualSpin * Time.deltaTime, Space.Self);
+                }
         }
     }
 }

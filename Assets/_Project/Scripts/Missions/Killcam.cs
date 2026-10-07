@@ -67,6 +67,7 @@ namespace ModernDrone.Missions
         ModernDrone.Drone.DroneController _trackedDrone;
         GameObject _ghost;
         Transform[] _ghostProps = new Transform[0];
+        bool _ghostPusher;
         float _ghostPropSpin;
         readonly System.Collections.Generic.List<Behaviour> _hiddenLights = new System.Collections.Generic.List<Behaviour>();
         readonly System.Collections.Generic.List<Renderer> _hiddenFx = new System.Collections.Generic.List<Renderer>();
@@ -307,7 +308,10 @@ namespace ModernDrone.Missions
                 // scrubbing back, like rewound video).
                 for (int i = 0; i < _ghostProps.Length && i < 4; i++)
                     if (_ghostProps[i] != null)
-                        _ghostProps[i].Rotate(0f, ModernDrone.Drone.QuadMixer.Spin[i] * pose.motors[i] * _ghostPropSpin * _replayRate * Time.unscaledDeltaTime, 0f, Space.Self);
+                    {
+                        var axis = _ghostPusher ? _ghostProps[i].InverseTransformDirection(_ghost.transform.forward) : Vector3.up;
+                        _ghostProps[i].Rotate(axis, ModernDrone.Drone.QuadMixer.Spin[i] * pose.motors[i] * _ghostPropSpin * _replayRate * Time.unscaledDeltaTime, Space.Self);
+                    }
                 PoseVehicles(_replayTime);
                 Vector3 aim = Vector3.Lerp(focus, pose.position, 0.5f);
                 Vector3 camPos = MovedRecon(focus, reconPos);
@@ -377,6 +381,8 @@ namespace ModernDrone.Missions
             var visuals = _tracked.GetComponentInChildren<ModernDrone.Drone.PropVisuals>(true);
             var props = visuals != null ? visuals.Props : new Transform[0];
             _ghostPropSpin = visuals != null ? visuals.MaxVisualSpin : 0f;
+            var flown = _tracked.GetComponent<ModernDrone.Drone.DroneController>();
+            _ghostPusher = flown != null && flown.Config != null && flown.Config.fixedWing; // prop on the flight axis
             _ghostProps = new Transform[props.Length];
             for (int i = 0; i < props.Length; i++)
             {

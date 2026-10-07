@@ -21,7 +21,8 @@ namespace ModernDrone.UI
         public static void Draw(Vector2 centre, float unit, OsdSettings osd)
         {
             float s = unit * Mathf.Clamp(osd.crosshairSize, 0.3f, 3f);
-            float w = Mathf.Max(1.5f, s * 0.12f * Mathf.Clamp(osd.crosshairThickness, 0.3f, 4f));
+            // At least 2 px: Betaflight's glyph strokes are ~2 px on a 720 x 576 frame; thinner strokes break up.
+            float w = Mathf.Max(2f, s * 0.14f * Mathf.Clamp(osd.crosshairThickness, 0.3f, 4f));
             float g = s * 0.6f * Mathf.Clamp(osd.crosshairGap, 0f, 3f);
             var c = Colors[Mathf.Clamp(osd.crosshairColor, 0, Colors.Length - 1)];
             c.a = Mathf.Clamp(osd.crosshairOpacity, 0.1f, 1f);
@@ -95,23 +96,50 @@ namespace ModernDrone.UI
             GUI.matrix = matrix;
         }
 
-        static void Dot(Vector2 c, float size, Color color)
+        /// <summary>Round dot (an anti-aliased disc, like an OSD glyph rather than a square).</summary>
+        static void Dot(Vector2 c, float size, Color color) => Disc(c, Mathf.Max(1.5f, size * 0.5f) + _grow, 0f, color);
+
+        /// <summary>Solid anti-aliased ring; one texture, so no seams or notches between segments.</summary>
+        static void Ring(Vector2 c, float radius, float w, Color color) => Disc(c, radius, w + 2f * _grow, color);
+
+        /// <summary>A ring of <paramref name="radius"/> and stroke <paramref name="width"/> (0 = filled disc), outlined when asked.</summary>
+        public static void Ring(Vector2 c, float radius, float width, Color color, bool outline)
         {
-            var prev = GUI.color;
-            GUI.color = color;
-            float h = size * 0.5f + _grow;
-            GUI.DrawTexture(new Rect(c.x - h, c.y - h, 2f * h, 2f * h), Texture2D.whiteTexture);
-            GUI.color = prev;
+            _grow = 0f;
+            if (outline) Disc(c, radius, width > 0f ? width + 2f : 0f, new Color(0f, 0f, 0f, 0.8f * color.a), width > 0f ? 0f : 1f);
+            Disc(c, radius, width, color);
         }
 
-        static void Ring(Vector2 c, float radius, float w, Color color)
+        static readonly System.Collections.Generic.Dictionary<(int, int), Texture2D> Discs = new System.Collections.Generic.Dictionary<(int, int), Texture2D>();
+
+        static void Disc(Vector2 c, float radius, float width, Color color, float extra = 0f)
         {
-            const int Segments = 28;
-            for (int i = 0; i < Segments; i++)
+            radius += extra;
+            // Cached per quarter-pixel radius / width, coverage computed per pixel for a soft 1 px edge.
+            var key = (Mathf.RoundToInt(radius * 4f), Mathf.RoundToInt(width * 4f));
+            if (!Discs.TryGetValue(key, out var tex) || tex == null)
             {
-                float a0 = i * Mathf.PI * 2f / Segments, a1 = (i + 1.08f) * Mathf.PI * 2f / Segments;
-                Line(c + new Vector2(Mathf.Cos(a0), Mathf.Sin(a0)) * radius, c + new Vector2(Mathf.Cos(a1), Mathf.Sin(a1)) * radius, w, color);
+                float r = key.Item1 / 4f, wq = key.Item2 / 4f, outer = r + wq * 0.5f;
+                int size = (Mathf.CeilToInt(outer) + 2) * 2; // even, so the centre sits on a pixel corner
+                // Drawn 1:1 on whole pixels; the soft edge is in the coverage, not in texture filtering.
+                tex = new Texture2D(size, size, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.HideAndDontSave };
+                var px = new Color32[size * size];
+                float mid = size * 0.5f;
+                for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float d = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(mid, mid));
+                    float a = wq > 0f ? Mathf.Clamp01(wq * 0.5f + 0.5f - Mathf.Abs(d - r)) : Mathf.Clamp01(r + 0.5f - d);
+                    px[y * size + x] = new Color32(255, 255, 255, (byte)(a * 255f));
+                }
+                tex.SetPixels32(px);
+                tex.Apply();
+                Discs[key] = tex;
             }
+            var prev = GUI.color;
+            GUI.color = color;
+            GUI.DrawTexture(new Rect(Mathf.Round(c.x) - tex.width / 2, Mathf.Round(c.y) - tex.height / 2, tex.width, tex.height), tex);
+            GUI.color = prev;
         }
     }
 }

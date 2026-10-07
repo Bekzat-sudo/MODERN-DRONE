@@ -8,7 +8,12 @@ namespace ModernDrone.Video
         /// <summary>Analog 5.8 GHz video + separate RC control link: range, line of sight and EW matter.</summary>
         Radio,
         /// <summary>Fiber-optic spool: immune to EW and terrain, limited by cable length.</summary>
-        Fiber
+        Fiber,
+        /// <summary>
+        /// Satellite terminal (Starlink, as on the Hornet: thepage.ua 2026): digital video and control with no range
+        /// limit and out of reach of the frontline FPV jammers; Starlink's 25-60 ms latency (starlink.com).
+        /// </summary>
+        Satellite
     }
 
     [Flags]
@@ -110,6 +115,9 @@ namespace ModernDrone.Video
 
         public static LinkQuality Fiber(float cableUsed, float spoolLength) =>
             cableUsed < spoolLength ? new LinkQuality { video = 1f, control = 1f } : default;
+
+        /// <summary>Control latency over a satellite link, s (Starlink 25-60 ms).</summary>
+        public const float SatelliteLatency = 0.05f;
 
         /// <summary>Added control latency from link quality, s (a clean link adds almost nothing).</summary>
         public static float ControlLatency(float controlQuality) =>

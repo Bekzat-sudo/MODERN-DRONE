@@ -61,6 +61,9 @@
 - **Mitsubishi L200** by [David_Holiday](https://sketchfab.com/3d-models/mitsubishi-l200-372e50454f3246239a5a1551f839f862) on Sketchfab,
   licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). `Assets/_Project/Art/Models/Vehicles/L200/l200.glb`
   (the interceptor-drone team's pickup); scaled to 5.0 m, joined, decimated LODs (`Tools/Blender/vehicle_import.py`).
+- **UAV Hornet** by [warmwork](https://sketchfab.com/3d-models/uav-hornet-6d46bc881fab4e34839ea36a4f5aed20) on Sketchfab, licensed under
+  [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). `Assets/_Project/Art/Models/Hornet/hornet.glb` (the fixed-wing strike drone);
+  the assembled copy kept, its top shell set back on, scaled to a 2.2 m span, pusher prop split out (`Tools/Blender/hornet_import.py`).
 - **FPV-dron NonStop** by [Viktor_](https://sketchfab.com/3d-models/fpv-dron-nonstop-c75dea6e3ae441ac87f292efb17f5bae) on Sketchfab,
   licensed under [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). `Assets/_Project/Art/Models/FPV_NonStop/nonstop.glb`;
   rescaled to 10" props, re-oriented, props split out, textures reduced to 2K.

@@ -126,7 +126,7 @@ namespace ModernDrone.Drone
 
         /// <summary>Bumped when defaults change in a way saved files must be migrated.</summary>
         public int version = CurrentVersion;
-        public const int CurrentVersion = 5;
+        public const int CurrentVersion = 6;
 
         public ControlDevice device = ControlDevice.Auto;
         [Tooltip("Display name of the preferred joystick; empty = first found.")]
@@ -300,6 +300,8 @@ namespace ModernDrone.Drone
             }
             if (s.version < 5 && s.gpThrottleMode == GamepadThrottleMode.CenterIsHover)
                 s.gpThrottleMode = GamepadThrottleMode.CenterIsZero; // v5: released stick = no throttle by default
+            if (s.version < 6 && s.osd != null)
+                s.osd.chargeAxis = false; // v6: off by default, Betaflight has no such element (the toggle stays)
             s.version = CurrentVersion;
             return s;
         }

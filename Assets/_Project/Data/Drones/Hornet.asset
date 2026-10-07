@@ -1,0 +1,91 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6b8669d5ef89d794faf1dc41d25281d1, type: 3}
+  m_Name: Hornet
+  m_EditorClassIdentifier: ModernDrone.Drone::ModernDrone.Drone.DroneConfig
+  displayName: Hornet
+  summary: "\u0434\u0430\u043B\u044C\u043D\u0438\u0439 \u0443\u0434\u0430\u0440\u043D\u044B\u0439 \u0434\u0440\u043E\u043D-\u0441\u0430\u043C\u043E\u043B\u0451\u0442, \u0441\u043F\u0443\u0442\u043D\u0438\u043A\u043E\u0432\u0430\u044F \u0441\u0432\u044F\u0437\u044C"
+  visualPrefab: {fileID: 8165839586903993064, guid: 43d80198b66751d45a40835e0bb87e89, type: 3}
+  cameraPosition: {x: 0, y: -0.07, z: 0.74}
+  batteryMount: {x: 0, y: 0.07, z: -0.03}
+  antennaMount: {x: 0, y: 0.06, z: -0.15}
+  spoolMount: {x: 0, y: -0.07, z: -0.08}
+  frameMass: 10
+  airframeMass: 10
+  stockParts: []
+  payloadDepth: 0.05
+  motorDiagonal: 0.3
+  inertia: {x: 1, y: 1.6, z: 0.8}
+  colliderSize: {x: 2.2, y: 0.3, z: 1.4}
+  thrustToWeight: 6.4
+  motorTauUp: 0.15
+  motorTauDown: 0.2
+  yawTorqueCoefficient: 0.016
+  motorKv: 300
+  propBlades: 3
+  propPitchSpeed: 40
+  dragArea: {x: 0.012, y: 0.045, z: 0.014}
+  angularDrag: 0.002
+  cells: 12
+  capacityMah: 30000
+  internalResistance: 0.02
+  maxCurrentPerMotor: 70
+  rollRates:
+    centerRate: 60
+    maxRate: 180
+    expo: 0.3
+  pitchRates:
+    centerRate: 40
+    maxRate: 90
+    expo: 0.3
+  yawRates:
+    centerRate: 20
+    maxRate: 50
+    expo: 0.2
+  setpointCutoffHz: 12
+  pitchPid:
+    kp: 18
+    ki: 6
+    kd: 0
+    iLimit: 40
+  rollPid:
+    kp: 18
+    ki: 6
+    kd: 0
+    iLimit: 40
+  yawPid:
+    kp: 12
+    ki: 4
+    kd: 0
+    iLimit: 20
+  maxAngle: 50
+  angleGain: 8
+  angleMaxRate: 120
+  cameraTilt: -10
+  cameraHorizontalFov: 70
+  fixedWing: 1
+  satelliteLink: 1
+  wingSpan: 2.2
+  wingArea: 0.55
+  liftAtZeroAlpha: 0.45
+  liftSlope: 5
+  maxLift: 1.2
+  zeroLiftDrag: 0.05
+  oswald: 0.8
+  sideForceSlope: 0.4
+  pitchStability: 0.3
+  yawStability: 0.15
+  staticThrust: 60
+  thrustPower: 2900
+  cruiseSpeed: 31
+  controlSpeed: 25
+  crashSpeed: 7

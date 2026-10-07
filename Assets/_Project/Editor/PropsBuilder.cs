@@ -99,10 +99,10 @@ namespace ModernDrone.Editor
         }
 
         /// <summary>A prop model; the heavy scans have a decimated "_low.glb" (Blender, 2.5-5k triangles), used when present.</summary>
-        static GameObject Model(string name) =>
+        internal static GameObject Model(string name) =>
             AssetDatabase.LoadAssetAtPath<GameObject>(Dir + $"{name}/{name}_low.glb") ?? AssetDatabase.LoadAssetAtPath<GameObject>(Dir + $"{name}/{name}.gltf");
 
-        static GameObject Place(Terrain t, Transform parent, GameObject asset, Vector3 at, float yaw, float scale = 1f, bool collider = false)
+        internal static GameObject Place(Terrain t, Transform parent, GameObject asset, Vector3 at, float yaw, float scale = 1f, bool collider = false)
         {
             var go = (GameObject)PrefabUtility.InstantiatePrefab(asset, parent);
             var p = Ground(t, at);
@@ -301,7 +301,7 @@ namespace ModernDrone.Editor
         static Material _net;
 
         /// <summary>Camouflage net draped over four poles about 1.8 m high, sagging between them, edges to the ground.</summary>
-        static void CamoNet(Terrain t, Transform parent, Vector3 at, float yaw)
+        internal static void CamoNet(Terrain t, Transform parent, Vector3 at, float yaw)
         {
             if (_net == null)
             {

@@ -80,7 +80,8 @@ namespace ModernDrone.Drone
         public bool horizon = true;
         [UnityEngine.Tooltip("Betaflight horizon sidebars: short vertical scales left and right of the centre.")]
         public bool sidebars;
-        public bool chargeAxis = true;
+        [UnityEngine.Tooltip("Game aid, not a Betaflight element: where the shaped-charge jet goes (off by default).")]
+        public bool chargeAxis;
         public bool warnings = true;
         public string craftName = "MODERN DRONE";
 
