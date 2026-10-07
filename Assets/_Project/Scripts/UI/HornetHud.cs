@@ -14,11 +14,13 @@ namespace ModernDrone.UI
     /// boxed in orange), an altitude tape on the right ("ALT", value boxed with a pointer and a reference line), a compass
     /// tape across the top (N / NE / E / SE) with a marker below it, a horizontal scale with a dot along the bottom, and
     /// the AI target lock: a red-orange box on each recognised vehicle with a tag "number | class" (e.g. "2 | VEH/ARM").
-    /// A second frame of the same HUD shows a thin horizon line (here in the HUD green, kept between the tapes) through a boresight at the
-    /// centre (a hollow ring with a short tick above it) and a small "x" above it; the horizon through the boresight in
-    /// level flight means the camera looks along the airframe. Assumptions (not readable in the footage, which blurs the telemetry
-    /// fields): the cross and the compass marker show the target area, the bottom scale is the throttle, recognition
-    /// reaches 1 km with a clear line of sight (abstract).
+    /// A second frame of the same HUD shows a thin horizon line (here in the HUD green, kept between the tapes) through the
+    /// aircraft symbol at the centre (a hollow ring, a tick above it and two short wings, set apart from the line) and a
+    /// small "x": the symbol and the line are how the drone flies, the "x" where the operator is steering it (here the
+    /// nose a second ahead at the rates the flight controller is commanding). The horizon through the symbol in level
+    /// flight means the camera looks along the airframe. Assumptions (not readable in the footage, which blurs the
+    /// telemetry fields): the compass marker shows the target area, the bottom scale is the throttle, recognition reaches
+    /// 1 km with a clear line of sight (abstract).
     /// </summary>
     public static class HornetHud
     {
@@ -53,13 +55,14 @@ namespace ModernDrone.UI
             Tape(altX, midY, half, alt, 12f, false, "ALT", w * 0.07f);
             Compass(f, t.headingDeg, TargetBearing(drone));
             ThrottleScale(new Vector2(spdX, f.yMax - h * 0.11f), f.center.x + w * 0.06f - spdX, t.throttle);
+            var symbol = f.center;
             if (cam != null)
             {
-                Horizon(cam, f, spdX, altX);
-                Waypoint(cam, drone, f.height);
+                symbol = Horizon(cam, f, spdX, altX, midY - half, midY + half);
+                CommandMarker(cam, drone, f.height);
                 Targets(cam, f);
             }
-            AircraftSymbol(f.center, f.height);
+            AircraftSymbol(symbol, f.height);
 
             // Link and battery under the tapes (the real fields are blurred in the footage).
             var link = VideoFeed.HasLink ? VideoFeed.Current : default;
@@ -70,46 +73,76 @@ namespace ModernDrone.UI
         }
 
         /// <summary>
-        /// The true horizon between the two tapes (where level directions meet the camera's view), with a gap round
-        /// the aircraft symbol; it rolls and moves with the aircraft's attitude.
+        /// The long line: level flight, the true horizon between the two tapes (where level directions meet the camera's
+        /// view); it moves with pitch and tilts with bank. Returns where the aircraft symbol sits: on the line at the
+        /// picture's centre column (kept between <paramref name="top"/> and <paramref name="bottom"/>), with a gap in the
+        /// line for its wings. The symbol's level wings against the tilted line show the bank.
         /// </summary>
-        static void Horizon(Camera cam, Rect f, float leftTape, float rightTape)
+        static Vector2 Horizon(Camera cam, Rect f, float leftTape, float rightTape, float top, float bottom)
         {
             Vector3 fwd = cam.transform.forward, right = cam.transform.right;
             var hf = new Vector3(fwd.x, 0f, fwd.z);
-            if (hf.sqrMagnitude < 0.01f) return; // looking straight down or up: no horizon in view
+            if (hf.sqrMagnitude < 0.01f) return f.center; // looking straight down or up: no horizon in view
             hf.Normalize();
             var hr = new Vector3(right.x, 0f, right.z).normalized;
             Vector3 o = cam.transform.position;
             Vector3 a = cam.WorldToScreenPoint(o + hf * 5000f - hr * 1000f), b = cam.WorldToScreenPoint(o + hf * 5000f + hr * 1000f);
-            if (a.z <= 0f || b.z <= 0f) return;
+            if (a.z <= 0f || b.z <= 0f) return f.center;
             Vector2 pa = new Vector2(a.x, f.height - a.y), pb = new Vector2(b.x, f.height - b.y);
             Vector2 dir = (pb - pa).normalized;
             if (dir.x < 0f) dir = -dir;
-            if (dir.x < 0.05f) return; // banked past vertical: no room between the tapes
-            // Between the tapes (ends cut where x reaches them), a gap where the line passes the aircraft symbol.
-            Vector2 mid = pa + dir * Vector2.Dot(f.center - pa, dir);
+            if (dir.x < 0.05f) return f.center; // banked past vertical: no room between the tapes
+            // The symbol's spot: where the line crosses the centre column; the line runs between the tapes from there.
+            Vector2 anchor = pa + dir * ((f.center.x - pa.x) / dir.x);
             float lo = leftTape + f.width * 0.01f, hi = rightTape - f.width * 0.01f;
-            float back = (mid.x - lo) / dir.x, ahead = (hi - mid.x) / dir.x;
-            float gap = (mid - f.center).magnitude < f.height * 0.03f ? f.height * 0.018f : 0f;
+            float back = (anchor.x - lo) / dir.x, ahead = (hi - anchor.x) / dir.x;
+            // Banked, the ends also stop at the tapes' height (top to bottom of the AIRSPD / ALT scales).
+            if (Mathf.Abs(dir.y) > 1e-3f)
+            {
+                float down = dir.y > 0f ? (bottom - anchor.y) / dir.y : (top - anchor.y) / dir.y; // along +dir
+                float up = dir.y > 0f ? (anchor.y - top) / dir.y : (anchor.y - bottom) / dir.y;   // along -dir
+                ahead = Mathf.Min(ahead, down);
+                back = Mathf.Min(back, up);
+            }
+            float clamped = Mathf.Clamp(anchor.y, top, bottom);
+            // On the line the wings stand apart from it; off the line (horizon out of the tapes' span) no gap.
+            float gap = Mathf.Approximately(clamped, anchor.y) ? f.height * SymbolRadius * 6f : 0f;
             float thin = Mathf.Max(1.5f, f.height * 0.002f);
-            if (back > gap) Line(mid - dir * back, mid - dir * gap, thin, Green);
-            if (ahead > gap) Line(mid + dir * gap, mid + dir * ahead, thin, Green);
+            if (back > gap) Line(anchor - dir * back, anchor - dir * gap, thin, Green);
+            if (ahead > gap) Line(anchor + dir * gap, anchor + dir * ahead, thin, Green);
+            return new Vector2(f.center.x, clamped);
         }
 
-        /// <summary>Boresight fixed at the centre (the camera looks along the airframe): a hollow ring with a short tick above it.</summary>
+        /// <summary>Ring radius of the aircraft symbol, share of the screen height.</summary>
+        const float SymbolRadius = 0.01f;
+
+        /// <summary>
+        /// Aircraft symbol, the drone's attitude now: a hollow ring, a short tick above it and two short wings either side,
+        /// level with the airframe (the camera looks along it), sitting on the long line (see <see cref="Horizon"/>).
+        /// </summary>
         static void AircraftSymbol(Vector2 c, float h)
         {
-            float r = h * 0.01f, thin = Mathf.Max(1.5f, h * 0.002f);
+            float r = h * SymbolRadius, thin = Mathf.Max(1.5f, h * 0.002f);
             Crosshair.Ring(c, r, thin, Green, false);
             Line(c + Vector2.down * r, c + Vector2.down * r * 2.2f, thin, Green); // GUI y grows down: the tick rises
+            Line(c + Vector2.left * r * 1.8f, c + Vector2.left * r * 4.5f, thin, Green);
+            Line(c + Vector2.right * r * 1.8f, c + Vector2.right * r * 4.5f, thin, Green);
         }
 
-        /// <summary>Small cross where the programmed target area is (the middle of the live targets).</summary>
-        static void Waypoint(Camera cam, DroneController drone, float h)
+        /// <summary>How far ahead the commanded-direction cross looks, s.</summary>
+        const float CommandLead = 1f;
+
+        /// <summary>
+        /// Small cross where the operator is steering: the nose <see cref="CommandLead"/> ahead at the body rates the flight
+        /// controller is commanding (centred on the symbol when the sticks hold the attitude). The symbol and the line
+        /// show how the drone flies, the cross where it has been told to go.
+        /// </summary>
+        static void CommandMarker(Camera cam, DroneController drone, float h)
         {
-            if (!TargetArea(out var area)) return;
-            var s = cam.WorldToScreenPoint(area);
+            if (!drone.Armed || drone.FlightController == null) return;
+            var rate = drone.FlightController.TargetRate * (CommandLead * Mathf.Rad2Deg); // body: x pitch nose-down +, y yaw right +
+            var dir = drone.transform.rotation * Quaternion.Euler(rate.x, rate.y, 0f) * Vector3.forward;
+            var s = cam.WorldToScreenPoint(cam.transform.position + dir * 1000f);
             if (s.z <= 0f) return;
             var p = new Vector2(s.x, h - s.y);
             float k = h * 0.007f, thin = Mathf.Max(1.5f, h * 0.0018f);
@@ -199,16 +232,17 @@ namespace ModernDrone.UI
             {
                 var target = _targets[i];
                 if (target.Model == null || target.Neutralized) continue;
-                var bounds = Bounds(target);
+                var bounds = target.HullBounds; // cached per frame on the target
                 Vector3 to = bounds.center - cam.transform.position;
-                if (to.magnitude > RecognitionRange || Vector3.Dot(to, cam.transform.forward) <= 0f) continue;
-                if (Physics.Linecast(cam.transform.position, bounds.center, GameLayers.TerrainMask, QueryTriggerInteraction.Ignore)) continue;
+                if (to.sqrMagnitude > RecognitionRange * RecognitionRange || Vector3.Dot(to, cam.transform.forward) <= 0f) continue;
+                if (!target.InSightFrom(cam.transform.position)) continue;
                 if (!ScreenRect(cam, bounds, f.height, out var r)) continue;
                 float min = f.height * 0.018f;
                 r = new Rect(r.center.x - Mathf.Max(r.width, min) * 0.5f, r.center.y - Mathf.Max(r.height, min) * 0.5f, Mathf.Max(r.width, min), Mathf.Max(r.height, min));
                 Brackets(r, thin);
-                string tag = $"{i + 1} | {Class(target)}";
-                float tw = _small.CalcSize(new GUIContent(tag)).x + 10f, th = _small.fontSize * 1.4f;
+                string tag = Tag(target, i);
+                TagContent.text = tag;
+                float tw = _small.CalcSize(TagContent).x + 10f, th = _small.fontSize * 1.4f;
                 var tr = new Rect(r.center.x - tw * 0.3f, r.yMin - th - 4f, tw, th);
                 Box(tr, TagBack);
                 Text(tr, tag, _small, Orange, TextAnchor.MiddleCenter);
@@ -218,18 +252,31 @@ namespace ModernDrone.UI
         static void Brackets(Rect r, float thin)
         {
             float k = Mathf.Min(r.width, r.height) * 0.35f;
-            foreach (var (corner, dx, dy) in new[] { (new Vector2(r.xMin, r.yMin), 1f, 1f), (new Vector2(r.xMax, r.yMin), -1f, 1f),
-                                                      (new Vector2(r.xMin, r.yMax), 1f, -1f), (new Vector2(r.xMax, r.yMax), -1f, -1f) })
-            {
-                Line(corner, corner + new Vector2(dx * k, 0f), thin, Lock);
-                Line(corner, corner + new Vector2(0f, dy * k), thin, Lock);
-            }
+            Corner(new Vector2(r.xMin, r.yMin), k, k, thin);
+            Corner(new Vector2(r.xMax, r.yMin), -k, k, thin);
+            Corner(new Vector2(r.xMin, r.yMax), k, -k, thin);
+            Corner(new Vector2(r.xMax, r.yMax), -k, -k, thin);
+        }
+
+        static void Corner(Vector2 corner, float dx, float dy, float thin)
+        {
+            Line(corner, corner + new Vector2(dx, 0f), thin, Lock);
+            Line(corner, corner + new Vector2(0f, dy), thin, Lock);
+        }
+
+        static readonly GUIContent TagContent = new GUIContent();
+
+        /// <summary>"number | class" tag, built once per target (no string formatting every frame).</summary>
+        static string Tag(MissionTarget target, int index)
+        {
+            if (Classes.TryGetValue(target, out var tag)) return tag;
+            return Classes[target] = $"{index + 1} | {Class(target)}";
         }
 
         /// <summary>Class code from what the vehicle carries (the recognition classes are illustrative).</summary>
         static string Class(MissionTarget target)
         {
-            if (Classes.TryGetValue(target, out var c)) return c;
+            string c;
             bool radar = false, launcher = false, gun = false, rotor = false, tracks = false;
             foreach (var m in target.Model.Modules)
             {
@@ -240,15 +287,7 @@ namespace ModernDrone.UI
                 tracks |= m.Type == ModuleType.Track;
             }
             c = rotor ? "AIR/HEL" : launcher && gun ? "VEH/AD" : launcher ? "VEH/SAM" : radar ? "RAD" : tracks || gun ? "VEH/ARM" : "VEH";
-            return Classes[target] = c;
-        }
-
-        static Bounds Bounds(MissionTarget target)
-        {
-            var rs = target.GetComponentsInChildren<Renderer>();
-            var b = new Bounds(target.transform.position + Vector3.up * 1.5f, Vector3.one * 3f);
-            foreach (var r in rs) if (r.enabled && r is MeshRenderer) b.Encapsulate(r.bounds);
-            return b;
+            return c;
         }
 
         static bool ScreenRect(Camera cam, Bounds b, float h, out Rect r)
