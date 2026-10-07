@@ -14,9 +14,11 @@ namespace ModernDrone.UI
     /// boxed in orange), an altitude tape on the right ("ALT", value boxed with a pointer and a reference line), a compass
     /// tape across the top (N / NE / E / SE) with a marker below it, a horizontal scale with a dot along the bottom, and
     /// the AI target lock: a red-orange box on each recognised vehicle with a tag "number | class" (e.g. "2 | VEH/ARM").
-    /// Assumptions (not readable in the footage, which blurs the telemetry fields): the compass marker points at the
-    /// target area, the bottom scale is the throttle, recognition reaches 1 km with a clear line of sight (abstract).
-    /// Nothing sits in the centre of the picture, as in the footage.
+    /// A second frame of the same HUD shows a thin horizon line (here in the HUD green, kept between the tapes) through a boresight at the
+    /// centre (a hollow ring with a short tick above it) and a small "x" above it; the horizon through the boresight in
+    /// level flight means the camera looks along the airframe. Assumptions (not readable in the footage, which blurs the telemetry
+    /// fields): the cross and the compass marker show the target area, the bottom scale is the throttle, recognition
+    /// reaches 1 km with a clear line of sight (abstract).
     /// </summary>
     public static class HornetHud
     {
@@ -34,7 +36,7 @@ namespace ModernDrone.UI
         static readonly Dictionary<MissionTarget, string> Classes = new Dictionary<MissionTarget, string>();
         static readonly Vector3[] Corners = new Vector3[8];
 
-        public static void Draw(DroneController drone, Camera cam, Rect f)
+        public static void Draw(DroneController drone, Camera cam, Rect f, InputSource source = InputSource.KeyboardMouse)
         {
             EnsureStyles();
             if (_targets == null || System.Array.Exists(_targets, x => x == null))
@@ -51,7 +53,13 @@ namespace ModernDrone.UI
             Tape(altX, midY, half, alt, 12f, false, "ALT", w * 0.07f);
             Compass(f, t.headingDeg, TargetBearing(drone));
             ThrottleScale(new Vector2(spdX, f.yMax - h * 0.11f), f.center.x + w * 0.06f - spdX, t.throttle);
-            if (cam != null) Targets(cam, f);
+            if (cam != null)
+            {
+                Horizon(cam, f, spdX, altX);
+                Waypoint(cam, drone, f.height);
+                Targets(cam, f);
+            }
+            AircraftSymbol(f.center, f.height);
 
             // Link and battery under the tapes (the real fields are blurred in the footage).
             var link = VideoFeed.HasLink ? VideoFeed.Current : default;
@@ -59,6 +67,54 @@ namespace ModernDrone.UI
             Text(new Rect(spdX - 60f, midY + half + _small.fontSize * 0.6f, 200f, _small.fontSize * 1.4f), linkText, _small, link.control < 0.3f ? Lock : Green, TextAnchor.MiddleLeft);
             Text(new Rect(altX - 140f, midY + half + _small.fontSize * 0.6f, 200f, _small.fontSize * 1.4f),
                 $"BAT {drone.Battery.StateOfCharge * 100f:0}%", _small, drone.Battery.StateOfCharge < 0.15f ? Lock : Green, TextAnchor.MiddleRight);
+        }
+
+        /// <summary>
+        /// The true horizon between the two tapes (where level directions meet the camera's view), with a gap round
+        /// the aircraft symbol; it rolls and moves with the aircraft's attitude.
+        /// </summary>
+        static void Horizon(Camera cam, Rect f, float leftTape, float rightTape)
+        {
+            Vector3 fwd = cam.transform.forward, right = cam.transform.right;
+            var hf = new Vector3(fwd.x, 0f, fwd.z);
+            if (hf.sqrMagnitude < 0.01f) return; // looking straight down or up: no horizon in view
+            hf.Normalize();
+            var hr = new Vector3(right.x, 0f, right.z).normalized;
+            Vector3 o = cam.transform.position;
+            Vector3 a = cam.WorldToScreenPoint(o + hf * 5000f - hr * 1000f), b = cam.WorldToScreenPoint(o + hf * 5000f + hr * 1000f);
+            if (a.z <= 0f || b.z <= 0f) return;
+            Vector2 pa = new Vector2(a.x, f.height - a.y), pb = new Vector2(b.x, f.height - b.y);
+            Vector2 dir = (pb - pa).normalized;
+            if (dir.x < 0f) dir = -dir;
+            if (dir.x < 0.05f) return; // banked past vertical: no room between the tapes
+            // Between the tapes (ends cut where x reaches them), a gap where the line passes the aircraft symbol.
+            Vector2 mid = pa + dir * Vector2.Dot(f.center - pa, dir);
+            float lo = leftTape + f.width * 0.01f, hi = rightTape - f.width * 0.01f;
+            float back = (mid.x - lo) / dir.x, ahead = (hi - mid.x) / dir.x;
+            float gap = (mid - f.center).magnitude < f.height * 0.03f ? f.height * 0.018f : 0f;
+            float thin = Mathf.Max(1.5f, f.height * 0.002f);
+            if (back > gap) Line(mid - dir * back, mid - dir * gap, thin, Green);
+            if (ahead > gap) Line(mid + dir * gap, mid + dir * ahead, thin, Green);
+        }
+
+        /// <summary>Boresight fixed at the centre (the camera looks along the airframe): a hollow ring with a short tick above it.</summary>
+        static void AircraftSymbol(Vector2 c, float h)
+        {
+            float r = h * 0.01f, thin = Mathf.Max(1.5f, h * 0.002f);
+            Crosshair.Ring(c, r, thin, Green, false);
+            Line(c + Vector2.down * r, c + Vector2.down * r * 2.2f, thin, Green); // GUI y grows down: the tick rises
+        }
+
+        /// <summary>Small cross where the programmed target area is (the middle of the live targets).</summary>
+        static void Waypoint(Camera cam, DroneController drone, float h)
+        {
+            if (!TargetArea(out var area)) return;
+            var s = cam.WorldToScreenPoint(area);
+            if (s.z <= 0f) return;
+            var p = new Vector2(s.x, h - s.y);
+            float k = h * 0.007f, thin = Mathf.Max(1.5f, h * 0.0018f);
+            Line(p + new Vector2(-k, -k), p + new Vector2(k, k), thin, Green);
+            Line(p + new Vector2(-k, k), p + new Vector2(k, -k), thin, Green);
         }
 
         /// <summary>Vertical tape: ticks every unit, labels every 5, the current value boxed at the centre.</summary>
@@ -216,14 +272,22 @@ namespace ModernDrone.UI
         /// <summary>Bearing from the drone to the middle of the live targets (the programmed target area), deg.</summary>
         static float? TargetBearing(DroneController drone)
         {
-            if (_targets == null) return null;
-            Vector3 sum = Vector3.zero;
+            if (!TargetArea(out var area)) return null;
+            var d = area - drone.transform.position;
+            return (Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg + 360f) % 360f;
+        }
+
+        /// <summary>Middle of the live mission targets (the programmed target area).</summary>
+        static bool TargetArea(out Vector3 area)
+        {
+            area = Vector3.zero;
+            if (_targets == null) return false;
             int n = 0;
             foreach (var target in _targets)
-                if (target != null && target.Model != null && !target.Neutralized) { sum += target.transform.position; n++; }
-            if (n == 0) return null;
-            var d = sum / n - drone.transform.position;
-            return (Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg + 360f) % 360f;
+                if (target != null && target.Model != null && !target.Neutralized) { area += target.transform.position; n++; }
+            if (n == 0) return false;
+            area /= n;
+            return true;
         }
 
         static void Line(Vector2 a, Vector2 b, float thickness, Color color)

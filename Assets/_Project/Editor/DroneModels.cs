@@ -128,7 +128,7 @@ namespace ModernDrone.Editor
             c.fixedWing = true;
             c.satelliteLink = true;
             c.cameraPosition = new Vector3(0f, -0.07f, 0.74f); // ahead of the nose cone (model nose at z = 0.72)
-            c.cameraTilt = -10f; // looks down ahead: the ground fills most of the frame in the published footage
+            c.cameraTilt = 0f; // along the airframe: the HUD aircraft symbol sits on the horizon in level flight (footage)
             c.cameraHorizontalFov = 70f; // ordinary wide-format view in the published footage (not measured)
             c.airframeMass = c.frameMass = 10f; // 15 kg take-off weight less the 5 kg warhead
             c.colliderSize = new Vector3(2.2f, 0.3f, 1.4f);
