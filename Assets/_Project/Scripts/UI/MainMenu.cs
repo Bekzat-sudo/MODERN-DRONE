@@ -36,17 +36,18 @@ namespace ModernDrone.UI
         };
         [SerializeField] string[] missionBriefings = new string[0];
 
-        enum Nav { Campaign, Hangar, ProvingGround, Settings, Quit }
+        enum Nav { Campaign, Hangar, ProvingGround, Music, Settings, Quit }
         static readonly (Nav nav, string label)[] NavItems =
         {
             (Nav.Campaign, "КАМПАНИЯ"), (Nav.Hangar, "АНГАР"), (Nav.ProvingGround, "ПОЛИГОН"),
-            (Nav.Settings, "НАСТРОЙКИ"), (Nav.Quit, "ВЫХОД"),
+            (Nav.Music, "МУЗЫКА"), (Nav.Settings, "НАСТРОЙКИ"), (Nav.Quit, "ВЫХОД"),
         };
         const int GridColumns = 4;
 
         readonly MenuGui _gui = new MenuGui();
         SettingsMenu _settings;
-        bool _inSettings, _inHangar, _inMissions;
+        MusicMenu _music;
+        bool _inSettings, _inHangar, _inMissions, _inMusic;
         Hangar _hangar;
         int _nav, _mission = -1;
         float _angle = 200f;
@@ -59,6 +60,7 @@ namespace ModernDrone.UI
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
             _settings = new SettingsMenu(_gui);
+            _music = new MusicMenu(_gui);
         }
 
         public void SetHangar(DroneConfig[] models, DronePart[] options, WarheadData[] warheadOptions, HangarPreview turntable)
@@ -85,6 +87,7 @@ namespace ModernDrone.UI
                 case Nav.Campaign: _inMissions = true; break;
                 case Nav.Hangar: OpenHangar(); break;
                 case Nav.ProvingGround: GameScenes.Load(GameScenes.ProvingGround); break;
+                case Nav.Music: _music.Open(); _inMusic = true; break;
                 case Nav.Settings: _settings.Open(); _inSettings = true; break;
                 case Nav.Quit: GameScenes.Quit(); break;
             }
@@ -137,7 +140,7 @@ namespace ModernDrone.UI
                     cam.transform.position = orbitTarget.position + Quaternion.Euler(0f, _angle, 0f) * Vector3.forward * orbitRadius + Vector3.up * orbitHeight;
                     cam.transform.LookAt(orbitTarget.position + Vector3.up * 1.2f);
                     // Frame the backdrop in the recon window (full screen behind the hangar / settings).
-                    bool framed = _recon.width > 0f && !_inHangar && !_inSettings;
+                    bool framed = _recon.width > 0f && !_inHangar && !_inSettings && !_inMusic;
                     cam.rect = framed
                         ? new Rect(_recon.x / Screen.width, 1f - _recon.yMax / Screen.height, _recon.width / Screen.width, _recon.height / Screen.height)
                         : new Rect(0f, 0f, 1f, 1f);
@@ -155,6 +158,12 @@ namespace ModernDrone.UI
             {
                 _settings.Update();
                 if (_settings.Closed) _inSettings = false;
+                return;
+            }
+            if (_inMusic)
+            {
+                _music.Update();
+                if (_music.Closed) _inMusic = false;
                 return;
             }
 
@@ -193,6 +202,12 @@ namespace ModernDrone.UI
             {
                 UiTheme.Background();
                 _settings.Draw(new Rect(w * 0.12f, h * 0.06f, w * 0.76f, h * 0.88f));
+                return;
+            }
+            if (_inMusic)
+            {
+                UiTheme.Background();
+                _music.Draw(new Rect(w * 0.12f, h * 0.06f, w * 0.76f, h * 0.88f));
                 return;
             }
             if (_mission < 0) return;
@@ -242,6 +257,7 @@ namespace ModernDrone.UI
                     Nav.Campaign => $"{done} / {missionScenes.Length}",
                     Nav.Hangar => SavedDrone(),
                     Nav.ProvingGround => "свободный полёт",
+                    Nav.Music => "свой плейлист",
                     Nav.Settings => "управление · видео",
                     _ => ""
                 };

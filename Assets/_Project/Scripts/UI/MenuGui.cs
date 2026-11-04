@@ -238,6 +238,10 @@ namespace ModernDrone.UI
                 if (finish) MenuRow.Editing = null;
                 else if (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter) { }
                 else if (e.keyCode == KeyCode.Backspace) ed.Erase?.Invoke();
+                else if (e.keyCode == KeyCode.V && (e.control || e.command))
+                {
+                    foreach (char c in GUIUtility.systemCopyBuffer) ed.Type?.Invoke(c);
+                }
                 else if (e.character != '\0' && !char.IsControl(e.character)) ed.Type?.Invoke(e.character);
                 e.Use();
             }
