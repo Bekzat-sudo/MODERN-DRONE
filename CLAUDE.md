@@ -28,6 +28,9 @@
 - Link/video: `Video/LinkModel.cs` (pure rules), `Missions/DroneLink.cs` (per-frame sampling, failsafe, fiber spool),
   `Art/Shaders/AnalogVideo.shader` via the URP Full Screen Pass on `Assets/Settings/PC_Renderer.asset`
   (installed by `Modern Drone/Setup/Install Video Feed Effect`). EW emitters are `SignalJammer` + `JammerStation`.
+- Music: `Core/MusicPlaylist.cs` (pure rules: link validation, yt-dlp arguments and output, play order), `Core/MusicPlayer.cs`
+  (playback, MP3 cache, `music.json` in `persistentDataPath`), `UI/MusicMenu.cs`. yt-dlp and ffmpeg are installed by the player,
+  never shipped with the game.
 - Play mode only ticks while unfocused if `PlayerSettings.runInBackground` is on (needed for automated play checks).
 
 ## Workflow

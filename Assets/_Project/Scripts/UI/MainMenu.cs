@@ -42,7 +42,8 @@ namespace ModernDrone.UI
         readonly MenuGui _gui = new MenuGui();
         readonly List<MenuRow> _navRows = new List<MenuRow>();
         SettingsMenu _settings;
-        bool _inSettings, _inHangar, _inMissions;
+        MusicMenu _music;
+        bool _inSettings, _inHangar, _inMissions, _inMusic;
         Hangar _hangar;
         int _nav, _mission = -1;
         float _angle = 200f;
@@ -54,9 +55,11 @@ namespace ModernDrone.UI
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
             _settings = new SettingsMenu(_gui);
+            _music = new MusicMenu(_gui);
             _navRows.Add(MenuRow.Button("КАМПАНИЯ", () => _inMissions = true, () => $"{DoneCount()} / {missionScenes.Length}"));
             _navRows.Add(MenuRow.Button("АНГАР", OpenHangar, SavedDrone));
             _navRows.Add(MenuRow.Button("ПОЛИГОН", () => GameScenes.Load(GameScenes.ProvingGround), () => "свободный полёт"));
+            _navRows.Add(MenuRow.Button("МУЗЫКА", () => { _music.Open(); _inMusic = true; }, () => "свой плейлист"));
             _navRows.Add(MenuRow.Button("НАСТРОЙКИ", () => { _settings.Open(); _inSettings = true; }, () => "управление · видео"));
             _navRows.Add(MenuRow.Header(""));
             _navRows.Add(new MenuRow("ВЫХОД") { Activate = GameScenes.Quit, Danger = true });
@@ -133,7 +136,7 @@ namespace ModernDrone.UI
                     cam.transform.position = orbitTarget.position + Quaternion.Euler(0f, _angle, 0f) * Vector3.forward * orbitRadius + Vector3.up * orbitHeight;
                     cam.transform.LookAt(orbitTarget.position + Vector3.up * 1.2f);
                     // Frame the backdrop in the recon window (full screen behind the hangar / settings).
-                    bool framed = _recon.width > 0f && !_inHangar && !_inSettings;
+                    bool framed = _recon.width > 0f && !_inHangar && !_inSettings && !_inMusic;
                     cam.rect = framed
                         ? new Rect(_recon.x / Screen.width, 1f - _recon.yMax / Screen.height, _recon.width / Screen.width, _recon.height / Screen.height)
                         : new Rect(0f, 0f, 1f, 1f);
@@ -151,6 +154,12 @@ namespace ModernDrone.UI
             {
                 _settings.Update();
                 if (_settings.Closed) _inSettings = false;
+                return;
+            }
+            if (_inMusic)
+            {
+                _music.Update();
+                if (_music.Closed) _inMusic = false;
                 return;
             }
 
@@ -189,6 +198,12 @@ namespace ModernDrone.UI
             {
                 UiTheme.Background();
                 _settings.Draw(new Rect(0, 0, w, h));
+                return;
+            }
+            if (_inMusic)
+            {
+                UiTheme.Background();
+                _music.Draw(new Rect(0, 0, w, h));
                 return;
             }
             if (_mission < 0) return;

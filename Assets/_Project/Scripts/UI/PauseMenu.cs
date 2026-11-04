@@ -15,16 +15,19 @@ namespace ModernDrone.UI
         readonly MenuGui _gui = new MenuGui();
         readonly List<MenuRow> _rows = new List<MenuRow>();
         SettingsMenu _settings;
+        MusicMenu _music;
         MissionController _mission;
-        bool _inSettings;
+        bool _inSettings, _inMusic;
         int _selected;
         int _openedFrame = -1;
 
         void Awake()
         {
             _settings = new SettingsMenu(_gui);
+            _music = new MusicMenu(_gui);
             _rows.Add(MenuRow.Button("Продолжить", Resume));
             _rows.Add(MenuRow.Button("Настройки", () => { _settings.Open(); _inSettings = true; }, () => "управление · видео"));
+            _rows.Add(MenuRow.Button("Музыка", () => { _music.Open(); _inMusic = true; }, () => "свой плейлист"));
             _rows.Add(MenuRow.Button("Перезапустить", GameScenes.Reload, () => "задача с начала"));
             _rows.Add(MenuRow.Header(""));
             _rows.Add(new MenuRow("Главное меню") { Activate = () => GameScenes.Load(GameScenes.MainMenu), Value = () => "без сохранения", Danger = true });
@@ -46,6 +49,7 @@ namespace ModernDrone.UI
                     GamePause.Set(true);
                     _selected = 0;
                     _inSettings = false;
+                    _inMusic = false;
                     _openedFrame = Time.frameCount;
                 }
                 return;
@@ -56,6 +60,12 @@ namespace ModernDrone.UI
             {
                 _settings.Update();
                 if (_settings.Closed) _inSettings = false;
+                return;
+            }
+            if (_inMusic)
+            {
+                _music.Update();
+                if (_music.Closed) _inMusic = false;
                 return;
             }
 
@@ -86,6 +96,12 @@ namespace ModernDrone.UI
             {
                 UiTheme.Fill(screen, UiTheme.Scrim);
                 _settings.Draw(screen);
+                return;
+            }
+            if (_inMusic)
+            {
+                UiTheme.Fill(screen, UiTheme.Scrim);
+                _music.Draw(screen);
                 return;
             }
 
