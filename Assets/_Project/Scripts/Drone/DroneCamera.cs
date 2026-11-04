@@ -7,7 +7,8 @@ namespace ModernDrone.Drone
     public sealed class DroneCamera : MonoBehaviour
     {
         [SerializeField] DroneController drone;
-        [Range(0f, 60f)] [SerializeField] float tiltDeg = 25f;
+        [Tooltip("Camera uptilt, deg (negative = looking down, as on an aeroplane's nose camera).")]
+        [Range(-45f, 60f)] [SerializeField] float tiltDeg = 25f;
         [Range(60f, 160f)] [SerializeField] float horizontalFov = 118f;
 
         Camera _camera;
@@ -17,7 +18,7 @@ namespace ModernDrone.Drone
         public float TiltDeg
         {
             get => tiltDeg;
-            set => tiltDeg = Mathf.Clamp(value, 0f, 60f);
+            set => tiltDeg = Mathf.Clamp(value, -45f, 60f);
         }
 
         public float HorizontalFov

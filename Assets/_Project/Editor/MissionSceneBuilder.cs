@@ -1,4 +1,5 @@
 using ModernDrone.Missions;
+using ModernDrone.Vehicles;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -308,13 +309,113 @@ namespace ModernDrone.Editor
             var heli = TargetAt(terrain, VehicleCatalog.Helicopter, points[0], 200f, "Ми-28НМ", TargetRequirement.OutOfAction);
             heli.transform.position += Vector3.up * 35f;
             var flight = heli.GetComponent<ModernDrone.Vehicles.HelicopterFlight>();
-            flight.Configure(points, heli.transform.Find("Rotor"));
+            flight.Configure(points, heli.GetComponent<VehicleFxProfile>().rotor);
             EditorUtility.SetDirty(flight);
 
             Mog(terrain, VehicleCatalog.MogZil, new Vector3(1000f, 0f, 1720f), 200f);
             ProvingGroundBuilder.CreateMissionRig("Задача 8: Охота на вертолёт", Briefing08, 4);
             EditorSceneManager.SaveScene(scene, "Assets/_Project/Scenes/Mission_08.unity");
             ProvingGroundBuilder.AddToBuildSettings("Assets/_Project/Scenes/Mission_08.unity", 8);
+        }
+
+        internal const string Briefing09 =
+            "Батарея ПВО. Между лесополосами, в ~1,3–1,5 км к северу от точки пуска, развернута полевая батарея ЗРК С-400. " +
+            "Впереди, на открытом поле, — РЛС; за ней командный пункт с антенными мачтами; четыре пусковые рассредоточены " +
+            "по земляным капонирам; у лесополосы — транспортно-заряжающие машины и техзона. Фланг прикрывает «Панцирь-С1», " +
+            "с запада — мобильная огневая группа с ЗУ-23.\n\n" +
+            "Работает Hornet — ударный дрон-самолёт с боевой частью 5 кг и связью через Starlink: РЭБ его не глушит. " +
+            "Он стартует в воздухе на ~250 м и ~110 км/ч. Самолёт не зависает: подходите на высоте, цель берите в " +
+            "пикировании (200–300 км/ч); ниже ~70 км/ч крыло сваливается. Пусковые в капонирах — заходите сверху или сзади, " +
+            "со стороны въезда. Каждый Hornet одноразовый.\n\n" +
+            "Задача: вывести батарею из строя — 4 цели из 6 (РЛС — подавить, пусковые и «Панцирь» — вывести из строя).";
+
+        [MenuItem("Modern Drone/Setup/Build Mission 09 Scene")]
+        public static void BuildMission09()
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var terrain = ProvingGroundBuilder.CreateTerrain("Assets/_Project/Scenes/Mission_09_Terrain.asset");
+            ProvingGroundBuilder.CreateLighting();
+            ProvingGroundBuilder.CreateTreeLines(terrain);
+            var hornet = ModernDrone.Editor.DroneModels.Load(ModernDrone.Editor.DroneModels.Hornet);
+            // Launch at the map's south edge, 250 m up, heading north (published operating altitude 300-500 m; the
+            // 2 km map keeps the approach short).
+            ProvingGroundBuilder.CreateAirSpawn(terrain, new Vector3(1000f, 0f, 80f), 250f, 0f, hornet);
+            AirDefenseBattery(terrain);
+
+            var mission = ProvingGroundBuilder.CreateMissionRig("Задача 9: Батарея ПВО", Briefing09, 6);
+            mission.SetDroneModels(new[] { hornet });
+            mission.SetWarheads(new[] { WarheadAssets.Load(WarheadAssets.HornetPath) });
+            mission.SetParts(null);
+            mission.SetRequiredTargets(4);
+            EditorSceneManager.SaveScene(scene, "Assets/_Project/Scenes/Mission_09.unity");
+            ProvingGroundBuilder.AddToBuildSettings("Assets/_Project/Scenes/Mission_09.unity", 9);
+        }
+
+        /// <summary>
+        /// Field S-400 battery in the strip between the tree belts at z = 1300 and 1650, facing south (toward the launch
+        /// point), laid out by function (AirDefenseSiteBuilder): the radar forward on open ground, the command post with
+        /// masts behind it, four launchers at uneven spacing and angles in revetments open to their tracks, reload vehicles
+        /// and the technical zone off the firing line by the northern belt, a road in from the east with a checkpoint;
+        /// a Pantsir on the east flank and a ZU-23 fire group on the west (point defence).
+        /// </summary>
+        static void AirDefenseBattery(Terrain t)
+        {
+            var root = new GameObject("AirDefenseBattery").transform;
+            var cp = new Vector3(1004f, 0f, 1468f);
+
+            // Road from the east edge along the northern belt, past the technical zone, to the command post.
+            Vector3 P(float x, float z) => new Vector3(x, 0f, z);
+            AirDefenseSiteBuilder.Track(t, 6f, P(1995f, 1612f), P(1620f, 1610f), P(1320f, 1602f), P(1190f, 1592f), P(1090f, 1580f), P(1020f, 1530f), cp + P(0f, 8f));
+            foreach (var x in new[] { 1305f, 1308f, 1311f })
+                PropsBuilder.Place(t, root, PropsBuilder.Model("concrete_road_barrier_02"), P(x, 1594f + (x - 1305f) * 0.4f), 82f, 1f, true);
+
+            // Sensor forward with open ground round it; a track back to the command post.
+            TargetAt(t, VehicleCatalog.SamRadar, P(1016f, 1386f), 172f, "РЛС С-400", TargetRequirement.Silenced);
+            AirDefenseSiteBuilder.Track(t, 3.5f, P(1018f, 1398f), P(1012f, 1430f), cp + P(0f, -6f));
+
+            // Command post: a van under a net, two masts (not at the geometric centre of the launchers).
+            AirDefenseSiteBuilder.StaticModel(t, root, "Assets/_Project/Art/Models/Vehicles/Ural4320/ural4320_kung.glb", cp, 203f, "Командный пункт");
+            PropsBuilder.CamoNet(t, root, cp + P(-6f, 9f), 23f);
+            var mast = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Art/Environment/Props/Pole_0.prefab");
+            if (mast != null)
+                foreach (var m in new[] { cp + P(-14f, 6f), cp + P(17f, 11f) })
+                    PropsBuilder.Place(t, root, mast, m, 0f, 1.6f); // the pole prefab has its own collider
+
+            // Launchers dispersed round the command post, each in a revetment open to the rear and a track to it.
+            (Vector2 pos, float yaw)[] launchers =
+            {
+                (new Vector2(902f, 1437f), 197f), (new Vector2(1123f, 1451f), 163f),
+                (new Vector2(874f, 1528f), 211f), (new Vector2(1139f, 1544f), 149f)
+            };
+            for (int i = 0; i < launchers.Length; i++)
+            {
+                var (pos, yaw) = launchers[i];
+                var at = P(pos.x, pos.y);
+                AirDefenseSiteBuilder.Revetment(t, root, at, yaw, 22f, 8f); // TEL ~17 m from cab to trailer
+                TargetAt(t, VehicleCatalog.SamLauncher, at, yaw, $"Пусковая №{i + 1}", TargetRequirement.OutOfAction);
+                var rear = at - Quaternion.Euler(0f, yaw, 0f) * Vector3.forward * 16f;
+                AirDefenseSiteBuilder.Track(t, 3.5f, at, rear, Vector3.Lerp(rear, cp, 0.55f) + P(i % 2 == 0 ? -12f : 10f, 14f), cp);
+            }
+
+            // Reloads near the launchers but not in their line; technical zone (trucks, nets, stores) by the belt.
+            ProvingGroundBuilder.PlacePrefab(t, VehicleCatalog.SamLauncherTravel, P(958f, 1571f), 96f, "ТЗМ №1");
+            ProvingGroundBuilder.PlacePrefab(t, VehicleCatalog.SamLauncherTravel, P(1061f, 1588f), 262f, "ТЗМ №2");
+            AirDefenseSiteBuilder.Track(t, 3.5f, P(958f, 1571f), P(1000f, 1560f), P(1061f, 1588f));
+            foreach (var (x, z, yaw) in new[] { (1178f, 1606f, 271f), (1206f, 1583f, 248f), (1160f, 1572f, 305f) })
+                ProvingGroundBuilder.PlacePrefab(t, VehicleCatalog.Truck, P(x, z), yaw);
+            PropsBuilder.CamoNet(t, root, P(1196f, 1563f), 8f);
+            PropsBuilder.CamoNet(t, root, P(1232f, 1603f), 78f);
+            string[] stores = { "old_military_crate", "ammo_box", "barrel_03", "metal_jerrycan_green", "old_military_crate", "barrel_03" };
+            for (int i = 0; i < stores.Length; i++)
+            {
+                var model = PropsBuilder.Model(stores[i]);
+                if (model != null) PropsBuilder.Place(t, root, model, P(1188f + i * 2.3f, 1560f + (i % 3) * 1.4f), i * 37f);
+            }
+
+            // Point defence: Pantsir on the east flank, a ZU-23 fire group on the west.
+            TargetAt(t, VehicleCatalog.Spaag, P(1262f, 1398f), 147f, "ЗРПК «Панцирь-С1»", TargetRequirement.OutOfAction);
+            AirDefenseSiteBuilder.Track(t, 3.5f, P(1262f, 1398f), P(1230f, 1470f), P(1190f, 1592f));
+            Mog(t, VehicleCatalog.MogUral, P(768f, 1452f), 196f);
         }
 
         /// <summary>Moonlit night: dim bluish key light, almost no ambient, no sky.</summary>

@@ -1,6 +1,5 @@
 using System.Collections;
 using System.Collections.Generic;
-using System.Text;
 using ModernDrone.Core;
 using ModernDrone.Damage;
 using ModernDrone.Drone;
@@ -60,7 +59,7 @@ namespace ModernDrone.Missions
         string _lostMessage = "ДРОН ПОТЕРЯН";
         float _missionTime;
         MissionOutcome _outcome;
-        GUIStyle _title, _body, _small, _kicker;
+        float _debriefAt;
 
         public MissionPhase Phase { get; private set; }
         public bool FreeFlight => _targets.Count == 0;
@@ -68,6 +67,22 @@ namespace ModernDrone.Missions
         public int Sorties => sorties + fiberSorties;
         public MissionOutcome Outcome => _outcome;
         public IReadOnlyList<MissionTarget> Targets => _targets;
+        public string MissionName => missionName;
+        /// <summary>Flight time so far (briefing and loadout excluded).</summary>
+        public float MissionTime => _missionTime;
+        /// <summary>Targets that must be neutralized to complete the task.</summary>
+        public int RequiredTargets => Required;
+
+        /// <summary>Targets neutralized so far (an escaped convoy vehicle does not count).</summary>
+        public int TargetsDone
+        {
+            get
+            {
+                int done = 0;
+                foreach (var t in _targets) if (t.Neutralized && !IsEscaped(t)) done++;
+                return done;
+            }
+        }
 
         public void SetWarheads(WarheadData[] options) => warheads = options ?? new WarheadData[0];
 
@@ -147,12 +162,15 @@ namespace ModernDrone.Missions
                 UpdateLoadout();
             else if (Phase == MissionPhase.Debrief && RestartPressed())
                 SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+            else if (Phase == MissionPhase.Debrief && MenuPressed())
+                SceneManager.LoadScene(0); // main menu (build index 0)
         }
 
         void BeginFlying()
         {
             Phase = MissionPhase.Flying;
             _input.Suspended = false;
+            drone.Launch(); // an aeroplane is released at cruise speed
             if (killcam != null) killcam.BeginRecording(drone.transform);
         }
 
@@ -220,7 +238,8 @@ namespace ModernDrone.Missions
             }
             if (_link != null)
             {
-                if (link != null) _link.ApplyPart(link);
+                if (drone.Config.satelliteLink) _link.SetType(LinkType.Satellite);
+                else if (link != null) _link.ApplyPart(link);
                 else _link.SetType(fiber ? LinkType.Fiber : LinkType.Radio);
             }
             if (!_convoysStarted)
@@ -305,6 +324,7 @@ namespace ModernDrone.Missions
         void EnterDebrief()
         {
             Phase = MissionPhase.Debrief;
+            _debriefAt = Time.unscaledTime;
             _input.Suspended = true;
             if (_recorded) return;
             _recorded = true;
@@ -321,11 +341,22 @@ namespace ModernDrone.Missions
                 || (pad != null && pad.buttonSouth.wasPressedThisFrame);
         }
 
+        /// <summary>Enter / A, ignored for a second so a press meant for the flight cannot skip the debrief.</summary>
+        bool MenuPressed()
+        {
+            if (Time.unscaledTime - _debriefAt < 1f) return false;
+            var kb = Keyboard.current;
+            var pad = Gamepad.current;
+            return (kb != null && (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame))
+                || (pad != null && pad.buttonSouth.wasPressedThisFrame);
+        }
+
         static bool RestartPressed()
         {
             var kb = Keyboard.current;
             return kb != null && kb.rKey.wasPressedThisFrame; // gamepad restart goes through the Restart binding
         }
+
 
         // ---------- HUD ----------
 
@@ -334,102 +365,170 @@ namespace ModernDrone.Missions
             if (ModernDrone.Core.GamePause.IsPaused) return;
             if (FreeFlight && Phase != MissionPhase.Loadout) return;
             GUI.depth = -10; // above the OSD
-            EnsureStyles();
             float w = Screen.width, h = Screen.height;
 
             switch (Phase)
             {
                 case MissionPhase.Briefing:
-                    Panel(new Rect(w * 0.18f, h * 0.08f, w * 0.64f, h * 0.84f), "БРИФИНГ", missionName, BriefingText(), "SPACE / A — начать");
+                    DrawBriefing(w, h);
                     break;
                 case MissionPhase.Flying:
-                    int done = 0;
-                    foreach (var t in _targets) if (t.Neutralized && !IsEscaped(t)) done++;
-                    string kind = _link != null && _link.Type == LinkType.Fiber ? "ОПТОВОЛОКНО" : "РАДИО";
-                    // Over live video: a dark plate keeps the text readable on any background (XAG 101).
-                    string status = $"ДРОН {_sortiesFlown + 1}/{Sorties} · {kind}   ЦЕЛИ {done}/{Required}";
-                    float sw = _small.CalcSize(new GUIContent(status)).x + UiTheme.Px(32f);
-                    UiTheme.Fill(new Rect((w - sw) * 0.5f, h * 0.09f, sw, _small.fontSize * 1.6f), new Color(0f, 0f, 0f, 0.55f));
-                    GUI.Label(new Rect(0, h * 0.09f, w, _small.fontSize * 1.6f), status, _small);
+                    DrawStatusStrip(w);
                     break;
                 case MissionPhase.DroneLost:
-                    UiTheme.Fill(new Rect(0, h * 0.4f, w, _title.fontSize * 1.6f), new Color(0f, 0f, 0f, 0.6f));
-                    _title.alignment = TextAnchor.MiddleCenter;
-                    _title.normal.textColor = UiTheme.Hostile;
-                    GUI.Label(new Rect(0, h * 0.4f, w, _title.fontSize * 1.6f), _lostMessage, _title);
-                    _title.alignment = TextAnchor.MiddleLeft;
-                    _title.normal.textColor = UiTheme.Text;
+                    int left = Sorties - _sortiesFlown - 1;
+                    UiTheme.Banner(h * 0.34f, _lostMessage, UiTheme.Danger, left > 0 ? $"дронов осталось: {left}" : "это был последний дрон");
                     break;
                 case MissionPhase.Loadout:
                     DrawLoadout();
                     break;
                 case MissionPhase.Debrief:
-                    string header = _outcome == MissionOutcome.Success ? "ЗАДАЧА ВЫПОЛНЕНА" : "ЗАДАЧА НЕ ВЫПОЛНЕНА";
-                    Panel(new Rect(w * 0.2f, h * 0.12f, w * 0.6f, h * 0.76f), missionName.ToUpperInvariant(), header, DebriefText(),
-                        $"{ControlInput.HintFor(PilotAction.Restart, _input != null ? _input.ActiveSource : InputSource.KeyboardMouse)} — повторить");
+                    DrawDebrief(w, h);
                     break;
             }
         }
 
-        string BriefingText()
+        /// <summary>
+        /// Task state over the live feed, on the screen's top edge above the OSD rows (Betaflight's top line sits a
+        /// safe margin below it), so it never covers the pilot's telemetry.
+        /// </summary>
+        void DrawStatusStrip(float w)
         {
-            var sb = new StringBuilder(briefing);
-            sb.AppendLine().AppendLine();
-            sb.AppendLine(fiberSorties > 0 ? $"Дронов: {sorties} радио + {fiberSorties} оптоволокно" : $"Дронов: {sorties}");
-            sb.AppendLine(Required < _targets.Count ? $"Цели (нужно {Required} из {_targets.Count}):" : "Цели:");
-            foreach (var t in _targets)
-                sb.AppendLine($"  • {t.Label} — {RequirementText(t.Requirement)}");
+            var t = UiTheme.T;
+            string kind = _link == null ? "радио" : _link.Type == LinkType.Fiber ? "оптоволокно" : _link.Type == LinkType.Satellite ? "спутник" : "радио";
+            int done = TargetsDone;
+            string Val(string v, Color c) => UiTheme.Colored(v, c);
+            string text = $"ДРОН {Val($"{_sortiesFlown + 1}/{Sorties}", UiTheme.TextPrimary)} {Val(kind, UiTheme.TextBody)}     "
+                + $"ЦЕЛИ {Val($"{done}/{Required}", done >= Required ? UiTheme.Success : UiTheme.TextPrimary)}";
+            float tw = UiTheme.Width(text, t.caption) + UiTheme.Px(UiTheme.S6);
+            var r = new Rect((w - tw) * 0.5f, UiTheme.Px(8f), tw, UiTheme.Px(32f));
+            UiTheme.Fill(r, UiTheme.OverVideo);
+            UiTheme.Text(r, text, t.captionCenter, UiTheme.TextSecondary);
+        }
+
+        /// <summary>Centred content column of the briefing and debrief: readable width on any aspect ratio.</summary>
+        static Rect Sheet(float w, float h)
+        {
+            float m = UiTheme.Px(UiTheme.Margin);
+            float width = Mathf.Min(w - 2f * m, UiTheme.Px(1400f));
+            return new Rect((w - width) * 0.5f, UiTheme.Px(72f), width, h - UiTheme.Px(72f) - m);
+        }
+
+        void DrawBriefing(float w, float h)
+        {
+            var t = UiTheme.T;
+            UiTheme.Background(); // opaque: the OSD under it must not show through
+            var r = Sheet(w, h);
+            UiTheme.Text(new Rect(r.x, r.y, r.width, UiTheme.Px(26f)), "БРИФИНГ", t.caption, UiTheme.Accent);
+            UiTheme.TextFit(new Rect(r.x, r.y + UiTheme.Px(28f), r.width, UiTheme.Px(60f)), missionName, t.title, UiTheme.TextPrimary);
+
+            float top = r.y + UiTheme.Px(112f), gap = UiTheme.Px(UiTheme.S7);
+            var button = new Rect(r.x, r.yMax - UiTheme.Px(60f), UiTheme.Px(340f), UiTheme.Px(60f));
+            float sideW = Mathf.Clamp(r.width * 0.36f, UiTheme.Px(420f), UiTheme.Px(520f));
+            var situation = new Rect(r.x, top, r.width - sideW - gap, button.y - UiTheme.Px(UiTheme.S6) - top);
+            var side = new Rect(situation.xMax + gap, top, sideW, r.yMax - top);
+
+            // Situation: running text at a readable line length.
+            UiTheme.Text(new Rect(situation.x, situation.y, situation.width, UiTheme.Px(26f)), "ОБСТАНОВКА", t.caption, UiTheme.TextSecondary);
+            float textW = Mathf.Min(situation.width, UiTheme.Px(820f));
+            UiTheme.Text(new Rect(situation.x, situation.y + UiTheme.Px(36f), textW, situation.height - UiTheme.Px(36f)), briefing, t.body, UiTheme.TextBody);
+
+            // Forces, targets, controls.
+            UiTheme.Panel(side);
+            var s = UiTheme.Inset(side, UiTheme.Px(28f), UiTheme.Px(UiTheme.S5));
+            float y = s.y, lh = UiTheme.Px(30f);
+            UiTheme.Text(new Rect(s.x, y, s.width, UiTheme.Px(26f)), "ДРОНЫ", t.caption, UiTheme.TextSecondary);
+            y += UiTheme.Px(32f);
+            UiTheme.KeyValue(new Rect(s.x, y, s.width, lh), "радио", sorties.ToString(), UiTheme.TextPrimary);
+            y += lh;
+            if (fiberSorties > 0)
+            {
+                UiTheme.KeyValue(new Rect(s.x, y, s.width, lh), "оптоволокно", fiberSorties.ToString(), UiTheme.TextPrimary);
+                y += lh;
+            }
+            UiTheme.Segments(new Rect(s.x, y + UiTheme.Px(4f), s.width, UiTheme.Px(6f)), Sorties, Sorties, UiTheme.TextBody);
+            y += UiTheme.Px(UiTheme.S6);
+
+            UiTheme.Text(new Rect(s.x, y, s.width, UiTheme.Px(26f)), Required < _targets.Count ? $"ЦЕЛИ · НУЖНО {Required} ИЗ {_targets.Count}" : "ЦЕЛИ", t.caption, UiTheme.TextSecondary);
+            y += UiTheme.Px(32f);
+            foreach (var target in _targets)
+            {
+                if (y > side.yMax - UiTheme.Px(180f)) break;
+                var line = new Rect(s.x, y, s.width, UiTheme.Px(28f));
+                UiTheme.Marker(line, UiTheme.Danger, false);
+                UiTheme.TextFit(new Rect(s.x + UiTheme.Px(22f), y, s.width - UiTheme.Px(22f), line.height), target.Label, t.label, UiTheme.TextPrimary);
+                UiTheme.Text(new Rect(s.x + UiTheme.Px(22f), y + UiTheme.Px(26f), s.width - UiTheme.Px(22f), UiTheme.Px(24f)), RequirementText(target.Requirement), t.caption, UiTheme.TextSecondary);
+                y += UiTheme.Px(58f);
+            }
+
             var src = _input != null ? _input.ActiveSource : InputSource.KeyboardMouse;
-            sb.AppendLine().Append($"Арм: {ControlInput.HintFor(PilotAction.Arm, src)}   Режим: {ControlInput.HintFor(PilotAction.Mode, src)}   Пауза / настройки: {ControlInput.HintFor(PilotAction.Pause, src)}");
-            return sb.ToString();
+            float cy = s.yMax - 3f * lh;
+            UiTheme.Text(new Rect(s.x, cy - UiTheme.Px(32f), s.width, UiTheme.Px(26f)), "УПРАВЛЕНИЕ", t.caption, UiTheme.TextSecondary);
+            UiTheme.KeyValue(new Rect(s.x, cy, s.width, lh), "арм", ControlInput.HintFor(PilotAction.Arm, src), UiTheme.TextPrimary);
+            UiTheme.KeyValue(new Rect(s.x, cy + lh, s.width, lh), "режим acro / angle", ControlInput.HintFor(PilotAction.Mode, src), UiTheme.TextPrimary);
+            UiTheme.KeyValue(new Rect(s.x, cy + 2f * lh, s.width, lh), "пауза и настройки", ControlInput.HintFor(PilotAction.Pause, src), UiTheme.TextPrimary);
+
+            if (UiTheme.Button(button, "НАЧАТЬ", true, true, ControlInput.Key("Enter", "A"))) PrepareSortie();
         }
 
         static string RequirementText(TargetRequirement r) => r switch
         {
             TargetRequirement.Destroyed => "уничтожить",
-            TargetRequirement.Silenced => "подавить (антенны / генератор)",
+            TargetRequirement.Silenced => "подавить: антенны или генератор",
             _ => "вывести из строя"
         };
 
-        string DebriefText()
+        void DrawDebrief(float w, float h)
         {
+            var t = UiTheme.T;
+            UiTheme.Background(); // opaque: the OSD under it must not show through
+            var r = Sheet(w, h);
+            bool success = _outcome == MissionOutcome.Success;
             var states = CollectStates();
-            var sb = new StringBuilder();
-            foreach (var t in _targets)
-                sb.AppendLine(IsEscaped(t) ? $"{t.Label}: ушла" : $"{t.Label}: {DamageNames.Ru(t.Model.State)}  (+{MissionRules.Score(t.Model.State)})");
-            sb.AppendLine();
-            sb.AppendLine($"Израсходовано дронов: {_sortiesFlown}/{Sorties}");
-            if (_decoyStrikes > 0) sb.AppendLine($"Из них по макетам: {_decoyStrikes}");
-            int s = (int)_missionTime;
-            sb.AppendLine($"Время: {s / 60:00}:{s % 60:00}");
-            sb.AppendLine().Append($"ОЧКИ: {MissionRules.TotalScore(states, _sortiesFlown, Sorties, _outcome)}");
-            return sb.ToString();
-        }
+            UiTheme.Text(new Rect(r.x, r.y, r.width, UiTheme.Px(26f)), $"ИТОГ · {missionName.ToUpperInvariant()}", t.caption, UiTheme.TextSecondary);
+            var titleRect = new Rect(r.x, r.y + UiTheme.Px(28f), r.width, UiTheme.Px(60f));
+            UiTheme.Text(titleRect,
+                success ? "ЗАДАЧА ВЫПОЛНЕНА" : "ЗАДАЧА НЕ ВЫПОЛНЕНА", t.title, success ? UiTheme.Success : UiTheme.Danger);
 
-        void Panel(Rect r, string kicker, string header, string text, string footer)
-        {
-            UiTheme.Fill(r, UiTheme.Panel);
-            UiTheme.Frame(r, UiTheme.Line);
-            float pad = UiTheme.Px(40f);
-            GUI.Label(new Rect(r.x + pad, r.y + pad * 0.8f, r.width - pad * 2, UiTheme.Px(28f)), $"// {kicker}", _kicker);
-            GUI.Label(new Rect(r.x + pad, r.y + pad * 0.8f + UiTheme.Px(30f), r.width - pad * 2, _title.fontSize * 1.4f), header, _title);
-            float bodyTop = r.y + pad * 0.8f + UiTheme.Px(30f) + _title.fontSize * 1.7f;
-            GUI.Label(new Rect(r.x + pad, bodyTop, r.width - pad * 2, r.yMax - bodyTop - UiTheme.Px(80f)), text, _body);
-            var bar = new Rect(r.x + pad, r.yMax - UiTheme.Px(64f), r.width - pad * 2, UiTheme.Px(40f));
-            UiTheme.Fill(new Rect(bar.x, bar.y - UiTheme.Px(10f), bar.width, 1f), UiTheme.Line);
-            GUI.Label(bar, footer, _small);
-        }
+            // Key numbers.
+            float top = r.y + UiTheme.Px(116f), g = UiTheme.Px(UiTheme.S3), th = UiTheme.Px(104f);
+            int tiles = _decoyStrikes > 0 ? 4 : 3;
+            float tw = (r.width - (tiles - 1) * g) / tiles;
+            int sec = (int)_missionTime;
+            UiTheme.Stat(new Rect(r.x, top, tw, th), "ОЧКИ", MissionRules.TotalScore(states, _sortiesFlown, Sorties, _outcome).ToString(), UiTheme.TextPrimary);
+            UiTheme.Stat(new Rect(r.x + (tw + g), top, tw, th), "ДРОНОВ ИЗРАСХОДОВАНО", $"{_sortiesFlown} из {Sorties}", UiTheme.TextPrimary);
+            UiTheme.Stat(new Rect(r.x + 2f * (tw + g), top, tw, th), "ВРЕМЯ", $"{sec / 60:00}:{sec % 60:00}", UiTheme.TextPrimary);
+            if (_decoyStrikes > 0)
+                UiTheme.Stat(new Rect(r.x + 3f * (tw + g), top, tw, th), "УДАРОВ ПО МАКЕТАМ", _decoyStrikes.ToString(), UiTheme.Warning);
 
-        void EnsureStyles()
-        {
-            int size = UiTheme.FontPx(19f);
-            if (_body != null && _body.fontSize == size) return;
-            _body = UiTheme.Style(UiTheme.Mono, 19f, UiTheme.Body, TextAnchor.UpperLeft, true);
-            _title = UiTheme.Style(UiTheme.Display, 46f, UiTheme.Text);
-            _kicker = UiTheme.Style(UiTheme.Mono, 18f, UiTheme.Accent);
-            _small = UiTheme.Style(UiTheme.MonoBold, 20f, UiTheme.Text, TextAnchor.MiddleCenter);
-            _small.normal.textColor = UiTheme.Text;
-            _small.fontStyle = FontStyle.Normal;
+            // Targets: name, state, points.
+            float y = top + th + UiTheme.Px(UiTheme.S6);
+            UiTheme.Text(new Rect(r.x, y, r.width, UiTheme.Px(26f)), "ЦЕЛИ", t.caption, UiTheme.TextSecondary);
+            y += UiTheme.Px(34f);
+            float rh = UiTheme.Px(44f), listBottom = r.yMax - UiTheme.Px(60f) - UiTheme.Px(UiTheme.S6);
+            foreach (var target in _targets)
+            {
+                if (y + rh > listBottom) break;
+                var row = new Rect(r.x, y, r.width, rh);
+                UiTheme.Fill(new Rect(row.x, row.yMax - 1f, row.width, 1f), UiTheme.Border);
+                bool escaped = IsEscaped(target), hit = !escaped && target.Neutralized;
+                Color c = escaped ? UiTheme.Danger : hit ? UiTheme.Success : UiTheme.TextSecondary;
+                UiTheme.Marker(row, c, hit);
+                UiTheme.TextFit(new Rect(row.x + UiTheme.Px(22f), row.y, row.width * 0.5f, rh), target.Label, t.label, UiTheme.TextPrimary);
+                string state = escaped ? "ушла из района" : DamageNames.Ru(target.Model.State);
+                float pw = UiTheme.Px(90f);
+                UiTheme.Text(new Rect(row.x, row.y, row.width - pw, rh), state, t.labelRight, c);
+                UiTheme.Text(new Rect(row.xMax - pw, row.y, pw, rh), escaped ? "—" : $"+{MissionRules.Score(target.Model.State)}", t.labelRight, UiTheme.TextSecondary);
+                y += rh;
+            }
+
+            float bw = UiTheme.Px(320f), bh = UiTheme.Px(60f), by = r.yMax - bh;
+            var src = _input != null ? _input.ActiveSource : InputSource.KeyboardMouse;
+            // The likely next step is the primary one: retry after a failure, the menu after a success.
+            if (UiTheme.Button(new Rect(r.x, by, bw, bh), "ПОВТОРИТЬ", !success, !success, ControlInput.HintFor(PilotAction.Restart, src)))
+                SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+            if (UiTheme.Button(new Rect(r.x + bw + UiTheme.Px(UiTheme.S3), by, bw, bh), "В МЕНЮ", success, success, ControlInput.Key("Enter", "A")))
+                SceneManager.LoadScene(0);
         }
     }
 }

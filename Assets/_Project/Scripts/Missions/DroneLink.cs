@@ -122,11 +122,14 @@ namespace ModernDrone.Missions
 
         void Update()
         {
-            var q = type == LinkType.Fiber ? LinkModel.Fiber(_cableUsed, spoolLength) : RadioQuality(out _telemetry.jam);
-            if (type == LinkType.Fiber) _telemetry.jam = 0f;
+            var q = type == LinkType.Fiber ? LinkModel.Fiber(_cableUsed, spoolLength)
+                : type == LinkType.Satellite ? new LinkQuality { video = 1f, control = 1f }
+                : RadioQuality(out _telemetry.jam);
+            if (type != LinkType.Radio) _telemetry.jam = 0f;
 
             _drone.SetLinkQuality(q.control);
-            _drone.InputLatency = type == LinkType.Fiber ? 0.01f : LinkModel.ControlLatency(q.control);
+            _drone.InputLatency = type == LinkType.Fiber ? 0.01f : type == LinkType.Satellite ? LinkModel.SatelliteLatency
+                : LinkModel.ControlLatency(q.control);
 
             _telemetry.type = type;
             _telemetry.video = q.video;

@@ -212,6 +212,35 @@ namespace ModernDrone.Editor
             group.RecalculateBounds();
         }
 
+        /// <summary>
+        /// Describes how the vehicle burns and blows up (<see cref="VehicleFxProfile"/>): turret and rotor by reference,
+        /// compartments fitted around the modules, openings suggested from the model (Hatch_* nodes become hinged lids)
+        /// and the hull's top. Call once every module and the model are in place.
+        /// </summary>
+        public static VehicleFxProfile SetupProfile(Transform root, Transform turret = null, Transform rotor = null)
+        {
+            var p = root.GetComponent<VehicleFxProfile>();
+            if (p == null) p = root.gameObject.AddComponent<VehicleFxProfile>();
+            p.turret = turret;
+            p.rotor = rotor;
+            VehicleFxSetup.FitCompartments(p);
+            VehicleFxSetup.Suggest(p, turret);
+            return p;
+        }
+
+        /// <summary>Sets what a module holds (substance asset and amount in its unit, explosive fill).</summary>
+        public static VehicleModule Fill(Transform root, string module, SubstanceData contents, float units, SubstanceData explosive = null,
+            float explosiveUnits = 0f, float fill = 1f, bool selfSealing = false)
+        {
+            var t = System.Array.Find(root.GetComponentsInChildren<Transform>(true), x => x.name == module);
+            var m = t != null ? t.GetComponent<VehicleModule>() : null;
+            if (m == null) throw new System.ArgumentException($"{root.name}: no module {module}");
+            return m.SetContents(contents, units, explosive, explosiveUnits, fill, selfSealing);
+        }
+
+        public VehicleModule Fill(string module, SubstanceData contents, float units, SubstanceData explosive = null, float explosiveUnits = 0f,
+            float fill = 1f, bool selfSealing = false) => Fill(T, module, contents, units, explosive, explosiveUnits, fill, selfSealing);
+
         /// <summary>The full model's materials by name (the decimated LODs carry the same names, no textures).</summary>
         public static System.Collections.Generic.Dictionary<string, Material> FullMaterials(System.Collections.Generic.IEnumerable<Renderer> renderers)
         {
@@ -293,6 +322,8 @@ namespace ModernDrone.Editor
             model.SetDisplayName(displayName);
             model.SetDecoy(decoy);
             Root.AddComponent<VehicleEffects>();
+            // The builders name their own moving parts; the profile keeps them as references from here on.
+            SetupProfile(T, T.Find("Turret"), T.Find("Rotor"));
             if (decoy) Root.tag = "Decoy";
             return model;
         }

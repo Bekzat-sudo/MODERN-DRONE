@@ -95,7 +95,7 @@ namespace ModernDrone.Missions
             _camera = new GameObject("HangarCamera").AddComponent<Camera>();
             _camera.transform.SetParent(_stage, false);
             _camera.clearFlags = CameraClearFlags.SolidColor;
-            _camera.backgroundColor = ModernDrone.Core.UiTheme.PanelRaised;
+            _camera.backgroundColor = ModernDrone.Core.UiTheme.SurfaceRaised;
             _camera.nearClipPlane = 0.02f;
             _camera.farClipPlane = 8f; // the map is 3 km below
             _camera.fieldOfView = 30f;

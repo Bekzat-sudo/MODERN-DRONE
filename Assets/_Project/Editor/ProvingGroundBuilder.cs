@@ -206,6 +206,22 @@ namespace ModernDrone.Editor
             drone.transform.SetPositionAndRotation(pos + Vector3.up * 0.1f, Quaternion.identity);
         }
 
+        /// <summary>
+        /// Launch point in the air for an aeroplane: the drone rig with the given model, held there (kinematic) until
+        /// the sortie starts and released at cruise speed toward <paramref name="yaw"/>.
+        /// </summary>
+        internal static void CreateAirSpawn(Terrain terrain, Vector3 pos, float heightAboveGround, float yaw, ModernDrone.Drone.DroneConfig model)
+        {
+            pos.y = terrain.SampleHeight(pos) + heightAboveGround;
+            new GameObject("DroneSpawn") { tag = "Respawn" }.transform.position = pos;
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(DroneRigBuilder.PrefabPath) ?? DroneRigBuilder.BuildPrefab();
+            var drone = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+            drone.transform.SetPositionAndRotation(pos, Quaternion.Euler(0f, yaw, 0f));
+            var so = new SerializedObject(drone.GetComponent<ModernDrone.Drone.DroneController>());
+            so.FindProperty("config").objectReferenceValue = model;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
         static GameObject Box(string name, Transform parent, Material mat, int layer)
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);

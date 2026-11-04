@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ModernDrone.Core;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -16,6 +17,18 @@ namespace ModernDrone.UI
         /// <summary>Editable text: typed while the row is in edit mode (Enter / click to start, Enter / Esc to finish).</summary>
         public Action<char> Type;
         public Action Erase;
+        /// <summary>Explanation shown under the list while the row has focus.</summary>
+        public string Note;
+        /// <summary>Slider position in [0, 1], drawn as a track next to the value.</summary>
+        public Func<float> Fraction;
+        /// <summary>On / off state of a toggle, drawn as a switch.</summary>
+        public Func<bool> On;
+        /// <summary>The value is a key or button name, drawn as a key cap.</summary>
+        public bool IsBinding;
+        /// <summary>Resets, discards or leaves something: the label turns red while focused.</summary>
+        public bool Danger;
+        /// <summary>Null = always available; a disabled row is drawn dimmed and does nothing.</summary>
+        public Func<bool> Enabled;
 
         public MenuRow(string label) => Label = label;
 
@@ -23,12 +36,12 @@ namespace ModernDrone.UI
         public static MenuRow Editing;
         static int _editingSince;
 
+        public static int EditingSince => _editingSince;
+
         /// <summary>
         /// Text field limited to <paramref name="maxLength"/> characters that <paramref name="accept"/> maps to a
         /// stored character (or '\0' to reject).
         /// </summary>
-        public static int EditingSince => _editingSince;
-
         public static MenuRow Text(string label, Func<string> get, Action<string> set, int maxLength, Func<char, char> accept)
         {
             var row = new MenuRow(label);
@@ -53,6 +66,7 @@ namespace ModernDrone.UI
         public static MenuRow Toggle(string label, Func<bool> get, Action<bool> set) => new MenuRow(label)
         {
             Value = () => get() ? "ВКЛ" : "ВЫКЛ",
+            On = get,
             Adjust = _ => set(!get()),
             Activate = () => set(!get())
         };
@@ -61,6 +75,7 @@ namespace ModernDrone.UI
             new MenuRow(label)
             {
                 Value = () => get().ToString(format, System.Globalization.CultureInfo.InvariantCulture),
+                Fraction = () => Mathf.InverseLerp(min, max, get()),
                 Adjust = dir => set(Mathf.Clamp(Mathf.Round((get() + dir * step) / step) * step, min, max))
             };
 
@@ -72,6 +87,15 @@ namespace ModernDrone.UI
         };
 
         public bool Selectable => !IsHeader && (Adjust != null || Activate != null);
+
+        public bool IsEnabled => Enabled == null || Enabled();
+
+        /// <summary>Enter / A / click: activate, or step the value forward.</summary>
+        public void Press()
+        {
+            if (!IsEnabled) return;
+            (Activate ?? (() => Adjust?.Invoke(1)))();
+        }
     }
 
     public struct MenuNav
@@ -80,54 +104,27 @@ namespace ModernDrone.UI
     }
 
     /// <summary>
-    /// Minimal IMGUI menu toolkit with keyboard, gamepad and mouse navigation.
+    /// IMGUI menu toolkit on top of <see cref="UiTheme"/>: keyboard / gamepad / mouse navigation and row lists whose
+    /// values are drawn by kind (choice, slider track, switch, key cap, read-only info).
     /// </summary>
     public sealed class MenuGui
     {
         const float RepeatDelay = 0.35f;
         const float RepeatRate = 0.09f;
 
-        public GUIStyle title, subtitle, row, rowSelected, value, header, hint, tab, tabSelected;
-        int _styleHeight;
+        public enum RowSize
+        {
+            /// <summary>Settings: mono label, value on the right.</summary>
+            Normal,
+            /// <summary>Main / pause menu: Oswald label, a note on the right.</summary>
+            Large
+        }
 
         // Held-direction auto-repeat for sticks / d-pad / keys.
         Vector2Int _heldDir;
         float _nextRepeat;
 
-        static Texture2D _white;
-        static Texture2D White => _white != null ? _white : _white = Texture2D.whiteTexture;
-
-        public static readonly Color PanelColor = new Color(ModernDrone.Core.UiTheme.Panel.r, ModernDrone.Core.UiTheme.Panel.g, ModernDrone.Core.UiTheme.Panel.b, 0.96f);
-        public static readonly Color Accent = ModernDrone.Core.UiTheme.Accent;
-
-        public void EnsureStyles()
-        {
-            if (title != null && _styleHeight == Screen.height) return;
-            _styleHeight = Screen.height;
-            // "Tactical tablet" theme: data in IBM Plex Mono, headings in Oswald (ModernDrone.Core.UiTheme).
-            int size = ModernDrone.Core.UiTheme.FontPx(22f);
-
-            row = new GUIStyle(GUI.skin.label) { font = ModernDrone.Core.UiTheme.Mono, fontSize = size, alignment = TextAnchor.MiddleLeft, clipping = TextClipping.Clip };
-            row.normal.textColor = ModernDrone.Core.UiTheme.Body;
-            rowSelected = new GUIStyle(row) { font = ModernDrone.Core.UiTheme.MonoBold };
-            rowSelected.normal.textColor = ModernDrone.Core.UiTheme.Text;
-            value = new GUIStyle(row) { alignment = TextAnchor.MiddleRight };
-            value.normal.textColor = Accent;
-            header = new GUIStyle(row) { fontStyle = FontStyle.Bold, fontSize = Mathf.RoundToInt(size * 0.8f) };
-            header.normal.textColor = ModernDrone.Core.UiTheme.Muted;
-            hint = new GUIStyle(row) { fontSize = Mathf.RoundToInt(size * 0.75f), alignment = TextAnchor.MiddleCenter, wordWrap = true };
-            hint.normal.textColor = ModernDrone.Core.UiTheme.Muted;
-            title = new GUIStyle(row) { font = ModernDrone.Core.UiTheme.Display, fontSize = Mathf.RoundToInt(size * 2.2f), alignment = TextAnchor.MiddleCenter };
-            title.normal.textColor = ModernDrone.Core.UiTheme.Text;
-            subtitle = new GUIStyle(row) { fontSize = Mathf.RoundToInt(size * 0.9f), alignment = TextAnchor.MiddleCenter, wordWrap = true };
-            subtitle.normal.textColor = ModernDrone.Core.UiTheme.Body;
-            tab = new GUIStyle(row) { font = ModernDrone.Core.UiTheme.Display, alignment = TextAnchor.MiddleCenter, fontSize = Mathf.RoundToInt(size * 0.95f) };
-            tab.normal.textColor = ModernDrone.Core.UiTheme.Muted;
-            tabSelected = new GUIStyle(tab);
-            tabSelected.normal.textColor = ModernDrone.Core.UiTheme.Text;
-        }
-
-        public float RowHeight => row.fontSize * 1.9f;
+        public static float RowHeight(RowSize size = RowSize.Normal) => UiTheme.Px(size == RowSize.Large ? 64f : 46f);
 
         /// <summary>Polls keyboard and gamepad for menu navigation (call once per frame, from Update).</summary>
         public MenuNav ReadNav()
@@ -194,9 +191,12 @@ namespace ModernDrone.UI
             if (nav.up) selected = Step(rows, selected, -1);
             if (nav.down) selected = Step(rows, selected, 1);
             var r = rows[selected];
-            if (nav.left) r.Adjust?.Invoke(-1);
-            if (nav.right) r.Adjust?.Invoke(1);
-            if (nav.confirm) (r.Activate ?? (() => r.Adjust?.Invoke(1)))();
+            if (r.IsEnabled)
+            {
+                if (nav.left) r.Adjust?.Invoke(-1);
+                if (nav.right) r.Adjust?.Invoke(1);
+            }
+            if (nav.confirm) r.Press();
         }
 
         static int Step(List<MenuRow> rows, int from, int dir)
@@ -215,13 +215,23 @@ namespace ModernDrone.UI
             return rows[idx].Selectable ? idx : Step(rows, idx, dir);
         }
 
-        /// <summary>Draws rows (scrolling to keep the selection visible) and handles mouse input. Call from OnGUI.</summary>
-        public void DrawRows(Rect area, List<MenuRow> rows, ref int selected)
+        /// <summary>Note of the focused row, or null.</summary>
+        public static string FocusedNote(List<MenuRow> rows, int selected) =>
+            selected >= 0 && selected < rows.Count ? rows[selected].Note : null;
+
+        /// <summary>
+        /// Draws rows (scrolling to keep the selection visible, with a scroll bar when they do not fit) and handles
+        /// mouse input. <paramref name="focused"/> = false draws the selection as "current" (focus is elsewhere on the
+        /// screen). Call from OnGUI.
+        /// </summary>
+        public void DrawRows(Rect area, List<MenuRow> rows, ref int selected, RowSize size = RowSize.Normal, bool focused = true)
         {
-            float h = RowHeight;
+            var t = UiTheme.T;
+            float h = RowHeight(size);
             int visible = Mathf.Max(1, Mathf.FloorToInt(area.height / h));
             int first = Mathf.Clamp(selected - visible / 2, 0, Mathf.Max(0, rows.Count - visible));
             var e = Event.current;
+            int slide = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(rows);
             // Mouse wheel scrolls the selection.
             if (e.type == EventType.ScrollWheel && area.Contains(e.mousePosition) && rows.Count > 0)
             {
@@ -246,27 +256,23 @@ namespace ModernDrone.UI
                 e.Use();
             }
 
-            for (int i = first; i < Mathf.Min(rows.Count, first + visible); i++)
+            int last = Mathf.Min(rows.Count, first + visible);
+            for (int i = first; i < last; i++)
             {
                 var r = rows[i];
                 var rect = new Rect(area.x, area.y + (i - first) * h, area.width, h);
                 if (r.IsHeader)
                 {
-                    GUI.Label(new Rect(rect.x, rect.y + h * 0.25f, rect.width, h * 0.75f), r.Label.ToUpperInvariant(), header);
+                    if (!string.IsNullOrEmpty(r.Label))
+                        UiTheme.Text(new Rect(rect.x + UiTheme.Px(UiTheme.S5), rect.y + h * 0.35f, rect.width, h * 0.65f), r.Label.ToUpperInvariant(), t.caption, UiTheme.TextSecondary);
                     continue;
                 }
 
-                bool isSel = i == selected;
-                if (isSel) Fill(rect, ModernDrone.Core.UiTheme.AccentFill);
-                if (isSel) Fill(new Rect(rect.x, rect.y, 3f, rect.height), Accent);
-
-                float valueWidth = rect.width * 0.45f;
-                GUI.Label(new Rect(rect.x + 14f, rect.y, rect.width - valueWidth - 14f, h), r.Label, isSel ? rowSelected : row);
-
-                var valueRect = new Rect(rect.xMax - valueWidth, rect.y, valueWidth - 10f, h);
-                string v = r.Value?.Invoke();
-                if (v != null)
-                    GUI.Label(valueRect, r.Adjust != null ? $"‹  {v}  ›" : v, value);
+                bool sel = i == selected && r.Selectable;
+                var state = r.Selectable ? UiTheme.StateOf(rect, sel, focused, r.IsEnabled) : UiState.Normal;
+                if (!r.IsEnabled) state = UiState.Disabled;
+                UiTheme.Item(rect, state, slideId: sel ? slide : 0);
+                DrawRow(rect, r, state, size);
 
                 // Mouse: hover selects, click on the value side adjusts (left/right half), elsewhere activates.
                 if (!r.Selectable) continue;
@@ -274,55 +280,132 @@ namespace ModernDrone.UI
                 if (e.type == EventType.MouseDown && e.button == 0 && rect.Contains(e.mousePosition))
                 {
                     selected = i;
-                    if (r.Adjust != null && valueRect.Contains(e.mousePosition))
-                        r.Adjust(e.mousePosition.x < valueRect.center.x ? -1 : 1);
+                    var valueSide = new Rect(rect.center.x, rect.y, rect.width * 0.5f, rect.height);
+                    if (r.Adjust != null && r.IsEnabled && valueSide.Contains(e.mousePosition))
+                        r.Adjust(e.mousePosition.x < valueSide.center.x ? -1 : 1);
                     else
-                        (r.Activate ?? (() => r.Adjust?.Invoke(1)))();
+                        r.Press();
                     e.Use();
                 }
             }
+            UiTheme.ScrollBar(new Rect(area.xMax + UiTheme.Px(UiTheme.S3), area.y, UiTheme.Hair(3f), visible * h), first, visible, rows.Count);
         }
 
-        /// <summary>Tab strip; returns the new tab index (mouse click).</summary>
-        public int DrawTabs(Rect area, string[] names, int current)
+        static void DrawRow(Rect rect, MenuRow r, UiState state, RowSize size)
         {
-            float w = area.width / names.Length;
-            for (int i = 0; i < names.Length; i++)
+            var t = UiTheme.T;
+            bool focus = state == UiState.Focus;
+            float pad = UiTheme.Px(UiTheme.S5);
+            // Leading spaces in a label mark a sub-item: indent instead of drawing them.
+            string label = r.Label.TrimStart(' ');
+            float indent = (r.Label.Length - label.Length) / 2 * UiTheme.Px(UiTheme.S5);
+            var inner = new Rect(rect.x + pad + indent, rect.y, rect.width - pad * 2f - indent, rect.height);
+            string v = r.Value?.Invoke();
+
+            if (size == RowSize.Large)
             {
-                var r = new Rect(area.x + i * w, area.y, w, area.height);
-                if (i == current)
-                {
-                    Fill(r, new Color(1f, 1f, 1f, 0.07f));
-                    Fill(new Rect(r.x, r.yMax - 3f, r.width, 3f), Accent);
-                }
-                if (GUI.Button(r, names[i], i == current ? tabSelected : tab))
-                    current = i;
+                Color lc = r.Danger ? (focus ? UiTheme.Danger : UiTheme.TextSecondary) : UiTheme.LabelColor(state);
+                UiTheme.TextFit(new Rect(inner.x, inner.y, inner.width * 0.6f, inner.height), label, t.heading, lc);
+                if (!string.IsNullOrEmpty(v))
+                    UiTheme.Text(inner, v, t.captionRight, focus ? UiTheme.TextBody : UiTheme.TextSecondary);
+                return;
             }
-            return current;
+
+            // Value on the right, drawn by kind; the label takes the rest of the line.
+            float valueW = DrawValue(inner, r, state, v);
+            var labelRect = new Rect(inner.x, inner.y, Mathf.Max(0f, inner.width - valueW - UiTheme.Px(UiTheme.S5)), inner.height);
+            Color labelColor = r.Danger && focus ? UiTheme.Danger : r.Selectable ? UiTheme.LabelColor(state) : UiTheme.TextSecondary;
+            UiTheme.TextFit(labelRect, label, focus ? t.labelBold : t.label, labelColor);
         }
 
-        public static void Fill(Rect r, Color c)
+        /// <summary>Draws the value right-aligned in <paramref name="r"/> and returns the width it used.</summary>
+        static float DrawValue(Rect r, MenuRow row, UiState state, string v)
         {
-            var prev = GUI.color;
-            GUI.color = c;
-            GUI.DrawTexture(r, White);
-            GUI.color = prev;
+            var t = UiTheme.T;
+            bool focus = state == UiState.Focus, disabled = state == UiState.Disabled;
+            float x = r.xMax;
+
+            if (row.On != null)
+            {
+                // Switch: track with a knob, the word beside it.
+                bool on = row.On();
+                float sw = UiTheme.Px(44f), sh = UiTheme.Px(22f), b = UiTheme.Hair(2f);
+                var track = new Rect(x - sw, r.center.y - sh * 0.5f, sw, sh);
+                Color c = disabled ? UiTheme.TextDisabled : on ? UiTheme.Accent : UiTheme.TextSecondary;
+                if (on) UiTheme.Fill(track, c); else UiTheme.Frame(track, c, b);
+                float k = sh - 4f * b;
+                UiTheme.Fill(new Rect(on ? track.xMax - 2f * b - k : track.x + 2f * b, track.y + 2f * b, k, k), on ? UiTheme.OnAccent : c);
+                float ww = UiTheme.Px(70f);
+                UiTheme.Text(new Rect(track.x - UiTheme.Px(UiTheme.S3) - ww, r.y, ww, r.height), v, t.labelRight, on ? UiTheme.TextPrimary : UiTheme.TextSecondary);
+                return sw + UiTheme.Px(UiTheme.S3) + ww;
+            }
+
+            if (v == null)
+            {
+                // Plain action: a chevron says "opens / does something".
+                if (row.Activate == null) return 0f;
+                UiTheme.Text(r, "›", t.labelRight, focus ? UiTheme.Accent : UiTheme.TextSecondary);
+                return UiTheme.Px(20f);
+            }
+
+            if (row.IsBinding)
+            {
+                float kw = UiTheme.KeyWidth(v), kh = UiTheme.Px(30f);
+                var cap = new Rect(x - kw, r.center.y - kh * 0.5f, kw, kh);
+                if (v == "—") UiTheme.Text(cap, v, t.captionCenter, UiTheme.TextSecondary);
+                else UiTheme.KeyCap(cap, v, focus ? UiTheme.Accent : UiTheme.TextPrimary, UiTheme.OnAccent);
+                return kw;
+            }
+
+            Color vc = disabled ? UiTheme.TextDisabled : !row.Selectable ? UiTheme.TextSecondary : focus ? UiTheme.Accent : UiTheme.TextPrimary;
+            float used = 0f;
+            if (row.Adjust != null && focus)
+            {
+                // Chevrons only on the focused row: they say "← → changes this".
+                float cw = UiTheme.Px(22f);
+                UiTheme.Text(new Rect(x - cw, r.y, cw, r.height), "›", t.labelRight, UiTheme.Accent);
+                x -= cw + UiTheme.Px(UiTheme.S2);
+                used += cw + UiTheme.Px(UiTheme.S2);
+            }
+            float vw = Mathf.Min(UiTheme.Width(v, t.labelRight), r.width * 0.5f);
+            UiTheme.TextFit(new Rect(x - vw, r.y, vw, r.height), v, t.labelRight, vc);
+            x -= vw;
+            used += vw;
+            if (row.Adjust != null && focus)
+            {
+                float cw = UiTheme.Px(22f);
+                x -= UiTheme.Px(UiTheme.S2);
+                UiTheme.Text(new Rect(x - cw, r.y, cw, r.height), "‹", t.labelRight, UiTheme.Accent);
+                x -= cw;
+                used += cw + UiTheme.Px(UiTheme.S2);
+            }
+            if (row.Fraction != null)
+            {
+                // Slider track: where the value sits in its range.
+                float tw = UiTheme.Px(140f), th = UiTheme.Hair(4f);
+                x -= UiTheme.Px(UiTheme.S4) + tw;
+                var track = new Rect(x, r.center.y - th * 0.5f, tw, th);
+                UiTheme.Fill(track, UiTheme.Border);
+                UiTheme.Fill(new Rect(track.x, track.y, tw * Mathf.Clamp01(row.Fraction()), th), focus ? UiTheme.Accent : UiTheme.TextSecondary);
+                used += UiTheme.Px(UiTheme.S4) + tw;
+            }
+            return used;
         }
 
         /// <summary>Horizontal value bar for axis monitors: value in [-1, 1] (bipolar) or [0, 1].</summary>
         public static void Bar(Rect r, float v, bool bipolar)
         {
-            Fill(r, new Color(1f, 1f, 1f, 0.12f));
+            UiTheme.Fill(r, UiTheme.Border);
             if (bipolar)
             {
                 float mid = r.x + r.width * 0.5f;
                 float w = r.width * 0.5f * Mathf.Clamp(v, -1f, 1f);
-                Fill(w >= 0 ? new Rect(mid, r.y, w, r.height) : new Rect(mid + w, r.y, -w, r.height), Accent);
-                Fill(new Rect(mid - 1f, r.y, 2f, r.height), Color.white);
+                UiTheme.Fill(w >= 0 ? new Rect(mid, r.y, w, r.height) : new Rect(mid + w, r.y, -w, r.height), UiTheme.Accent);
+                UiTheme.Fill(new Rect(mid - 1f, r.y - UiTheme.Px(3f), 2f, r.height + UiTheme.Px(6f)), UiTheme.TextPrimary);
             }
             else
             {
-                Fill(new Rect(r.x, r.y, r.width * Mathf.Clamp01(v), r.height), Accent);
+                UiTheme.Fill(new Rect(r.x, r.y, r.width * Mathf.Clamp01(v), r.height), UiTheme.Accent);
             }
         }
     }

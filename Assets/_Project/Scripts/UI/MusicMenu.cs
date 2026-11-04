@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using ModernDrone.Core;
+using ModernDrone.Drone;
 using UnityEngine;
 
 namespace ModernDrone.UI
@@ -94,22 +95,35 @@ namespace ModernDrone.UI
 
         static string Tail(string text) => text.Length <= ShownUrlLength ? text : "…" + text.Substring(text.Length - ShownUrlLength);
 
-        public void Draw(Rect r)
+        public void Draw(Rect screen)
         {
-            _gui.EnsureStyles();
-            MenuGui.Fill(r, MenuGui.PanelColor);
-            float pad = r.height * 0.03f;
-            GUI.Label(new Rect(r.x, r.y + pad, r.width, _gui.title.fontSize * 1.2f), "МУЗЫКА", _gui.title);
+            var t = UiTheme.T;
+            float width = Mathf.Min(screen.width - 2f * UiTheme.Px(UiTheme.Margin), UiTheme.Px(1320f));
+            var panel = new Rect(screen.center.x - width * 0.5f, screen.y + UiTheme.Px(UiTheme.S7), width, screen.height - 2f * UiTheme.Px(UiTheme.S7));
+            UiTheme.Panel(panel);
+            var inner = UiTheme.Inset(panel, UiTheme.Px(40f), UiTheme.Px(UiTheme.S6));
 
-            float lineH = _gui.subtitle.fontSize * 1.6f, top = r.y + pad + _gui.title.fontSize * 1.4f;
+            var header = new Rect(inner.x, inner.y, inner.width, UiTheme.Px(56f));
+            UiTheme.Text(header, "МУЗЫКА", t.title, UiTheme.TextPrimary);
             var track = P.CurrentTrack;
-            GUI.Label(new Rect(r.x + pad, top, r.width - pad * 2, lineH), track != null ? track.title : "Ничего не играет", _gui.subtitle);
-            GUI.Label(new Rect(r.x + pad, top + lineH, r.width - pad * 2, lineH), P.Status, _gui.hint);
+            UiTheme.Text(header, track != null ? track.title : "ничего не играет", t.captionRight, UiTheme.TextSecondary);
 
-            float bodyTop = top + lineH * 2f + pad * 0.5f;
-            _gui.DrawRows(new Rect(r.x + pad, bodyTop, r.width - pad * 2, r.yMax - bodyTop - pad * 2 - _gui.hint.fontSize * 1.6f), _rows, ref _selected);
-            GUI.Label(new Rect(r.x, r.yMax - pad - _gui.hint.fontSize * 1.6f, r.width, _gui.hint.fontSize * 1.6f),
-                "↑↓ — выбор,  ←→ — значение,  Enter / A — действие,  Ctrl+V в поле — вставить,  Esc / B — назад", _gui.hint);
+            var prompts = new Rect(inner.x, inner.yMax - UiTheme.Px(36f), inner.width, UiTheme.Px(36f));
+            var note = new Rect(inner.x, prompts.y - UiTheme.Px(UiTheme.S4) - UiTheme.Px(60f), inner.width, UiTheme.Px(60f));
+            // Rows reach into the panel padding so their text lines up with the title.
+            float rowPad = UiTheme.Px(UiTheme.S5);
+            float top = header.yMax + UiTheme.Px(UiTheme.S4);
+            var body = new Rect(inner.x - rowPad, top, inner.width + 2f * rowPad - UiTheme.Px(UiTheme.S4), note.y - top - UiTheme.Px(UiTheme.S5));
+            _gui.DrawRows(body, _rows, ref _selected);
+
+            if (!string.IsNullOrEmpty(P.Status))
+            {
+                UiTheme.Fill(new Rect(note.x, note.y, note.width, 1f), UiTheme.Border);
+                UiTheme.Text(new Rect(note.x, note.y + UiTheme.Px(UiTheme.S3), note.width, note.height - UiTheme.Px(UiTheme.S3)), P.Status, t.body, UiTheme.TextBody);
+            }
+
+            if (UiTheme.Prompts(prompts, false, ("↑↓", "пункт"), ("←→", "значение"), (ControlInput.Key("Enter", "A"), "выбрать"), ("Ctrl+V", "вставить в поле"), (ControlInput.Key("Esc", "B"), "назад")) == 4)
+                Close();
         }
     }
 }

@@ -490,7 +490,7 @@ namespace ModernDrone.Editor
         {
             string path = outDir + $"{node}{suffix}.prefab";
             var existing = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-            if (existing != null) return existing;
+            if (existing != null && existing.GetComponent<LODGroup>() != null) return existing;
             var model = Object.Instantiate(AssetDatabase.LoadAssetAtPath<GameObject>(modelPath));
             Transform part = null;
             foreach (var t in model.GetComponentsInChildren<Transform>()) if (t.name == node) part = t;
@@ -513,8 +513,17 @@ namespace ModernDrone.Editor
             Object.DestroyImmediate(model);
             var root = new GameObject(node);
             root.AddComponent<MeshFilter>().sharedMesh = mesh;
-            root.AddComponent<MeshRenderer>().sharedMaterials = materials;
+            var renderer = root.AddComponent<MeshRenderer>();
+            renderer.sharedMaterials = materials;
             var b = mesh.bounds;
+            // A single-LOD group: the plant fades out once it is a few pixels tall, and the terrain accepts a
+            // tree prototype with a LOD group on any shader (without one it demands Nature/Soft Occlusion).
+            // Low plants cast no shadow.
+            if (b.size.y < 1.2f) renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            var group = root.AddComponent<LODGroup>();
+            group.fadeMode = LODFadeMode.CrossFade;
+            group.SetLODs(new[] { new LOD(0.012f, new Renderer[] { renderer }) });
+            group.RecalculateBounds();
             if (collider)
             {
                 // Drone crashes into a bush; the jet and fuze ignore vegetation beyond that.
@@ -645,6 +654,9 @@ namespace ModernDrone.Editor
             urp.mainLightShadowmapResolution = 4096;
             urp.upscalingFilter = UpscalingFilterSelection.STP;
             urp.gpuResidentDrawerEnableOcclusionCullingInCameras = true;
+            // 64-bit HDR target: in R11G11B10 blue keeps one mantissa bit less than red and green, and the bright
+            // gradients of a fireball broke into rainbow-coloured rings (blue banding at other steps than red/green).
+            urp.hdrColorBufferPrecision = HDRColorBufferPrecision._64Bits;
             EditorUtility.SetDirty(urp);
         }
     }

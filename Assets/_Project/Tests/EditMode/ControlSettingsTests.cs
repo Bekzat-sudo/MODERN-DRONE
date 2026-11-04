@@ -7,6 +7,16 @@ namespace ModernDrone.Tests
     public class ControlSettingsTests
     {
         [Test]
+        public void GamepadLabels_AreShortPadNames()
+        {
+            Assert.AreEqual("RB", ModernDrone.Drone.ControlInput.GamepadLabel("<Gamepad>/rightShoulder", null));
+            Assert.AreEqual("LB", ModernDrone.Drone.ControlInput.GamepadLabel("<Gamepad>/leftShoulder", null));
+            Assert.AreEqual("Menu", ModernDrone.Drone.ControlInput.GamepadLabel("<Gamepad>/startButton", null));
+            Assert.AreEqual("A", ModernDrone.Drone.ControlInput.GamepadLabel("<Gamepad>/buttonSouth", null));
+            Assert.IsNull(ModernDrone.Drone.ControlInput.GamepadLabel("<Keyboard>/space", null));
+        }
+
+        [Test]
         public void Bipolar_UsesSeparateScaleEachSideOfCentre()
         {
             // Typical RC axis reported 0..1 with an off-centre neutral.

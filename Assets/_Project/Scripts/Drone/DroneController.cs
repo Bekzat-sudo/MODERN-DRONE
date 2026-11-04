@@ -35,7 +35,8 @@ namespace ModernDrone.Drone
 
     /// <summary>
     /// Quadcopter rigid-body simulation: per-motor thrust at motor positions, reaction yaw torque,
-    /// motor lag, propeller inflow loss, body drag and battery sag.
+    /// motor lag, propeller inflow loss, body drag and battery sag. A fixed-wing config flies as an aeroplane instead
+    /// (<see cref="StepFixedWing"/>).
     /// </summary>
     [RequireComponent(typeof(Rigidbody))]
     public sealed class DroneController : MonoBehaviour
@@ -77,6 +78,8 @@ namespace ModernDrone.Drone
 
         public event Action<Collision> OnCrash;
         public event Action OnReset;
+        /// <summary>An aeroplane was released at its launch point (see <see cref="Launch"/>).</summary>
+        public event Action OnLaunch;
         public event Action OnFailsafe;
         public event Action OnShotDown;
 
@@ -145,6 +148,24 @@ namespace ModernDrone.Drone
             _battery = new BatteryModel(config.cells, config.capacityMah, config.internalResistance);
             _homePosition = transform.position;
             _homeRotation = transform.rotation;
+            // An aeroplane waits in the air at its launch point until Launch().
+            _rb.isKinematic = config.fixedWing;
+        }
+
+        /// <summary>
+        /// Starts a sortie. An aeroplane is released at its launch point at cruise speed, armed (its motor and
+        /// autopilot run without an arm switch); a quadcopter needs nothing (the pilot arms it on the pad).
+        /// </summary>
+        public void Launch()
+        {
+            if (!config.fixedWing) return;
+            _rb.isKinematic = false;
+            _rb.linearVelocity = transform.forward * config.cruiseSpeed;
+            _rb.angularVelocity = Vector3.zero;
+            _spin[0] = FixedWingAero.CruiseThrottle(config, TotalMass);
+            Armed = true;
+            _armedTime = 0f;
+            OnLaunch?.Invoke();
         }
 
         static readonly string[] PropNames = { "Prop_FR", "Prop_FL", "Prop_RR", "Prop_RL" };
@@ -170,7 +191,10 @@ namespace ModernDrone.Drone
             }
             var parts = model.GetComponentsInChildren<Transform>(true);
             var props = GetComponent<PropVisuals>();
-            if (props != null) props.SetProps(System.Array.ConvertAll(PropNames, n => System.Array.Find(parts, t => t.name == n)));
+            if (props != null)
+                props.SetProps(config.fixedWing
+                    ? new[] { System.Array.Find(parts, t => t.name == "Prop") }
+                    : System.Array.ConvertAll(PropNames, n => System.Array.Find(parts, t => t.name == n)));
             var cam = GetComponentInChildren<DroneCamera>(true);
             if (cam != null) cam.SetMount(config.cameraPosition);
         }
@@ -194,7 +218,8 @@ namespace ModernDrone.Drone
         }
 
         public float TotalMass => config.frameMass + _payloadMass + _extraMass;
-        public float HoverThrottle => config.HoverThrottleFor(TotalMass);
+        /// <summary>Throttle that holds altitude: hover for a quadcopter, level cruise for an aeroplane.</summary>
+        public float HoverThrottle => config.fixedWing ? FixedWingAero.CruiseThrottle(config, TotalMass) : config.HoverThrottleFor(TotalMass);
         /// <summary>Thrust-to-weight ratio with the current payload at full battery.</summary>
         public float ThrustToWeight => config.frameMass * config.thrustToWeight / TotalMass;
 
@@ -233,6 +258,7 @@ namespace ModernDrone.Drone
         /// <summary>Applies the pilot's rate profile from the control settings.</summary>
         public void ApplyPilotRates(AxisRates roll, AxisRates pitch, AxisRates yaw)
         {
+            if (config.fixedWing) return; // an aeroplane keeps its own (much slower) rates
             config.rollRates = roll;
             config.pitchRates = pitch;
             config.yawRates = yaw;
@@ -250,6 +276,12 @@ namespace ModernDrone.Drone
             _inputQueue.Enqueue((Time.time, state));
             while (_inputQueue.Count > 64) _inputQueue.Dequeue();
 
+            if (config != null && config.fixedWing)
+            {
+                // Armed by Launch(); the arm switch does nothing in the air.
+                if (state.resetPressed) ResetToHome();
+                return;
+            }
             if (state.armSwitch && !_prevArmSwitch && !Armed)
             {
                 bool throttleLow = state.throttleAtRest || state.throttle < 0.05f;
@@ -290,6 +322,7 @@ namespace ModernDrone.Drone
             transform.SetPositionAndRotation(_homePosition, _homeRotation);
             _rb.linearVelocity = Vector3.zero;
             _rb.angularVelocity = Vector3.zero;
+            _rb.isKinematic = config.fixedWing; // back to waiting at the launch point
             OnReset?.Invoke();
         }
 
@@ -327,6 +360,11 @@ namespace ModernDrone.Drone
             float maxThrust = config.MaxThrustPerMotor;
 
             UpdateFailsafe(dt);
+            if (config.fixedWing)
+            {
+                StepFixedWing(omegaBody, dt);
+                return;
+            }
             if (Armed)
             {
                 _armedTime += dt;
@@ -346,7 +384,8 @@ namespace ModernDrone.Drone
             }
 
             // Motors: command is sqrt of desired thrust fraction (thrust ~ rpm^2), first-order lag on speed.
-            float available = maxThrust * _battery.ThrustFactor;
+            float sag = _battery.ThrustFactor;
+            float available = maxThrust * sag;
             float axialSpeed = Vector3.Dot(_rb.linearVelocity, up);
             float inflow = Mathf.Clamp(1f - Mathf.Max(0f, axialSpeed) / config.propPitchSpeed, 0.05f, 1f);
             float current = 0f;
@@ -363,12 +402,49 @@ namespace ModernDrone.Drone
                 _rb.AddForceAtPosition(up * thrust, transform.TransformPoint(QuadMixer.MotorPosition(i, config.ArmOffset)));
 
                 yawTorque += config.yawTorqueCoefficient * QuadMixer.Spin[i] * thrust;
-                current += config.maxCurrentPerMotor * _spin[i] * _spin[i] * _spin[i];
+                // Prop power ~ rpm^3 and rpm ~ V * command, so I = P / V ~ V^2 * command^3: a sagging pack draws less.
+                current += config.maxCurrentPerMotor * _spin[i] * _spin[i] * _spin[i] * sag;
             }
             _rb.AddRelativeTorque(0f, yawTorque, 0f);
 
             ApplyDrag();
             _battery.Update(current, dt);
+        }
+
+        /// <summary>
+        /// Aeroplane: the flight controller's rate / angle commands drive the control surfaces, whose authority grows
+        /// with dynamic pressure; wing lift, drag, side force and the weathervane moments come from FixedWingAero; one
+        /// pusher prop (motor lag, battery sag) along the body axis.
+        /// </summary>
+        void StepFixedWing(Vector3 omegaBody, float dt)
+        {
+            if (_rb.isKinematic) return;
+            Vector3 vBody = transform.InverseTransformDirection(_rb.linearVelocity);
+            float throttle = 0f;
+            if (Armed)
+            {
+                _armedTime += dt;
+                var received = ReceivedInput();
+                received.mode = _input.mode;
+                Vector3 alpha = _fc.Compute(received, omegaBody, transform.InverseTransformDirection(Vector3.up), dt);
+                float authority = Mathf.Clamp01(vBody.sqrMagnitude / (config.controlSpeed * config.controlSpeed));
+                _rb.AddRelativeTorque(Vector3.Scale(alpha, config.inertia) * authority);
+                throttle = Mathf.Clamp01(received.throttle);
+            }
+            else
+                _fc.Reset();
+
+            float tau = throttle > _spin[0] ? config.motorTauUp : config.motorTauDown;
+            _spin[0] += (throttle - _spin[0]) * (1f - Mathf.Exp(-dt / tau));
+            float sag = _battery.ThrustFactor;
+            _thrust[0] = FixedWingAero.Thrust(config, Mathf.Max(0f, vBody.z), _spin[0]) * sag;
+
+            var aero = FixedWingAero.Aero(config, vBody);
+            _rb.AddRelativeForce(aero.force + Vector3.forward * _thrust[0]);
+            // Rate damping of wing and tail (abstract gameplay value): a released aeroplane stops rotating.
+            float q = 0.5f * SimConstants.AirDensitySeaLevel * vBody.sqrMagnitude;
+            _rb.AddRelativeTorque(aero.torque - omegaBody * (q * config.wingArea * 0.01f));
+            _battery.Update(config.maxCurrentPerMotor * _spin[0] * sag, dt);
         }
 
         void ApplyDrag()

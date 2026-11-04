@@ -58,12 +58,14 @@ namespace ModernDrone.Drone
         void OnEnable()
         {
             if (drone != null) drone.OnReset += ClearLatches;
+            if (drone != null) drone.OnLaunch += HoldCruiseThrottle;
             ControlSettings.Changed += Apply;
         }
 
         void OnDisable()
         {
             if (drone != null) drone.OnReset -= ClearLatches;
+            if (drone != null) drone.OnLaunch -= HoldCruiseThrottle;
             ControlSettings.Changed -= Apply;
             ReleaseCursor();
         }
@@ -76,19 +78,22 @@ namespace ModernDrone.Drone
         /// <summary>Pushes rates and camera settings to the drone.</summary>
         void Apply(ControlSettings s)
         {
-            if (drone != null && drone.Config != null)
+            // An aeroplane keeps its own rates, bank limit and camera (a wide-format gimbal-less nose camera, no FPV fisheye).
+            bool aircraft = drone != null && drone.Config != null && drone.Config.fixedWing;
+            if (drone != null && drone.Config != null && !aircraft)
             {
                 drone.ApplyPilotRates(s.rollRates, s.pitchRates, s.yawRates);
                 drone.Config.maxAngle = Mathf.Clamp(s.angleMaxTilt, 10f, 80f);
                 drone.Config.setpointCutoffHz = Mathf.Clamp(s.stickSmoothingHz, 0f, 100f);
             }
             // Lens and frame of the video feed (read by the AnalogVideo pass and the OSD).
-            Shader.SetGlobalFloat(LensId, Mathf.Clamp01(s.lensDistortion));
-            Shader.SetGlobalFloat(FrameAspectId, s.frame43 ? 4f / 3f : 0f);
+            Shader.SetGlobalFloat(LensId, aircraft ? 0f : Mathf.Clamp01(s.lensDistortion));
+            Shader.SetGlobalFloat(FrameAspectId, s.frame43 && !aircraft ? 4f / 3f : 0f);
             if (droneCamera != null)
             {
-                droneCamera.TiltDeg = StockTilt + s.cameraTiltOffset;
-                droneCamera.HorizontalFov = ModernDrone.Core.NightMode.Thermal ? ModernDrone.Core.NightMode.ThermalHorizontalFov : s.cameraFov;
+                droneCamera.TiltDeg = aircraft ? StockTilt : StockTilt + s.cameraTiltOffset;
+                droneCamera.HorizontalFov = ModernDrone.Core.NightMode.Thermal ? ModernDrone.Core.NightMode.ThermalHorizontalFov
+                    : aircraft ? drone.Config.cameraHorizontalFov : s.cameraFov;
             }
         }
 
@@ -99,6 +104,9 @@ namespace ModernDrone.Drone
             _heldThrottle = 0f;
             _mouseStick = Vector2.zero;
         }
+
+        /// <summary>An aeroplane is released at cruise speed: the held throttle (keyboard, incremental pad) starts at cruise.</summary>
+        void HoldCruiseThrottle() => _heldThrottle = drone.HoverThrottle;
 
         void Update()
         {

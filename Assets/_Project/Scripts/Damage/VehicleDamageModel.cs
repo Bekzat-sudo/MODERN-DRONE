@@ -8,7 +8,8 @@ namespace ModernDrone.Damage
     public sealed class VehicleFire
     {
         public VehicleModule Source { get; internal set; }
-        public Combustible Kind { get; internal set; }
+        /// <summary>What burns (the module's substance, or the fuel that pooled under the vehicle).</summary>
+        public SubstanceData Substance { get; internal set; }
         /// <summary>Fuel spilled on the ground rather than burning inside the vehicle.</summary>
         public bool IsPool { get; internal set; }
         public Vector3 Position { get; internal set; }
@@ -17,6 +18,18 @@ namespace ModernDrone.Damage
         public float Remaining { get; internal set; }
         public float Age { get; internal set; }
         public bool Out => Remaining <= 0f;
+    }
+
+    /// <summary>What blew the vehicle apart: the module, what it held and how much, where.</summary>
+    public struct Detonation
+    {
+        public VehicleModule module;
+        public SubstanceData substance;
+        /// <summary>Units of <see cref="substance"/> that went (shells, charges, rockets).</summary>
+        public float amount;
+        public Vector3 position;
+        /// <summary>True for an explosive fill detonating; false for burning propellant blowing the hull apart.</summary>
+        public bool explosive;
     }
 
     /// <summary>
@@ -56,6 +69,12 @@ namespace ModernDrone.Damage
         float _hullFireTime;
         float _pendingBlast = -1f;
         float _pooledFuel;
+        SubstanceData _poolSubstance;
+        VehicleModule _pendingModule;
+        // The charges lit but vented through the hatches instead of blowing the hull: the shells beside them then burn
+        // or go off low-order one by one, not as one mass detonation, and the turret stays on (footage of burned-out
+        // T-72s with the turret in place, e.g. youtu.be/gbI1EAPONWs; globalsecurity.org/military/world/russia/t-72-limits.htm).
+        bool _vented;
         VehicleFire _pool;
 
         public string DisplayName => displayName;
@@ -69,14 +88,16 @@ namespace ModernDrone.Damage
         public DestructionCause Cause { get; private set; }
         public bool Burning => _fires.Exists(f => !f.Out);
         public VehicleModule FireOrigin => _fires.Count > 0 ? _fires[0].Source : null;
+        /// <summary>The detonation that destroyed the vehicle (module null if none).</summary>
+        public Detonation LastDetonation { get; private set; }
 
         public event Action<VehicleDamageModel, VehicleModule, ModuleState> ModuleChanged;
         public event Action<VehicleDamageModel, KillState> StateChanged;
         public event Action<VehicleDamageModel, VehicleFire> FireStarted;
         public event Action<VehicleDamageModel, VehicleFire> FireEnded;
         public event Action<VehicleDamageModel, VehicleModule> LeakStarted;
-        /// <summary>A short flash: jet mist fireball (small) or an explosion of the contents (large).</summary>
-        public event Action<VehicleDamageModel, Vector3, float> Flash;
+        /// <summary>A jet atomised a module's fuel: a short mist fireball (the module says what and how much).</summary>
+        public event Action<VehicleDamageModel, VehicleModule> Flash;
         public event Action<VehicleDamageModel, DestructionCause> Destroyed;
         /// <summary>First time any strike touches this vehicle (used by decoys to collapse).</summary>
         public event Action<VehicleDamageModel> FirstStruck;
@@ -125,15 +146,15 @@ namespace ModernDrone.Damage
             if (Wrecked) return;
             string name = DamageNames.Ru(m.Type);
 
-            if (m.HighExplosive && Roll(Combustion.DetonationChance(kind)))
+            if (m.HighExplosive && Roll(m.Explosive.DetonateChance(kind)))
             {
                 Note($"{name}: детонация ВВ");
-                Explode(m.transform.position, DestructionCause.AmmoDetonation);
+                Explode(m, true);
                 return;
             }
 
-            var p = Combustion.Of(m.Combustible);
-            if (m.Combustible == Combustible.None || m.Load <= 0f || m.OnFire) return;
+            var p = m.Substance;
+            if (!m.Burnable || m.Load <= 0f || m.OnFire) return;
 
             if (p.mistFireball && kind == HitKind.Jet)
             {
@@ -144,7 +165,7 @@ namespace ModernDrone.Damage
 
             float chance = p.IgniteChance(kind);
             // Charges torn open by the hit that wrecked their rack light far more readily.
-            if (m.State == ModuleState.Destroyed && (m.Combustible == Combustible.Propellant || m.Combustible == Combustible.RocketPropellant))
+            if (m.State == ModuleState.Destroyed && (p.kind == SubstanceClass.GunPropellant || p.kind == SubstanceClass.RocketMotor || p.kind == SubstanceClass.CanisterMissile))
                 chance = Mathf.Max(chance, 0.8f);
             if (m.ProtectedTank) chance *= Combustion.ProtectedTankIgnition;
             if (Roll(chance))
@@ -170,22 +191,28 @@ namespace ModernDrone.Damage
         /// <summary>Sets a module's contents on fire.</summary>
         public void Ignite(VehicleModule m)
         {
-            if (m == null || m.OnFire || Wrecked || m.Combustible == Combustible.None) return;
-            var p = Combustion.Of(m.Combustible);
+            if (m == null || m.OnFire || Wrecked || !m.Burnable) return;
+            var p = m.Substance;
             m.OnFire = true;
             var fire = new VehicleFire
             {
-                Source = m, Kind = m.Combustible, Position = m.transform.position,
+                Source = m, Substance = p, Position = m.transform.position,
                 Radius = p.radius, Intensity = p.intensity, Remaining = p.burnSeconds * Mathf.Max(0.2f, m.Load)
             };
             _fires.Add(fire);
             Note($"{DamageNames.Ru(m.Type)}: {(p.violent ? "воспламенение зарядов" : "пожар")}");
             FireStarted?.Invoke(this, fire);
 
-            if (p.violent && Roll(ammoDetonationChance))
+            // One roll per vehicle: once the charges have vented through blown hatches, the next rack vents too.
+            if (p.violent && !_vented && Roll(ammoDetonationChance))
             {
                 // One charge sets off the next: the pressure builds for a moment, then the hull gives way.
                 _pendingBlast = Mathf.Lerp(CookOffDelayMin, CookOffDelayMax, (float)_random.NextDouble());
+                _pendingModule = m;
+            }
+            else if (p.violent)
+            {
+                _vented = true;
             }
             else if (p.suppressible)
             {
@@ -221,7 +248,7 @@ namespace ModernDrone.Damage
         void MistFireball(VehicleModule tank)
         {
             Vector3 c = tank.transform.position;
-            Flash?.Invoke(this, c, 1f);
+            Flash?.Invoke(this, tank);
             foreach (var m in _modules.ToArray())
             {
                 if (m == tank || Wrecked) continue;
@@ -232,7 +259,36 @@ namespace ModernDrone.Damage
             }
         }
 
-        void Explode(Vector3 at, DestructionCause cause) => Destroy(cause);
+        /// <summary>
+        /// Blows the vehicle apart with <paramref name="m"/>'s contents now: its explosive fill if it has one, otherwise its
+        /// burning contents (test bench and tools; in play the damage rules decide when this happens).
+        /// </summary>
+        public void Detonate(VehicleModule m)
+        {
+            if (m == null || Wrecked) return;
+            Note($"{DamageNames.Ru(m.Type)}: подрыв (полигон)");
+            Explode(m, m.HighExplosive);
+        }
+
+        /// <summary>A jet's mist fireball out of <paramref name="tank"/> (test bench and tools).</summary>
+        public void FlashMist(VehicleModule tank)
+        {
+            if (tank != null && tank.Burnable && !Wrecked) MistFireball(tank);
+        }
+
+        /// <summary>The module's contents blow the vehicle apart (explosive fill, or propellant deflagrating in the closed hull).</summary>
+        void Explode(VehicleModule m, bool explosive)
+        {
+            LastDetonation = new Detonation
+            {
+                module = m,
+                substance = m == null ? null : explosive ? m.Explosive : m.Substance,
+                amount = m == null ? 0f : explosive ? m.ExplosiveCount * m.Load : m.Remaining,
+                position = m != null ? m.transform.position : transform.position + Vector3.up * 1.5f,
+                explosive = explosive
+            };
+            Destroy(DestructionCause.AmmoDetonation);
+        }
 
         /// <summary>Advances fires, leaks and cook-offs. Called from Update; public so tests can step time.</summary>
         public void Tick(float dt)
@@ -245,7 +301,7 @@ namespace ModernDrone.Damage
                 if (_pendingBlast < 0f)
                 {
                     Note("подрыв боекомплекта");
-                    Explode(transform.position + Vector3.up * 1.5f, DestructionCause.AmmoDetonation);
+                    Explode(_pendingModule, false);
                     return;
                 }
             }
@@ -260,7 +316,7 @@ namespace ModernDrone.Damage
                 if (fire.Out) continue;
                 fire.Age += dt;
                 fire.Remaining -= dt;
-                if (fire.Source != null) fire.Source.Load -= dt / Mathf.Max(1f, Combustion.Of(fire.Kind).burnSeconds);
+                if (fire.Source != null) fire.Source.Load -= dt / Mathf.Max(1f, fire.Substance != null ? fire.Substance.burnSeconds : 30f);
                 if (!fire.IsPool) hullFire = true;
 
                 foreach (var m in modules)
@@ -278,6 +334,14 @@ namespace ModernDrone.Damage
                 {
                     if (fire.Source != null) fire.Source.OnFire = false;
                     FireEnded?.Invoke(this, fire);
+                    // Charges that vented through the hatches have gutted the fighting compartment by the time they are
+                    // spent: the vehicle is burnt out now (the hull fire takes over), not when the last small fire ends.
+                    if (_vented && fire.Substance != null && fire.Substance.violent)
+                    {
+                        Note("выгорел");
+                        Destroy(DestructionCause.BurnedOut);
+                        return;
+                    }
                 }
             }
 
@@ -292,13 +356,18 @@ namespace ModernDrone.Damage
         /// <summary>A module heated long enough lights (fuel, charges) or cooks off (explosive).</summary>
         void HeatUp(VehicleModule m)
         {
-            if (m.HighExplosive && m.Heat >= Combustion.HeatToDetonate)
+            if (m.HighExplosive && m.Heat >= m.Explosive.heatToDetonate && _vented)
+            {
+                Note($"{DamageNames.Ru(m.Type)}: снаряды горят без детонации");
+                m.ExplosiveSpent = true;
+            }
+            else if (m.HighExplosive && m.Heat >= m.Explosive.heatToDetonate)
             {
                 Note($"{DamageNames.Ru(m.Type)}: подрыв от нагрева");
-                Explode(m.transform.position, DestructionCause.AmmoDetonation);
+                Explode(m, true);
                 return;
             }
-            if (!m.OnFire && m.Load > 0f && m.Heat >= Combustion.Of(m.Combustible).heatToIgnite)
+            if (!m.OnFire && m.Load > 0f && m.Burnable && m.Heat >= m.Substance.heatToIgnite)
                 Ignite(m);
         }
 
@@ -309,6 +378,7 @@ namespace ModernDrone.Damage
             {
                 if (!m.Leaking || m.Load <= 0f) continue;
                 float spilled = Mathf.Min(m.Load, Combustion.LeakRate * dt);
+                if (_poolSubstance == null) _poolSubstance = m.Substance;
                 m.Load -= spilled;
                 _pooledFuel += spilled;
                 TotalSpilled += spilled;
@@ -325,7 +395,7 @@ namespace ModernDrone.Damage
                     if (Vector3.Distance(f.Position, poolAt) > f.Radius + PoolRadiusPerLoad * Mathf.Sqrt(_pooledFuel)) continue;
                     _pool = new VehicleFire
                     {
-                        Kind = Combustible.Diesel, IsPool = true, Position = poolAt, Intensity = 0.8f,
+                        Substance = _poolSubstance, IsPool = true, Position = poolAt, Intensity = 0.8f,
                         Radius = PoolRadiusPerLoad * Mathf.Sqrt(_pooledFuel), Remaining = _pooledFuel * PoolBurnSecondsPerLoad
                     };
                     _pooledFuel = 0f;
@@ -359,11 +429,11 @@ namespace ModernDrone.Damage
         {
             if (Wrecked) return;
             Destroy(DestructionCause.Crashed);
-            var fuel = _modules.Find(m => m.Type == ModuleType.FuelTank && m.Load > 0f);
+            var fuel = _modules.Find(m => m.Type == ModuleType.FuelTank && m.Load > 0f && m.Burnable);
             if (fuel != null)
             {
                 // The wreck's fuel keeps burning on the ground.
-                var fire = new VehicleFire { Source = fuel, Kind = fuel.Combustible, IsPool = true, Position = transform.position, Radius = 4f, Intensity = 1f, Remaining = 60f };
+                var fire = new VehicleFire { Source = fuel, Substance = fuel.Substance, IsPool = true, Position = transform.position, Radius = 4f, Intensity = 1f, Remaining = 60f };
                 _fires.Add(fire);
                 FireStarted?.Invoke(this, fire);
             }

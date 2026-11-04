@@ -69,13 +69,17 @@ namespace ModernDrone.UI
 
             var t = drone.Telemetry;
             var osd = ControlSettings.Current.osd;
-            var f = Frame();
+            bool aircraft = drone.Config != null && drone.Config.fixedWing;
+            var f = aircraft ? new Rect(0f, 0f, Screen.width, Screen.height) : Frame();
             float h = f.height;
             float pad = h * 0.05f;
             float line = _style.fontSize * 1.3f;
             bool lowBat = t.cellVoltage < lowCellVoltage;
 
+            // An aeroplane (Hornet) has its own aircraft-style HUD instead of the Betaflight elements.
+            if (aircraft) HornetHud.Draw(drone, _fpvCamera, f);
             // Text elements, stacked in their slots in list order.
+            if (!aircraft)
             foreach (OsdSlot slot in System.Enum.GetValues(typeof(OsdSlot)))
             {
                 if (slot == OsdSlot.Off) continue;
@@ -111,11 +115,14 @@ namespace ModernDrone.UI
                 }
             }
 
-            if (osd.crosshair) DrawCrosshair(f.center.x, f.center.y, h * 0.02f);
-            if (osd.chargeAxis) DrawChargeAxis(h);
+            if (!aircraft)
+            {
+                if (osd.crosshair) Crosshair.Draw(new Vector2(f.center.x, f.center.y + osd.crosshairOffset * 0.01f * h), h * 0.02f, osd);
+                if (osd.chargeAxis) DrawChargeAxis(h);
+                if (osd.horizon) DrawHorizon(f, t);
+                if (osd.sidebars) DrawSidebars(f);
+            }
             if (t.armed && !t.crashed) DrawThreat(f.width, h, f.x);
-            if (osd.horizon) DrawHorizon(f, t);
-            if (osd.sidebars) DrawSidebars(f);
 
             // "ARMED" for half a second on arming (Betaflight logo_on_arming_duration default 5 = 0.5 s).
             if (t.armed && !_wasArmed) _armedAt = Time.unscaledTime;
@@ -128,7 +135,8 @@ namespace ModernDrone.UI
             var linkNow = VideoFeed.HasLink ? VideoFeed.Current : default;
             string crash = input != null && !input.AllowReset ? "CRASH" : $"CRASH  [{ControlInput.HintFor(PilotAction.Reset, source)}]";
             // Arming and crash prompts always show; the rest follow the warnings switch.
-            string warning = armedMsg ? "ARMED"
+            string warning = aircraft && !t.armed && !t.crashed ? null // waiting at the launch point: no arming prompts
+                : armedMsg ? "ARMED"
                 : t.crashed ? crash
                 : drone.ArmBlock == ArmBlockReason.Throttle ? "ARM BLOCKED: THROTTLE"
                 : drone.ArmBlock == ArmBlockReason.Failsafe ? "ARM BLOCKED: FAILSAFE"
@@ -227,14 +235,6 @@ namespace ModernDrone.UI
             Line(tip, tip - dir * size * 1.4f - side, 3f);
         }
 
-        void DrawCrosshair(float cx, float cy, float size)
-        {
-            float thick = Mathf.Max(2f, size * 0.12f);
-            Line(new Vector2(cx - size * 2f, cy), new Vector2(cx - size * 0.6f, cy), thick);
-            Line(new Vector2(cx + size * 0.6f, cy), new Vector2(cx + size * 2f, cy), thick);
-            Line(new Vector2(cx, cy - size * 0.6f), new Vector2(cx, cy - size * 0.2f), thick);
-        }
-
         /// <summary>
         /// Where the shaped-charge jet will go: the payload points along the frame axis, the camera is tilted up
         /// from it, so the marker sits below the crosshair by the camera tilt.
@@ -246,13 +246,8 @@ namespace ModernDrone.UI
             if (sp.z <= 0f) return;
             var c = new Vector2(sp.x, h - sp.y);
             float r = h * 0.012f, thick = Mathf.Max(2f, h * 0.0025f);
-            const int Segments = 12;
-            for (int i = 0; i < Segments; i++)
-            {
-                float a0 = i * Mathf.PI * 2f / Segments, a1 = (i + 1) * Mathf.PI * 2f / Segments;
-                Line(c + new Vector2(Mathf.Cos(a0), Mathf.Sin(a0)) * r, c + new Vector2(Mathf.Cos(a1), Mathf.Sin(a1)) * r, thick);
-            }
-            Line(c + Vector2.down * thick * 0.5f, c + Vector2.up * thick * 0.5f, thick);
+            Crosshair.Ring(c, r, thick, textColor, true);
+            Crosshair.Ring(c, thick * 0.6f, 0f, textColor, true);
         }
 
         /// <summary>Betaflight battery symbol: an outlined cell that empties as the voltage falls.</summary>
